@@ -624,7 +624,8 @@ func TestDelivery(t *testing.T) {
 
 			changes := make(chan []store.Change)
 			go func() {
-				changes <- ts.comm.Get()
+				_, l := ts.comm.Get()
+				changes <- l
 			}()
 
 			timer := time.NewTimer(time.Second)

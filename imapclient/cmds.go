@@ -59,9 +59,9 @@ func (c *Conn) Login(username, password string) (untagged []Untagged, result Res
 
 	c.LastTag = c.nextTag()
 	fmt.Fprintf(c.xbw, "%s login %s ", c.LastTag, astring(username))
-	defer c.xtrace(mlog.LevelTraceauth)()
+	defer c.xtracewrite(mlog.LevelTraceauth)()
 	fmt.Fprintf(c.xbw, "%s\r\n", astring(password))
-	c.xtrace(mlog.LevelTrace) // Restore.
+	c.xtracewrite(mlog.LevelTrace) // Restore.
 	return c.Response()
 }
 
@@ -76,11 +76,11 @@ func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged
 	if result.Status != "" {
 		c.xerrorf("got result status %q, expected continuation", result.Status)
 	}
-	defer c.xtrace(mlog.LevelTraceauth)()
+	defer c.xtracewrite(mlog.LevelTraceauth)()
 	xw := base64.NewEncoder(base64.StdEncoding, c.xbw)
 	fmt.Fprintf(xw, "\u0000%s\u0000%s", username, password)
 	xw.Close()
-	c.xtrace(mlog.LevelTrace) // Restore.
+	c.xtracewrite(mlog.LevelTrace) // Restore.
 	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()
 	return c.Response()
@@ -317,10 +317,10 @@ func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged 
 		// todo: for larger messages, use a synchronizing literal.
 
 		fmt.Fprintf(c.xbw, " (%s)%s {%d+}\r\n", strings.Join(m.Flags, " "), date, m.Size)
-		defer c.xtrace(mlog.LevelTracedata)()
+		defer c.xtracewrite(mlog.LevelTracedata)()
 		_, err := io.Copy(c.xbw, m.Data)
 		c.xcheckf(err, "write message data")
-		c.xtrace(mlog.LevelTrace) // Restore
+		c.xtracewrite(mlog.LevelTrace) // Restore
 	}
 
 	fmt.Fprintf(c.xbw, "\r\n")
@@ -328,7 +328,8 @@ func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged 
 	return c.Response()
 }
 
-// note: No idle command. Idle is better implemented by writing the request and reading and handling the responses as they come in.
+// note: No Idle or Notify command. Idle/Notify is better implemented by
+// writing the request and reading and handling the responses as they come in.
 
 // CloseMailbox closes the currently selected/active mailbox, permanently removing
 // any messages marked with \Deleted.
@@ -444,10 +445,10 @@ func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (unta
 	err := c.Commandf("", "%s %s %s (%s)%s ~{%d+}", cmd, num, astring(mailbox), strings.Join(msg.Flags, " "), date, msg.Size)
 	c.xcheckf(err, "writing replace command")
 
-	defer c.xtrace(mlog.LevelTracedata)()
+	defer c.xtracewrite(mlog.LevelTracedata)()
 	_, err = io.Copy(c.xbw, msg.Data)
 	c.xcheckf(err, "write message data")
-	c.xtrace(mlog.LevelTrace)
+	c.xtracewrite(mlog.LevelTrace)
 
 	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()

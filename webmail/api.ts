@@ -423,6 +423,8 @@ export interface ChangeMsgAdd {
 	ModSeq: ModSeq
 	Flags: Flags  // System flags.
 	Keywords?: string[] | null  // Other flags.
+	MessageCountIMAP: number  // For IMAP NOTIFY.
+	Unseen: number
 	MessageItems?: MessageItem[] | null
 }
 
@@ -446,6 +448,9 @@ export interface ChangeMsgRemove {
 	UIDs?: UID[] | null  // Must be in increasing UID order, for IMAP.
 	ModSeq: ModSeq
 	MsgIDs?: number[] | null  // Message.ID, for erasing, order does not necessarily correspond with UIDs!
+	UIDNext: UID  // For IMAP NOTIFY.
+	MessageCountIMAP: number
+	Unseen: number
 }
 
 // ChangeMsgFlags updates flags for one message.
@@ -456,6 +461,8 @@ export interface ChangeMsgFlags {
 	Mask: Flags  // Which flags are actually modified.
 	Flags: Flags  // New flag values. All are set, not just mask.
 	Keywords?: string[] | null  // Non-system/well-known flags/keywords/labels.
+	UIDValidity: number  // For IMAP NOTIFY.
+	Unseen: number
 }
 
 // ChangeMsgThread updates muted/collapsed fields for one message.
@@ -634,10 +641,10 @@ export const types: TypenameMap = {
 	"MessageEnvelope": {"Name":"MessageEnvelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"Sender","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"To","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"CC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"BCC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
 	"Attachment": {"Name":"Attachment","Docs":"","Fields":[{"Name":"Path","Docs":"","Typewords":["[]","int32"]},{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"Part","Docs":"","Typewords":["Part"]}]},
 	"EventViewChanges": {"Name":"EventViewChanges","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Changes","Docs":"","Typewords":["[]","[]","any"]}]},
-	"ChangeMsgAdd": {"Name":"ChangeMsgAdd","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"MessageItems","Docs":"","Typewords":["[]","MessageItem"]}]},
+	"ChangeMsgAdd": {"Name":"ChangeMsgAdd","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"MessageCountIMAP","Docs":"","Typewords":["uint32"]},{"Name":"Unseen","Docs":"","Typewords":["uint32"]},{"Name":"MessageItems","Docs":"","Typewords":["[]","MessageItem"]}]},
 	"Flags": {"Name":"Flags","Docs":"","Fields":[{"Name":"Seen","Docs":"","Typewords":["bool"]},{"Name":"Answered","Docs":"","Typewords":["bool"]},{"Name":"Flagged","Docs":"","Typewords":["bool"]},{"Name":"Forwarded","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Notjunk","Docs":"","Typewords":["bool"]},{"Name":"Deleted","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Phishing","Docs":"","Typewords":["bool"]},{"Name":"MDNSent","Docs":"","Typewords":["bool"]}]},
-	"ChangeMsgRemove": {"Name":"ChangeMsgRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UIDs","Docs":"","Typewords":["[]","UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"MsgIDs","Docs":"","Typewords":["[]","int64"]}]},
-	"ChangeMsgFlags": {"Name":"ChangeMsgFlags","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Mask","Docs":"","Typewords":["Flags"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]}]},
+	"ChangeMsgRemove": {"Name":"ChangeMsgRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UIDs","Docs":"","Typewords":["[]","UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"MsgIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"MessageCountIMAP","Docs":"","Typewords":["uint32"]},{"Name":"Unseen","Docs":"","Typewords":["uint32"]}]},
+	"ChangeMsgFlags": {"Name":"ChangeMsgFlags","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Mask","Docs":"","Typewords":["Flags"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"Unseen","Docs":"","Typewords":["uint32"]}]},
 	"ChangeMsgThread": {"Name":"ChangeMsgThread","Docs":"","Fields":[{"Name":"MessageIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Muted","Docs":"","Typewords":["bool"]},{"Name":"Collapsed","Docs":"","Typewords":["bool"]}]},
 	"ChangeMailboxRemove": {"Name":"ChangeMailboxRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
 	"ChangeMailboxAdd": {"Name":"ChangeMailboxAdd","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["Mailbox"]}]},

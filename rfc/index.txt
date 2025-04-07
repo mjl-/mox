@@ -212,7 +212,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 5464-eid2785	-	-	errata: fix GETMETADATA example
 5464-eid2786	-	-	errata: fix GETMETADATA example
 5464-eid3868	-	-	errata: fix GETMETADATA example
-5465	Roadmap	-	The IMAP NOTIFY Extension
+5465	Yes	-	The IMAP NOTIFY Extension
 5466	Roadmap	-	IMAP4 Extension for Named Searches (Filters)
 5524	No	-	Extended URLFETCH for Binary and Converted Parts
 5530	Yes	-	IMAP Response Codes

@@ -259,6 +259,13 @@ type MailboxCounts struct {
 	Size    int64 // Number of bytes for all messages.
 }
 
+// MessageCountIMAP returns the total message count for use in IMAP. In IMAP,
+// message marked \Deleted are included, in JMAP they those messages are not
+// visible at all.
+func (mc MailboxCounts) MessageCountIMAP() uint32 {
+	return uint32(mc.Total + mc.Deleted)
+}
+
 func (mc MailboxCounts) String() string {
 	return fmt.Sprintf("%d total, %d deleted, %d unread, %d unseen, size %d bytes", mc.Total, mc.Deleted, mc.Unread, mc.Unseen, mc.Size)
 }
@@ -601,13 +608,13 @@ func (m Message) MailboxCounts() (mc MailboxCounts) {
 	return
 }
 
-func (m Message) ChangeAddUID() ChangeAddUID {
-	return ChangeAddUID{m.MailboxID, m.UID, m.ModSeq, m.Flags, m.Keywords}
+func (m Message) ChangeAddUID(mb Mailbox) ChangeAddUID {
+	return ChangeAddUID{m.MailboxID, m.UID, m.ModSeq, m.Flags, m.Keywords, mb.MessageCountIMAP(), uint32(mb.MailboxCounts.Unseen)}
 }
 
-func (m Message) ChangeFlags(orig Flags) ChangeFlags {
+func (m Message) ChangeFlags(orig Flags, mb Mailbox) ChangeFlags {
 	mask := m.Flags.Changed(orig)
-	return ChangeFlags{MailboxID: m.MailboxID, UID: m.UID, ModSeq: m.ModSeq, Mask: mask, Flags: m.Flags, Keywords: m.Keywords}
+	return ChangeFlags{m.MailboxID, m.UID, m.ModSeq, mask, m.Flags, m.Keywords, mb.UIDValidity, uint32(mb.MailboxCounts.Unseen)}
 }
 
 func (m Message) ChangeThread() ChangeThread {
@@ -2884,7 +2891,7 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 		}
 
 		changes = append(changes, chl...)
-		changes = append(changes, m.ChangeAddUID(), mb.ChangeCounts())
+		changes = append(changes, m.ChangeAddUID(mb), mb.ChangeCounts())
 		if nmbkeywords != len(mb.Keywords) {
 			changes = append(changes, mb.ChangeKeywords())
 		}
@@ -2992,7 +2999,7 @@ func (a *Account) MessageRemove(log mlog.Log, tx *bstore.Tx, modseq ModSeq, mb *
 		}
 	}
 
-	return ChangeRemoveUIDs{mb.ID, uids, modseq, ids}, mb.ChangeCounts(), nil
+	return ChangeRemoveUIDs{mb.ID, uids, modseq, ids, mb.UIDNext, mb.MessageCountIMAP(), uint32(mb.MailboxCounts.Unseen)}, mb.ChangeCounts(), nil
 }
 
 // TidyRejectsMailbox removes old reject emails, and returns whether there is space for a new delivery.

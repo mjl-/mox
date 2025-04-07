@@ -199,10 +199,10 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	}
 
 	// Read the message data.
-	defer c.xtrace(mlog.LevelTracedata)()
+	defer c.xtraceread(mlog.LevelTracedata)()
 	mw := message.NewWriter(f)
 	msize, err := io.Copy(mw, io.LimitReader(c.br, size))
-	c.xtrace(mlog.LevelTrace) // Restore.
+	c.xtraceread(mlog.LevelTrace) // Restore.
 	if err != nil {
 		// Cannot use xcheckf due to %w handling of errIO.
 		c.xbrokenf("reading literal message: %s (%w)", err, errIO)
@@ -228,7 +228,12 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 
 	var om, nm store.Message
 	var mbSrc, mbDst store.Mailbox // Src and dst mailboxes can be different. ../rfc/8508:263
+	var overflow bool
 	var pendingChanges []store.Change
+	defer func() {
+		// In case of panic.
+		c.flushChanges(pendingChanges)
+	}()
 
 	c.account.WithWLock(func() {
 		var changes []store.Change
@@ -288,7 +293,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 			xcheckf(err, "delivering message")
 			newID = nm.ID
 
-			changes = append(changes, nm.ChangeAddUID(), mbDst.ChangeCounts())
+			changes = append(changes, nm.ChangeAddUID(mbDst), mbDst.ChangeCounts())
 			if nkeywords != len(mbDst.Keywords) {
 				changes = append(changes, mbDst.ChangeKeywords())
 			}
@@ -298,7 +303,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		})
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
-		pendingChanges = c.comm.Get()
+		overflow, pendingChanges = c.comm.Get()
 
 		if oldMsgExpunged {
 			return
@@ -315,7 +320,9 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	})
 
 	// Must update our msgseq/uids tracking with latest pending changes.
-	c.applyChanges(pendingChanges, false)
+	l := pendingChanges
+	pendingChanges = nil
+	c.xapplyChanges(overflow, l, false, false)
 
 	// If we couldn't find the message, send a NO response. We've just applied pending
 	// changes, which should have expunged the absent message.

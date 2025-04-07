@@ -2850,6 +2850,20 @@
 					]
 				},
 				{
+					"Name": "MessageCountIMAP",
+					"Docs": "For IMAP NOTIFY.",
+					"Typewords": [
+						"uint32"
+					]
+				},
+				{
+					"Name": "Unseen",
+					"Docs": "",
+					"Typewords": [
+						"uint32"
+					]
+				},
+				{
 					"Name": "MessageItems",
 					"Docs": "",
 					"Typewords": [
@@ -2968,6 +2982,27 @@
 						"[]",
 						"int64"
 					]
+				},
+				{
+					"Name": "UIDNext",
+					"Docs": "For IMAP NOTIFY.",
+					"Typewords": [
+						"UID"
+					]
+				},
+				{
+					"Name": "MessageCountIMAP",
+					"Docs": "",
+					"Typewords": [
+						"uint32"
+					]
+				},
+				{
+					"Name": "Unseen",
+					"Docs": "",
+					"Typewords": [
+						"uint32"
+					]
 				}
 			]
 		},
@@ -3016,6 +3051,20 @@
 					"Typewords": [
 						"[]",
 						"string"
+					]
+				},
+				{
+					"Name": "UIDValidity",
+					"Docs": "For IMAP NOTIFY.",
+					"Typewords": [
+						"uint32"
+					]
+				},
+				{
+					"Name": "Unseen",
+					"Docs": "",
+					"Typewords": [
+						"uint32"
 					]
 				}
 			]

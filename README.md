@@ -145,7 +145,7 @@ support:
 - Automate DNS management, for setup and maintenance, such as DANE/DKIM key rotation
 - Config options for "transactional email domains", for which mox will only
   send messages
-- More IMAP extensions (NOTIFY, UIDONLY)
+- More IMAP extensions (UIDONLY)
 - Encrypted storage of files (email messages, TLS keys), also with per account keys
 - Recognize common deliverability issues and help postmasters solve them
 - JMAP, IMAP OBJECTID extension, IMAP JMAPACCESS extension

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mjl-/mox/mlog"
 )
 
 func (c *Conn) recorded() string {
@@ -131,7 +133,9 @@ var knownCodes = stringMap(
 	// With parameters.
 	"BADCHARSET", "CAPABILITY", "PERMANENTFLAGS", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "APPENDUID", "COPYUID",
 	"HIGHESTMODSEQ", "MODIFIED",
-	"INPROGRESS", // ../rfc/9585:104
+	"INPROGRESS",                       // ../rfc/9585:104
+	"BADEVENT", "NOTIFICATIONOVERFLOW", // ../rfc/5465:1023
+	"SERVERBUG",
 )
 
 func stringMap(l ...string) map[string]struct{} {
@@ -247,6 +251,20 @@ func (c *Conn) xrespCode() (string, CodeArg) {
 			c.xtake(")")
 		}
 		codeArg = CodeInProgress{tag, current, goal}
+	case "BADEVENT":
+		// ../rfc/5465:1033
+		c.xspace()
+		c.xtake("(")
+		var l []string
+		for {
+			s := c.xatom()
+			l = append(l, s)
+			if !c.space() {
+				break
+			}
+		}
+		c.xtake(")")
+		codeArg = CodeBadEvent(l)
 	}
 	return W, codeArg
 }
@@ -896,8 +914,10 @@ func (c *Conn) xliteral() []byte {
 		c.xflush()
 	}
 	buf := make([]byte, int(size))
+	defer c.xtraceread(mlog.LevelTracedata)()
 	_, err := io.ReadFull(c.br, buf)
 	c.xcheckf(err, "reading data for literal")
+	c.xtraceread(mlog.LevelTrace)
 	return buf
 }
 

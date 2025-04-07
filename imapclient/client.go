@@ -185,13 +185,18 @@ func (c *Conn) xflush() {
 	}
 }
 
-func (c *Conn) xtrace(level slog.Level) func() {
-	c.xflush()
+func (c *Conn) xtraceread(level slog.Level) func() {
 	c.tr.SetTrace(level)
+	return func() {
+		c.tr.SetTrace(mlog.LevelTrace)
+	}
+}
+
+func (c *Conn) xtracewrite(level slog.Level) func() {
+	c.xflush()
 	c.xtw.SetTrace(level)
 	return func() {
 		c.xflush()
-		c.tr.SetTrace(mlog.LevelTrace)
 		c.xtw.SetTrace(mlog.LevelTrace)
 	}
 }
@@ -357,9 +362,10 @@ func (c *Conn) WriteSyncLiteral(s string) (untagged []Untagged, rerr error) {
 		_, err = c.Readline()
 		c.xcheckf(err, "read continuation line")
 
+		defer c.xtracewrite(mlog.LevelTracedata)()
 		_, err = c.xbw.Write([]byte(s))
 		c.xcheckf(err, "write literal data")
-		c.xflush()
+		c.xtracewrite(mlog.LevelTrace)
 		return nil, nil
 	}
 	untagged, result, err := c.Response()

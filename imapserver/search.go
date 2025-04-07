@@ -49,33 +49,13 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 	// The ESEARCH command has various ways to specify which mailboxes are to be
 	// searched. We parse and gather the request first, and evaluate them to mailboxes
 	// after parsing, when we start and have a DB transaction.
-	type mailboxSpec struct {
-		Kind string
-		Args []string
-	}
-	var mailboxSpecs []mailboxSpec
+	var mailboxSpecs []mailboxSpecifier
 
 	// ../rfc/7377:468
 	if isE && p.take(" IN (") {
 		for {
-			mbs := mailboxSpec{}
-			mbs.Kind = p.xtakelist("SELECTED", "INBOXES", "PERSONAL", "SUBSCRIBED", "SUBTREE-ONE", "SUBTREE", "MAILBOXES")
-			switch mbs.Kind {
-			case "SUBTREE", "SUBTREE-ONE", "MAILBOXES":
-				p.xtake(" ")
-				if p.take("(") {
-					for {
-						mbs.Args = append(mbs.Args, p.xmailbox())
-						if !p.take(" ") {
-							break
-						}
-					}
-					p.xtake(")")
-				} else {
-					mbs.Args = []string{p.xmailbox()}
-				}
-			}
-			mailboxSpecs = append(mailboxSpecs, mbs)
+			ms := p.xfilterMailbox(mbspecsEsearch)
+			mailboxSpecs = append(mailboxSpecs, ms)
 
 			if !p.take(" ") {
 				break
@@ -214,9 +194,9 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		if len(mailboxSpecs) > 0 {
 			// While gathering, we deduplicate mailboxes. ../rfc/7377:312
 			m := map[int64]store.Mailbox{}
-			for _, mbs := range mailboxSpecs {
-				switch mbs.Kind {
-				case "SELECTED":
+			for _, ms := range mailboxSpecs {
+				switch ms.Kind {
+				case mbspecSelected:
 					// ../rfc/7377:306
 					if c.state != stateSelected {
 						xsyntaxErrorf("cannot use ESEARCH with selected when state is not selected")
@@ -225,7 +205,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					mb := c.xmailboxID(tx, c.mailboxID) // Validate.
 					m[mb.ID] = mb
 
-				case "INBOXES":
+				case mbspecInboxes:
 					// Inbox and everything below. And we look at destinations and rulesets. We all
 					// mailboxes from the destinations, and all from the rulesets except when
 					// ListAllowDomain is non-empty.
@@ -265,7 +245,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 						}
 					}
 
-				case "PERSONAL":
+				case mbspecPersonal:
 					// All mailboxes in the personal namespace. Which is all mailboxes for us.
 					// ../rfc/5465:817
 					for mb, err := range bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).All() {
@@ -273,7 +253,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 						m[mb.ID] = mb
 					}
 
-				case "SUBSCRIBED":
+				case mbspecSubscribed:
 					// Mailboxes that are subscribed. Will typically be same as personal, since we
 					// subscribe to all mailboxes. But user can manage subscriptions differently.
 					// ../rfc/5465:831
@@ -286,7 +266,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 						}
 					}
 
-				case "SUBTREE", "SUBTREE-ONE":
+				case mbspecSubtree, mbspecSubtreeOne:
 					// The mailbox name itself, and children. ../rfc/5465:847
 					// SUBTREE is arbitrarily deep, SUBTREE-ONE is one level deeper than requested
 					// mailbox. The mailbox itself is included too ../rfc/7377:274
@@ -294,13 +274,13 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					// We don't have to worry about loops. Mailboxes are not in the file system.
 					// ../rfc/7377:291
 
-					for _, name := range mbs.Args {
+					for _, name := range ms.Mailboxes {
 						name = xcheckmailboxname(name, true)
 
-						one := mbs.Kind == "SUBTREE-ONE"
+						one := ms.Kind == mbspecSubtreeOne
 						var ntoken int
 						if one {
-							ntoken = len(strings.Split(name, "/"))
+							ntoken = len(strings.Split(name, "/")) + 1
 						}
 
 						q := bstore.QueryTx[store.Mailbox](tx)
@@ -312,15 +292,15 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 							if mb.Name != name && !strings.HasPrefix(mb.Name, name+"/") {
 								break
 							}
-							if !one || mb.Name == name || len(strings.Split(mb.Name, "/")) == ntoken+1 {
+							if !one || mb.Name == name || len(strings.Split(mb.Name, "/")) == ntoken {
 								m[mb.ID] = mb
 							}
 						}
 					}
 
-				case "MAILBOXES":
+				case mbspecMailboxes:
 					// Just the specified mailboxes. ../rfc/5465:853
-					for _, name := range mbs.Args {
+					for _, name := range ms.Mailboxes {
 						name = xcheckmailboxname(name, true)
 
 						// If a mailbox doesn't exist, we don't treat it as an error. Seems reasonable

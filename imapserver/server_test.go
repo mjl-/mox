@@ -250,7 +250,7 @@ func tuntagged(t *testing.T, got imapclient.Untagged, dst any) {
 	gotv := reflect.ValueOf(got)
 	dstv := reflect.ValueOf(dst)
 	if gotv.Type() != dstv.Type().Elem() {
-		t.Fatalf("got %v, expected %v", gotv.Type(), dstv.Type().Elem())
+		t.Fatalf("got %#v, expected %#v", gotv.Type(), dstv.Type().Elem())
 	}
 	dstv.Elem().Set(gotv)
 }
@@ -259,6 +259,18 @@ func (tc *testconn) xnountagged() {
 	tc.t.Helper()
 	if len(tc.lastUntagged) != 0 {
 		tc.t.Fatalf("got %v untagged, expected 0", tc.lastUntagged)
+	}
+}
+
+func (tc *testconn) readuntagged(exps ...imapclient.Untagged) {
+	tc.t.Helper()
+	for i, exp := range exps {
+		tc.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		v, err := tc.client.ReadUntagged()
+		tcheck(tc.t, err, "reading untagged")
+		if !reflect.DeepEqual(v, exp) {
+			tc.t.Fatalf("got %#v, expected %#v, response %d/%d", v, exp, i+1, len(exps))
+		}
 	}
 }
 

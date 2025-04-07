@@ -183,6 +183,7 @@ var serverCapabilities = strings.Join([]string{
 	"PREVIEW",                         // ../rfc/8970:114
 	"INPROGRESS",                      // ../rfc/9585:101
 	"MULTISEARCH",                     // ../rfc/7377:187
+	"NOTIFY",                          // ../rfc/5465:195
 	// "COMPRESS=DEFLATE", // ../rfc/4978, disabled for interoperability issues: The flate reader (inflate) still blocks on partial flushes, preventing progress.
 }, " ")
 
@@ -213,6 +214,7 @@ type conn struct {
 	log               mlog.Log            // Used for all synchronous logging on this connection, see logbg for logging in a separate goroutine.
 	enabled           map[capability]bool // All upper-case.
 	compress          bool                // Whether compression is enabled, via compress command.
+	notify            *notify             // For the NOTIFY extension. Event/change filtering active if non-nil.
 
 	// Set by SEARCH with SAVE. Can be used by commands accepting a sequence-set with
 	// value "$". When used, UIDs must be verified to still exist, because they may
@@ -282,7 +284,7 @@ func stateCommands(cmds ...string) map[string]struct{} {
 var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
-	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress", "esearch")
+	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress", "esearch", "notify")
 	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace", "esearch")
 )
 
@@ -319,6 +321,7 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"setmetadata":  (*conn).cmdSetmetadata,
 	"compress":     (*conn).cmdCompress,
 	"esearch":      (*conn).cmdEsearch,
+	"notify":       (*conn).cmdNotify, // Connection does not have to be in selected state. ../rfc/5465:792 ../rfc/5465:921
 
 	// Selected.
 	"check":       (*conn).cmdCheck,
@@ -487,11 +490,39 @@ func (c *conn) xdbread(fn func(tx *bstore.Tx)) {
 // Closes the currently selected/active mailbox, setting state from selected to authenticated.
 // Does not remove messages marked for deletion.
 func (c *conn) unselect() {
+	// Flush any pending delayed changes as if the mailbox is still selected. Probably
+	// better than causing STATUS responses for the mailbox being unselected but which
+	// is still selected.
+	c.flushNotifyDelayed()
+
 	if c.state == stateSelected {
 		c.state = stateAuthenticated
 	}
 	c.mailboxID = 0
 	c.uids = nil
+}
+
+func (c *conn) flushNotifyDelayed() {
+	if c.notify == nil {
+		return
+	}
+	delayed := c.notify.Delayed
+	c.notify.Delayed = nil
+	c.flushChanges(delayed)
+}
+
+// flushChanges is called for NOTIFY changes we shouldn't send untagged messages
+// about but must process for message removals. We don't update the selected
+// mailbox message sequence numbers, since the client would have no idea we
+// adjusted message sequence numbers. Combined with NOTIFY NONE, this means
+// messages may be erased that the client thinks still exists in its session.
+func (c *conn) flushChanges(changes []store.Change) {
+	for _, change := range changes {
+		switch ch := change.(type) {
+		case store.ChangeRemoveUIDs:
+			c.comm.RemovalSeen(ch)
+		}
+	}
 }
 
 func (c *conn) setSlow(on bool) {
@@ -529,13 +560,18 @@ func (c *conn) Write(buf []byte) (int, error) {
 	return n, nil
 }
 
-func (c *conn) xtrace(level slog.Level) func() {
-	c.xflush()
+func (c *conn) xtraceread(level slog.Level) func() {
 	c.tr.SetTrace(level)
+	return func() {
+		c.tr.SetTrace(mlog.LevelTrace)
+	}
+}
+
+func (c *conn) xtracewrite(level slog.Level) func() {
+	c.xflush()
 	c.xtw.SetTrace(level)
 	return func() {
 		c.xflush()
-		c.tr.SetTrace(mlog.LevelTrace)
 		c.xtw.SetTrace(mlog.LevelTrace)
 	}
 }
@@ -561,7 +597,6 @@ func (c *conn) readline0() (string, error) {
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
 		return "", fmt.Errorf("%s (%w)", err, errProtocol)
 	} else if err != nil {
-		c.connBroken = true
 		return "", fmt.Errorf("%s (%w)", err, errIO)
 	}
 	return line, nil
@@ -591,10 +626,11 @@ func (c *conn) xreadline(readCmd bool) string {
 	}
 	if err != nil {
 		if readCmd && errors.Is(err, os.ErrDeadlineExceeded) {
-			err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			c.log.Check(err, "setting write deadline")
+			err := c.conn.SetDeadline(time.Now().Add(10 * time.Second))
+			c.log.Check(err, "setting deadline")
 			c.xwritelinef("* BYE inactive")
 		}
+		c.connBroken = true
 		if !errors.Is(err, errIO) && !errors.Is(err, errProtocol) {
 			c.xbrokenf("%s (%w)", err, errIO)
 		}
@@ -630,7 +666,8 @@ func (c *conn) xbwriteresultf(format string, args ...any) {
 		// ../rfc/9051:5862 ../rfc/7162:2033
 	default:
 		if c.comm != nil {
-			c.applyChanges(c.comm.Get(), false)
+			overflow, changes := c.comm.Get()
+			c.xapplyChanges(overflow, changes, false, true)
 		}
 	}
 	c.xbwritelinef(format, args...)
@@ -670,8 +707,7 @@ func (c *conn) xflush() {
 	}
 }
 
-func (c *conn) readCommand(tag *string) (cmd string, p *parser) {
-	line := c.xreadline(true)
+func (c *conn) parseCommand(tag *string, line string) (cmd string, p *parser) {
 	p = newParser(line, c)
 	p.context("tag")
 	*tag = p.xtag()
@@ -786,6 +822,10 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		if err != nil {
 			c.log.Debugx("closing connection", err)
 		}
+
+		// If changes for NOTIFY's SELECTED-DELAYED are still pending, we'll acknowledge
+		// their message removals so the files can be erased.
+		c.flushNotifyDelayed()
 
 		if c.account != nil {
 			c.comm.Unregister()
@@ -1225,7 +1265,53 @@ func (c *conn) command() {
 	}()
 
 	tag = "*"
-	cmd, p = c.readCommand(&tag)
+
+	// If NOTIFY is enabled, we wait for either a line (with a command) from the
+	// client, or a change event. If we see a line, we continue below as for the
+	// non-NOTIFY case, parsing the command.
+	var line string
+	if c.notify != nil {
+	Wait:
+		for {
+			select {
+			case le := <-c.lineChan():
+				c.line = nil
+				if err := le.err; err != nil {
+					if errors.Is(err, os.ErrDeadlineExceeded) {
+						err := c.conn.SetDeadline(time.Now().Add(10 * time.Second))
+						c.log.Check(err, "setting write deadline")
+						c.xwritelinef("* BYE inactive")
+					}
+					c.connBroken = true
+					if !errors.Is(err, errIO) && !errors.Is(err, errProtocol) {
+						c.xbrokenf("%s (%w)", err, errIO)
+					}
+					panic(err)
+				}
+				line = le.line
+				break Wait
+
+			case <-c.comm.Pending:
+				overflow, changes := c.comm.Get()
+				c.xapplyChanges(overflow, changes, false, false)
+				c.xflush()
+
+			case <-mox.Shutdown.Done():
+				// ../rfc/9051:5375
+				c.xwritelinef("* BYE shutting down")
+				c.xbrokenf("shutting down (%w)", errIO)
+			}
+		}
+
+		// Reset the write deadline. In case of little activity, with a command timeout of
+		// 30 minutes, we have likely passed it.
+		err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
+		c.log.Check(err, "setting write deadline")
+	} else {
+		// Without NOTIFY, we just read a line.
+		line = c.xreadline(true)
+	}
+	cmd, p = c.parseCommand(&tag, line)
 	cmdlow = strings.ToLower(cmd)
 	c.cmd = cmdlow
 	c.cmdStart = time.Now()
@@ -1371,7 +1457,7 @@ func (c *conn) sequenceRemove(seq msgseq, uid store.UID) {
 // add uid to the session. care must be taken that pending changes are fetched
 // while holding the account wlock, and applied before adding this uid, because
 // those pending changes may contain another new uid that has to be added first.
-func (c *conn) uidAppend(uid store.UID) {
+func (c *conn) uidAppend(uid store.UID) msgseq {
 	if uidSearch(c.uids, uid) > 0 {
 		xserverErrorf("uid already present (%w)", errProtocol)
 	}
@@ -1382,6 +1468,7 @@ func (c *conn) uidAppend(uid store.UID) {
 	if sanityChecks {
 		checkUIDs(c.uids)
 	}
+	return msgseq(len(c.uids))
 }
 
 // sanity check that uids are in ascending order.
@@ -1577,10 +1664,43 @@ func (c *conn) xmailboxID(tx *bstore.Tx, id int64) store.Mailbox {
 // If initial is true, we only apply the changes.
 // Should not be called while holding locks, as changes are written to client connections, which can block.
 // Does not flush output.
-func (c *conn) applyChanges(changes []store.Change, initial bool) {
+func (c *conn) xapplyChanges(overflow bool, changes []store.Change, initial, sendDelayed bool) {
+	// If more changes were generated than we can process, we send a
+	// NOTIFICATIONOVERFLOW as defined in the NOTIFY extension. ../rfc/5465:712
+	if overflow {
+		if c.notify != nil && len(c.notify.Delayed) > 0 {
+			changes = append(c.notify.Delayed, changes...)
+		}
+		c.flushChanges(changes)
+		// We must not send any more unsolicited untagged responses to the client for
+		// NOTIFY, but we also follow this for IDLE. ../rfc/5465:717
+		c.notify = &notify{}
+		c.xbwritelinef("* OK [NOTIFICATIONOVERFLOW] out of sync after too many pending changes")
+		if !initial {
+			return
+		}
+		changes = nil
+	}
+
+	// applyChanges for IDLE and NOTIFY. When explicitly in IDLE while NOTIFY is
+	// enabled, we still respond with messages as for NOTIFY. ../rfc/5465:406
+	if c.notify != nil {
+		c.xapplyChangesNotify(changes, sendDelayed)
+		return
+	}
 	if len(changes) == 0 {
 		return
 	}
+
+	// Even in the case of a panic (e.g. i/o errors), we must mark removals as seen.
+	origChanges := changes
+	defer func() {
+		for _, change := range origChanges {
+			if ch, ok := change.(store.ChangeRemoveUIDs); ok {
+				c.comm.RemovalSeen(ch)
+			}
+		}
+	}()
 
 	err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 	c.log.Check(err, "setting write deadline")
@@ -1596,10 +1716,9 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			mbID = ch.MailboxID
 		case store.ChangeRemoveUIDs:
 			mbID = ch.MailboxID
-			c.comm.RemovalSeen(ch)
 		case store.ChangeFlags:
 			mbID = ch.MailboxID
-		case store.ChangeRemoveMailbox, store.ChangeAddMailbox, store.ChangeRenameMailbox, store.ChangeAddSubscription:
+		case store.ChangeRemoveMailbox, store.ChangeAddMailbox, store.ChangeRenameMailbox, store.ChangeAddSubscription, store.ChangeRemoveSubscription:
 			n = append(n, change)
 			continue
 		case store.ChangeAnnotation:
@@ -1653,6 +1772,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 				if condstore {
 					modseqStr = fmt.Sprintf(" MODSEQ (%d)", add.ModSeq.Client())
 				}
+
 				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, add.UID, flaglist(add.Flags, add.Keywords).pack(c), modseqStr)
 			}
 			continue
@@ -1689,6 +1809,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 					c.xbwritelinef("* VANISHED %s", s)
 				}
 			}
+
 		case store.ChangeFlags:
 			// The uid can be unknown if we just expunged it while another session marked it as deleted just before.
 			seq := c.sequence(ch.UID)
@@ -1702,6 +1823,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 				}
 				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
 			}
+
 		case store.ChangeRemoveMailbox:
 			// Only announce \NonExistent to modern clients, otherwise they may ignore the
 			// unrecognized \NonExistent and interpret this as a newly created mailbox, while
@@ -1709,8 +1831,10 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			if c.enabled[capIMAP4rev2] {
 				c.xbwritelinef(`* LIST (\NonExistent) "/" %s`, mailboxt(ch.Name).pack(c))
 			}
+
 		case store.ChangeAddMailbox:
 			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), mailboxt(ch.Mailbox.Name).pack(c))
+
 		case store.ChangeRenameMailbox:
 			// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
 			var oldname string
@@ -1718,14 +1842,388 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 				oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, mailboxt(ch.OldName).pack(c))
 			}
 			c.xbwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), mailboxt(ch.NewName).pack(c), oldname)
+
 		case store.ChangeAddSubscription:
-			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), mailboxt(ch.Name).pack(c))
+			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.ListFlags...), " "), mailboxt(ch.MailboxName).pack(c))
+
+		case store.ChangeRemoveSubscription:
+			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.ListFlags, " "), mailboxt(ch.MailboxName).pack(c))
+
 		case store.ChangeAnnotation:
 			// ../rfc/5464:807 ../rfc/5464:788
 			c.xbwritelinef(`* METADATA %s %s`, mailboxt(ch.MailboxName).pack(c), astring(ch.Key).pack(c))
+
 		default:
 			panic(fmt.Sprintf("internal error, missing case for %#v", change))
 		}
+	}
+}
+
+// Like applyChanges, but for notify, with configurable mailboxes to notify about,
+// and configurable events to send, including which fetch attributes to return.
+// All calls must go through applyChanges, for overflow handling.
+func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
+	if sendDelayed && len(c.notify.Delayed) > 0 {
+		changes = append(c.notify.Delayed, changes...)
+		c.notify.Delayed = nil
+	}
+
+	if len(changes) == 0 {
+		return
+	}
+
+	// Even in the case of a panic (e.g. i/o errors), we must mark removals as seen.
+	// For selected-delayed, we may have postponed handling the message, so we call
+	// RemovalSeen when handling a change, and mark how far we got, so we only process
+	// changes that we haven't processed yet.
+	unhandled := changes
+	defer func() {
+		for _, change := range unhandled {
+			if ch, ok := change.(store.ChangeRemoveUIDs); ok {
+				c.comm.RemovalSeen(ch)
+			}
+		}
+	}()
+
+	c.log.Debug("applying notify changes", slog.Any("changes", changes))
+
+	err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
+	c.log.Check(err, "setting write deadline")
+
+	qresync := c.enabled[capQresync]
+	condstore := c.enabled[capCondstore]
+
+	// Prepare for providing a read-only transaction on first-use, for MessageNew fetch
+	// attributes.
+	var tx *bstore.Tx
+	defer func() {
+		if tx != nil {
+			err := tx.Rollback()
+			c.log.Check(err, "rolling back tx")
+		}
+	}()
+	xtx := func() *bstore.Tx {
+		if tx != nil {
+			return tx
+		}
+
+		var err error
+		tx, err = c.account.DB.Begin(context.TODO(), false)
+		xcheckf(err, "tx")
+		return tx
+	}
+
+	// On-demand mailbox lookups, with cache.
+	mailboxes := map[int64]store.Mailbox{}
+	xmailbox := func(id int64) store.Mailbox {
+		if mb, ok := mailboxes[id]; ok {
+			return mb
+		}
+		mb := store.Mailbox{ID: id}
+		err := xtx().Get(&mb)
+		xcheckf(err, "get mailbox")
+		mailboxes[id] = mb
+		return mb
+	}
+
+	// Keep track of last command, to close any open message file (for fetching
+	// attributes) in case of a panic.
+	var cmd *fetchCmd
+	defer func() {
+		if cmd != nil {
+			cmd.msgclose()
+			cmd = nil
+		}
+	}()
+
+	for index, change := range changes {
+		switch ch := change.(type) {
+		case store.ChangeAddUID:
+			// ../rfc/5465:511
+			// todo: ../rfc/5465:525 group ChangeAddUID for the same mailbox, so we can send a single EXISTS. useful for imports.
+
+			mb := xmailbox(ch.MailboxID)
+			ms, ev, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventMessageNew)
+			if !ok {
+				continue
+			}
+
+			// For non-selected mailbox, send STATUS with UIDNEXT, MESSAGES. And HIGESTMODSEQ
+			// in case of condstore/qresync. ../rfc/5465:537
+			// There is no mention of UNSEEN for MessageNew, but clients will want to show a
+			// new "unread messages" count, and they will have to understand it since
+			// FlagChange is specified as sending UNSEEN.
+			if mb.ID != c.mailboxID {
+				if condstore || qresync {
+					c.xbwritelinef("* STATUS %s (UIDNEXT %d MESSAGES %d HIGHESTMODSEQ %d UNSEEN %d)", mailboxt(mb.Name).pack(c), ch.UID+1, ch.MessageCountIMAP, ch.ModSeq, ch.Unseen)
+				} else {
+					c.xbwritelinef("* STATUS %s (UIDNEXT %d MESSAGES %d UNSEEN %d)", mailboxt(mb.Name).pack(c), ch.UID+1, ch.MessageCountIMAP, ch.Unseen)
+				}
+				continue
+			}
+
+			// Delay sending all message events, we want to prevent synchronization issues
+			// around UIDNEXT and MODSEQ. ../rfc/5465:808
+			if ms.Kind == mbspecSelectedDelayed && !sendDelayed {
+				c.notify.Delayed = append(c.notify.Delayed, change)
+				continue
+			}
+
+			seq := c.uidAppend(ch.UID)
+
+			// ../rfc/5465:515
+			c.xbwritelinef("* %d EXISTS", len(c.uids))
+
+			// If client did not specify attributes, we'll send the defaults.
+			if len(ev.FetchAtt) == 0 {
+				var modseqStr string
+				if condstore {
+					modseqStr = fmt.Sprintf(" MODSEQ (%d)", ch.ModSeq.Client())
+				}
+				// NOTIFY does not specify the default fetch attributes to return, we send UID and
+				// FLAGS.
+				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+				continue
+			}
+
+			// todo: ../rfc/5465:543 mark messages as \seen after processing if client didn't use the .PEEK-variants.
+			cmd = &fetchCmd{conn: c, isUID: true, rtx: xtx(), mailboxID: ch.MailboxID, uid: ch.UID}
+			data, err := cmd.process(ev.FetchAtt)
+			if err != nil {
+				// There is no good way to notify the client about errors. We continue below to
+				// send a FETCH with just the UID. And we send an untagged NO in the hope a client
+				// developer sees the message.
+				c.log.Errorx("generating notify fetch response", err, slog.Int64("mailboxid", ch.MailboxID), slog.Any("uid", ch.UID))
+				c.xbwritelinef("* NO generating notify fetch response: %s", err.Error())
+				data = listspace{bare("UID"), number(ch.UID)}
+			}
+			fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", seq)
+			func() {
+				defer c.xtracewrite(mlog.LevelTracedata)()
+				data.xwriteTo(cmd.conn, cmd.conn.xbw)
+				c.xtracewrite(mlog.LevelTrace) // Restore.
+				cmd.conn.xbw.Write([]byte("\r\n"))
+			}()
+
+			cmd.msgclose()
+			cmd = nil
+
+		case store.ChangeRemoveUIDs:
+			// ../rfc/5465:567
+			mb := xmailbox(ch.MailboxID)
+			ms, _, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventMessageExpunge)
+			if !ok {
+				unhandled = changes[index+1:]
+				c.comm.RemovalSeen(ch)
+				continue
+			}
+
+			// For non-selected mailboxes, we send STATUS with at least UIDNEXT and MESSAGES.
+			// ../rfc/5465:576
+			// In case of QRESYNC, we send HIGHESTMODSEQ. Also for CONDSTORE, which isn't
+			// required like for MessageExpunge like it is for MessageNew.   ../rfc/5465:578
+			// ../rfc/5465:539
+			// There is no mention of UNSEEN, but clients will want to show a new "unread
+			// messages" count, and they can parse it since FlagChange is specified as sending
+			// UNSEEN.
+			if mb.ID != c.mailboxID {
+				unhandled = changes[index+1:]
+				c.comm.RemovalSeen(ch)
+				if condstore || qresync {
+					c.xbwritelinef("* STATUS %s (UIDNEXT %d MESSAGES %d HIGHESTMODSEQ %d UNSEEN %d)", mailboxt(mb.Name).pack(c), ch.UIDNext, ch.MessageCountIMAP, ch.ModSeq, ch.Unseen)
+				} else {
+					c.xbwritelinef("* STATUS %s (UIDNEXT %d MESSAGES %d UNSEEN %d)", mailboxt(mb.Name).pack(c), ch.UIDNext, ch.MessageCountIMAP, ch.Unseen)
+				}
+				continue
+			}
+
+			// Delay sending all message events, we want to prevent synchronization issues
+			// around UIDNEXT and MODSEQ. ../rfc/5465:808
+			if ms.Kind == mbspecSelectedDelayed && !sendDelayed {
+				unhandled = changes[index+1:] // We'll call RemovalSeen in the future.
+				c.notify.Delayed = append(c.notify.Delayed, change)
+				continue
+			}
+
+			unhandled = changes[index+1:]
+			c.comm.RemovalSeen(ch)
+
+			var vanishedUIDs numSet
+			for _, uid := range ch.UIDs {
+
+				seq := c.xsequence(uid)
+				c.sequenceRemove(seq, uid)
+				if qresync {
+					vanishedUIDs.append(uint32(uid))
+				} else {
+					c.xbwritelinef("* %d EXPUNGE", seq)
+				}
+			}
+			if qresync {
+				// VANISHED without EARLIER. ../rfc/7162:2004
+				for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
+					c.xbwritelinef("* VANISHED %s", s)
+				}
+			}
+
+		case store.ChangeFlags:
+			// ../rfc/5465:461
+			mb := xmailbox(ch.MailboxID)
+			ms, _, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventFlagChange)
+			if !ok {
+				continue
+			} else if mb.ID != c.mailboxID {
+				// ../rfc/5465:474
+				// For condstore/qresync, we include HIGHESTMODSEQ. ../rfc/5465:476
+				// We include UNSEEN, so clients can update the number of unread messages. ../rfc/5465:479
+				if condstore || qresync {
+					c.xbwritelinef("* STATUS %s (HIGHESTMODSEQ %d UIDVALIDITY %d UNSEEN %d)", mailboxt(mb.Name).pack(c), ch.ModSeq, ch.UIDValidity, ch.Unseen)
+				} else {
+					c.xbwritelinef("* STATUS %s (UIDVALIDITY %d UNSEEN %d)", mailboxt(mb.Name).pack(c), ch.UIDValidity, ch.Unseen)
+				}
+				continue
+			}
+
+			// Delay sending all message events, we want to prevent synchronization issues
+			// around UIDNEXT and MODSEQ. ../rfc/5465:808
+			if ms.Kind == mbspecSelectedDelayed && !sendDelayed {
+				c.notify.Delayed = append(c.notify.Delayed, change)
+				continue
+			}
+
+			// The uid can be unknown if we just expunged it while another session marked it as deleted just before.
+			seq := c.sequence(ch.UID)
+			if seq <= 0 {
+				continue
+			}
+
+			var modseqStr string
+			if condstore {
+				modseqStr = fmt.Sprintf(" MODSEQ (%d)", ch.ModSeq.Client())
+			}
+			// UID and FLAGS are required. ../rfc/5465:463
+			c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+
+		case store.ChangeThread:
+			continue
+
+		// ../rfc/5465:603
+		case store.ChangeRemoveMailbox:
+			mb := xmailbox(ch.MailboxID)
+			_, _, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventMailboxName)
+			if !ok {
+				continue
+			}
+
+			// ../rfc/5465:624
+			c.xbwritelinef(`* LIST (\NonExistent) "/" %s`, mailboxt(ch.Name).pack(c))
+
+		case store.ChangeAddMailbox:
+			mb := xmailbox(ch.Mailbox.ID)
+			_, _, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventMailboxName)
+			if !ok {
+				continue
+			}
+			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), mailboxt(ch.Mailbox.Name).pack(c))
+
+		case store.ChangeRenameMailbox:
+			mb := xmailbox(ch.MailboxID)
+			_, _, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventMailboxName)
+			if !ok {
+				continue
+			}
+			// ../rfc/5465:628
+			oldname := fmt.Sprintf(` ("OLDNAME" (%s))`, mailboxt(ch.OldName).pack(c))
+			c.xbwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), mailboxt(ch.NewName).pack(c), oldname)
+
+		// ../rfc/5465:653
+		case store.ChangeAddSubscription:
+			_, _, ok := c.notify.match(c, xtx, 0, ch.MailboxName, eventSubscriptionChange)
+			if !ok {
+				continue
+			}
+			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.ListFlags...), " "), mailboxt(ch.MailboxName).pack(c))
+
+		case store.ChangeRemoveSubscription:
+			_, _, ok := c.notify.match(c, xtx, 0, ch.MailboxName, eventSubscriptionChange)
+			if !ok {
+				continue
+			}
+			// ../rfc/5465:653
+			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.ListFlags, " "), mailboxt(ch.MailboxName).pack(c))
+
+		case store.ChangeMailboxCounts:
+			continue
+
+		case store.ChangeMailboxSpecialUse:
+			// todo: can we send special-use flags as part of an untagged LIST response?
+			continue
+
+		case store.ChangeMailboxKeywords:
+			// ../rfc/5465:461
+			mb := xmailbox(ch.MailboxID)
+			ms, _, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventFlagChange)
+			if !ok {
+				continue
+			} else if mb.ID != c.mailboxID {
+				continue
+			}
+
+			// Delay sending all message events, we want to prevent synchronization issues
+			// around UIDNEXT and MODSEQ.  ../rfc/5465:808
+			// This change is about mailbox keywords, but it's specified under the FlagChange
+			// message event. ../rfc/5465:466
+
+			if ms.Kind == mbspecSelectedDelayed && !sendDelayed {
+				c.notify.Delayed = append(c.notify.Delayed, change)
+				continue
+			}
+
+			var keywords string
+			if len(ch.Keywords) > 0 {
+				keywords = " " + strings.Join(ch.Keywords, " ")
+			}
+			c.xbwritelinef(`* FLAGS (\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent%s)`, keywords)
+
+		case store.ChangeAnnotation:
+			// Client does not have to enable METADATA/METADATA-SERVER. Just asking for these
+			// events is enough.
+			// ../rfc/5465:679
+
+			if ch.MailboxID == 0 {
+				// ServerMetadataChange ../rfc/5465:695
+				_, _, ok := c.notify.match(c, xtx, 0, "", eventServerMetadataChange)
+				if !ok {
+					continue
+				}
+			} else {
+				// MailboxMetadataChange ../rfc/5465:665
+				mb := xmailbox(ch.MailboxID)
+				_, _, ok := c.notify.match(c, xtx, mb.ID, mb.Name, eventMailboxMetadataChange)
+				if !ok {
+					continue
+				}
+			}
+			// We don't implement message annotations. ../rfc/5465:461
+
+			// We must not include values. ../rfc/5465:683 ../rfc/5464:716
+			// Syntax: ../rfc/5464:807
+			c.xbwritelinef(`* METADATA %s %s`, mailboxt(ch.MailboxName).pack(c), astring(ch.Key).pack(c))
+
+		default:
+			panic(fmt.Sprintf("internal error, missing case for %#v", change))
+		}
+	}
+
+	// If we have too many delayed changes, we will warn about notification overflow,
+	// and not queue more changes until another NOTIFY command. ../rfc/5465:717
+	if len(c.notify.Delayed) > selectedDelayedChangesMax {
+		l := c.notify.Delayed
+		c.notify.Delayed = nil
+		c.flushChanges(l)
+
+		c.notify = &notify{}
+		c.xbwritelinef("* OK [NOTIFICATIONOVERFLOW] out of sync after too many pending changes for selected mailbox")
 	}
 }
 
@@ -2039,9 +2537,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 
 		// Plain text passwords, mark as traceauth.
-		defer c.xtrace(mlog.LevelTraceauth)()
+		defer c.xtraceread(mlog.LevelTraceauth)()
 		buf := xreadInitial()
-		c.xtrace(mlog.LevelTrace) // Restore.
+		c.xtraceread(mlog.LevelTrace) // Restore.
 		plain := bytes.Split(buf, []byte{0})
 		if len(plain) != 3 {
 			xsyntaxErrorf("bad plain auth data, expected 3 nul-separated tokens, got %d tokens", len(plain))
@@ -2618,7 +3116,9 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 			}
 		})
 	})
-	c.applyChanges(c.comm.Get(), true)
+
+	overflow, changes := c.comm.Get()
+	c.xapplyChanges(overflow, changes, true, false)
 
 	var flags string
 	if len(mb.Keywords) > 0 {
@@ -3062,6 +3562,8 @@ func (c *conn) cmdUnsubscribe(tag, cmd string, p *parser) {
 	name = xcheckmailboxname(name, true)
 
 	c.account.WithWLock(func() {
+		var changes []store.Change
+
 		c.xdbwrite(func(tx *bstore.Tx) {
 			// It's OK if not currently subscribed, ../rfc/9051:2215
 			err := tx.Delete(&store.Subscription{Name: name})
@@ -3074,7 +3576,18 @@ func (c *conn) cmdUnsubscribe(tag, cmd string, p *parser) {
 				return
 			}
 			xcheckf(err, "removing subscription")
+
+			var flags []string
+			exists, err := c.account.MailboxExists(tx, name)
+			xcheckf(err, "looking up mailbox existence")
+			if !exists {
+				flags = []string{`\NonExistent`}
+			}
+
+			changes = []store.Change{store.ChangeRemoveSubscription{MailboxName: name, ListFlags: flags}}
 		})
+
+		c.broadcast(changes)
 
 		// todo: can we send untagged message about a mailbox no longer being subscribed?
 	})
@@ -3409,10 +3922,10 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			}
 		}
 
-		defer c.xtrace(mlog.LevelTracedata)()
+		defer c.xtracewrite(mlog.LevelTracedata)()
 		a.mw = message.NewWriter(f)
 		msize, err := io.Copy(a.mw, io.LimitReader(c.br, size))
-		c.xtrace(mlog.LevelTrace) // Restore.
+		c.xtracewrite(mlog.LevelTrace) // Restore.
 		if err != nil {
 			// Cannot use xcheckf due to %w handling of errIO.
 			c.xbrokenf("reading literal message: %s (%w)", err, errIO)
@@ -3448,7 +3961,12 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	}
 
 	var mb store.Mailbox
+	var overflow bool
 	var pendingChanges []store.Change
+	defer func() {
+		// In case of panic.
+		c.flushChanges(pendingChanges)
+	}()
 
 	// Append all messages in a single atomic transaction. ../rfc/3502:143
 
@@ -3490,7 +4008,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				err = c.account.MessageAdd(c.log, tx, &mb, &a.m, a.file, store.AddOpts{SkipDirSync: true})
 				xcheckf(err, "delivering message")
 
-				changes = append(changes, a.m.ChangeAddUID())
+				changes = append(changes, a.m.ChangeAddUID(mb))
 
 				msgDirs[filepath.Dir(c.account.MessagePath(a.m.ID))] = struct{}{}
 			}
@@ -3512,14 +4030,16 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		commit = true
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
-		pendingChanges = c.comm.Get()
+		overflow, pendingChanges = c.comm.Get()
 
 		// Broadcast the change to other connections.
 		c.broadcast(changes)
 	})
 
 	if c.mailboxID == mb.ID {
-		c.applyChanges(pendingChanges, false)
+		l := pendingChanges
+		pendingChanges = nil
+		c.xapplyChanges(overflow, l, false, true)
 		for _, a := range appends {
 			c.uidAppend(a.m.UID)
 		}
@@ -3552,17 +4072,35 @@ func (c *conn) cmdIdle(tag, cmd string, p *parser) {
 
 	c.xwritelinef("+ waiting")
 
+	// With NOTIFY enabled, flush all pending changes.
+	if c.notify != nil && len(c.notify.Delayed) > 0 {
+		c.xapplyChanges(false, nil, false, true)
+		c.xflush()
+	}
+
 	var line string
-wait:
+Wait:
 	for {
 		select {
 		case le := <-c.lineChan():
 			c.line = nil
-			xcheckf(le.err, "get line")
+			if err := le.err; err != nil {
+				if errors.Is(le.err, os.ErrDeadlineExceeded) {
+					err := c.conn.SetDeadline(time.Now().Add(10 * time.Second))
+					c.log.Check(err, "setting deadline")
+					c.xwritelinef("* BYE inactive")
+				}
+				c.connBroken = true
+				if !errors.Is(err, errIO) && !errors.Is(err, errProtocol) {
+					c.xbrokenf("%s (%w)", err, errIO)
+				}
+				panic(err)
+			}
 			line = le.line
-			break wait
+			break Wait
 		case <-c.comm.Pending:
-			c.applyChanges(c.comm.Get(), false)
+			overflow, changes := c.comm.Get()
+			c.xapplyChanges(overflow, changes, false, true)
 			c.xflush()
 		case <-mox.Shutdown.Done():
 			// ../rfc/9051:5375
@@ -4108,7 +4646,16 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 		if len(newUIDs) > 0 {
 			changes := make([]store.Change, 0, len(newUIDs)+2)
 			for i, uid := range newUIDs {
-				changes = append(changes, store.ChangeAddUID{MailboxID: mbDst.ID, UID: uid, ModSeq: modseq, Flags: flags[i], Keywords: keywords[i]})
+				add := store.ChangeAddUID{
+					MailboxID:        mbDst.ID,
+					UID:              uid,
+					ModSeq:           modseq,
+					Flags:            flags[i],
+					Keywords:         keywords[i],
+					MessageCountIMAP: mbDst.MessageCountIMAP(),
+					Unseen:           uint32(mbDst.MailboxCounts.Unseen),
+				}
+				changes = append(changes, add)
 			}
 			changes = append(changes, mbDst.ChangeCounts())
 			if nkeywords != len(mbDst.Keywords) {
@@ -4333,7 +4880,7 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 
 		changeRemoveUIDs.UIDs = append(changeRemoveUIDs.UIDs, om.UID)
 		changeRemoveUIDs.MsgIDs = append(changeRemoveUIDs.MsgIDs, om.ID)
-		changes = append(changes, nm.ChangeAddUID())
+		changes = append(changes, nm.ChangeAddUID(*mbDst))
 	}
 	xcheckf(err, "move messages")
 
@@ -4342,6 +4889,9 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 		xcheckf(err, "sync directory")
 	}
 
+	changeRemoveUIDs.UIDNext = mbDst.UIDNext
+	changeRemoveUIDs.MessageCountIMAP = mbDst.MessageCountIMAP()
+	changeRemoveUIDs.Unseen = uint32(mbDst.MailboxCounts.Unseen)
 	changes = append(changes, changeRemoveUIDs, mbSrc.ChangeCounts())
 
 	err = tx.Update(mbSrc)
@@ -4524,7 +5074,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 				modified[m.ID] = true
 				updated = append(updated, m)
 
-				changes = append(changes, m.ChangeFlags(origFlags))
+				changes = append(changes, m.ChangeFlags(origFlags, mb))
 
 				return tx.Update(&m)
 			})

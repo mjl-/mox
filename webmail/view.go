@@ -959,7 +959,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 			case store.ChangeMailboxKeywords:
 				taggedChanges = append(taggedChanges, [2]any{"ChangeMailboxKeywords", ChangeMailboxKeywords{c}})
 
-			case store.ChangeAddSubscription:
+			case store.ChangeAddSubscription, store.ChangeRemoveSubscription:
 				// Webmail does not care about subscriptions.
 
 			case store.ChangeAnnotation:
@@ -1111,7 +1111,12 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 			}
 
 		case <-pending:
-			xprocessChanges(comm.Get())
+			overflow, changes := comm.Get()
+			if overflow {
+				writer.xsendEvent(ctx, log, "fatalErr", "out of sync, too many pending changes")
+				return
+			}
+			xprocessChanges(changes)
 
 		case <-ctx.Done():
 			// Work around go vet, it doesn't see defer cancelDrain.

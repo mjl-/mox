@@ -32,7 +32,10 @@ type fetchCmd struct {
 	hasChangedSince bool        // Whether CHANGEDSINCE was set. Enables MODSEQ in response.
 	expungeIssued   bool        // Set if any message has been expunged. Can happen for expunged messages.
 
-	uid         store.UID // UID currently processing.
+	// For message currently processing.
+	mailboxID int64
+	uid       store.UID
+
 	markSeen    bool
 	needFlags   bool
 	needModseq  bool                 // Whether untagged responses needs modseq.
@@ -76,7 +79,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 	p.xspace()
 	nums := p.xnumSet()
 	p.xspace()
-	atts := p.xfetchAtts(isUID)
+	atts := p.xfetchAtts()
 	var changedSince int64
 	var haveChangedSince bool
 	var vanished bool
@@ -144,7 +147,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 	var uids []store.UID
 	var vanishedUIDs []store.UID
 
-	cmd := &fetchCmd{conn: c, isUID: isUID, hasChangedSince: haveChangedSince, newPreviews: map[store.UID]string{}}
+	cmd := &fetchCmd{conn: c, isUID: isUID, hasChangedSince: haveChangedSince, mailboxID: c.mailboxID, newPreviews: map[store.UID]string{}}
 
 	defer func() {
 		if cmd.rtx == nil {
@@ -247,9 +250,21 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 		}
 	}
 
+	defer cmd.msgclose() // In case of panic.
+
 	for _, cmd.uid = range uids {
 		cmd.conn.log.Debug("processing uid", slog.Any("uid", cmd.uid))
-		cmd.process(atts)
+		data, err := cmd.process(atts)
+		if err != nil {
+			cmd.conn.log.Infox("processing fetch attribute", err, slog.Any("uid", cmd.uid))
+			xuserErrorf("processing fetch attribute: %v", err)
+		}
+
+		fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", cmd.conn.xsequence(cmd.uid))
+		data.xwriteTo(cmd.conn, cmd.conn.xbw)
+		cmd.conn.xbw.Write([]byte("\r\n"))
+
+		cmd.msgclose()
 	}
 
 	// We've returned all data. Now we mark messages as seen in one go, in a new write
@@ -298,7 +313,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 					mb.Sub(m.MailboxCounts())
 					m.Seen = true
 					mb.Add(m.MailboxCounts())
-					changes = append(changes, m.ChangeFlags(oldFlags))
+					changes = append(changes, m.ChangeFlags(oldFlags, mb))
 
 					m.ModSeq = modseq
 					err = wtx.Update(&m)
@@ -353,7 +368,7 @@ func (cmd *fetchCmd) xensureMessage() *store.Message {
 	// We do not filter by Expunged, the message may have been deleted in other
 	// sessions, but not in ours.
 	q := bstore.QueryTx[store.Message](cmd.rtx)
-	q.FilterNonzero(store.Message{MailboxID: cmd.conn.mailboxID, UID: cmd.uid})
+	q.FilterNonzero(store.Message{MailboxID: cmd.mailboxID, UID: cmd.uid})
 	m, err := q.Get()
 	cmd.xcheckf(err, "get message for uid %d", cmd.uid)
 	cmd.m = &m
@@ -385,16 +400,20 @@ func (cmd *fetchCmd) xensureParsed() (*store.MsgReader, *message.Part) {
 	return cmd.msgr, cmd.part
 }
 
-func (cmd *fetchCmd) process(atts []fetchAtt) {
-	defer func() {
-		cmd.m = nil
-		cmd.part = nil
-		if cmd.msgr != nil {
-			err := cmd.msgr.Close()
-			cmd.conn.xsanity(err, "closing messagereader")
-			cmd.msgr = nil
-		}
+// msgclose must be called after processing a message (after having written/used
+// its data), even in the case of a panic.
+func (cmd *fetchCmd) msgclose() {
+	cmd.m = nil
+	cmd.part = nil
+	if cmd.msgr != nil {
+		err := cmd.msgr.Close()
+		cmd.conn.xsanity(err, "closing messagereader")
+		cmd.msgr = nil
+	}
+}
 
+func (cmd *fetchCmd) process(atts []fetchAtt) (rdata listspace, rerr error) {
+	defer func() {
 		x := recover()
 		if x == nil {
 			return
@@ -402,9 +421,9 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 		err, ok := x.(attrError)
 		if !ok {
 			panic(x)
+		} else if rerr == nil {
+			rerr = err
 		}
-		cmd.conn.log.Infox("processing fetch attribute", err, slog.Any("uid", cmd.uid))
-		xuserErrorf("processing fetch attribute: %v", err)
 	}()
 
 	data := listspace{bare("UID"), number(cmd.uid)}
@@ -446,10 +465,7 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 		data = append(data, bare("MODSEQ"), listspace{bare(fmt.Sprintf("%d", m.ModSeq.Client()))})
 	}
 
-	// Write errors are turned into panics because we write through c.
-	fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", cmd.conn.xsequence(cmd.uid))
-	data.xwriteTo(cmd.conn, cmd.conn.xbw)
-	cmd.conn.xbw.Write([]byte("\r\n"))
+	return data, nil
 }
 
 // result for one attribute. if processing fails, e.g. because data was requested

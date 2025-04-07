@@ -42,6 +42,7 @@ const (
 	CapReplace          Capability = "REPLACE"            // ../rfc/8508:155
 	CapPreview          Capability = "PREVIEW"            // ../rfc/8970:114
 	CapMultiSearch      Capability = "MULTISEARCH"        // ../rfc/7377:187
+	CapNotify           Capability = "NOTIFY"             // ../rfc/5465:195
 )
 
 // Status is the tagged final result of a command.
@@ -184,6 +185,14 @@ func (c CodeInProgress) CodeString() string {
 		goal = fmt.Sprintf("%d", *c.Goal)
 	}
 	return fmt.Sprintf("INPROGRESS (%q %s %s)", c.Tag, current, goal)
+}
+
+// "BADEVENT" response code, with the events that are supported, for the NOTIFY
+// extension.
+type CodeBadEvent []string
+
+func (c CodeBadEvent) CodeString() string {
+	return fmt.Sprintf("BADEVENT (%s)", strings.Join([]string(c), " "))
 }
 
 // RespText represents a response line minus the leading tag.

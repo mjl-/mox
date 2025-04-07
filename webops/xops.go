@@ -90,6 +90,9 @@ func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, 
 		err := tx.Update(&mb)
 		x.Checkf(ctx, err, "updating mailbox counts")
 		slices.Sort(changeRemoveUIDs.UIDs)
+		changeRemoveUIDs.UIDNext = mb.UIDNext
+		changeRemoveUIDs.MessageCountIMAP = mb.MessageCountIMAP()
+		changeRemoveUIDs.Unseen = uint32(mb.MailboxCounts.Unseen)
 		changes = append(changes, mb.ChangeCounts(), changeRemoveUIDs)
 	}
 
@@ -188,7 +191,7 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 				err = tx.Update(&m)
 				x.Checkf(ctx, err, "updating message")
 
-				changes = append(changes, m.ChangeFlags(oflags))
+				changes = append(changes, m.ChangeFlags(oflags, mb))
 				retrain = append(retrain, m)
 			}
 
@@ -261,7 +264,7 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 				err = tx.Update(&m)
 				x.Checkf(ctx, err, "updating message")
 
-				changes = append(changes, m.ChangeFlags(oflags))
+				changes = append(changes, m.ChangeFlags(oflags, mb))
 				retrain = append(retrain, m)
 			}
 
@@ -322,7 +325,7 @@ func (x XOps) MailboxesMarkRead(ctx context.Context, log mlog.Log, acc *store.Ac
 					err := tx.Update(&m)
 					x.Checkf(ctx, err, "updating message")
 
-					changes = append(changes, m.ChangeFlags(oflags))
+					changes = append(changes, m.ChangeFlags(oflags, mb))
 					return nil
 				})
 				x.Checkf(ctx, err, "listing messages to mark as read")
@@ -443,6 +446,9 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 	var mbSrc store.Mailbox
 	var changeRemoveUIDs store.ChangeRemoveUIDs
 	xflushMailbox := func() {
+		changeRemoveUIDs.UIDNext = mbSrc.UIDNext
+		changeRemoveUIDs.MessageCountIMAP = mbSrc.MessageCountIMAP()
+		changeRemoveUIDs.Unseen = uint32(mbSrc.MailboxCounts.Unseen)
 		changes = append(changes, changeRemoveUIDs, mbSrc.ChangeCounts())
 
 		err = tx.Update(&mbSrc)
@@ -527,7 +533,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 
 		changeRemoveUIDs.UIDs = append(changeRemoveUIDs.UIDs, om.UID)
 		changeRemoveUIDs.MsgIDs = append(changeRemoveUIDs.MsgIDs, om.ID)
-		changes = append(changes, nm.ChangeAddUID())
+		changes = append(changes, nm.ChangeAddUID(mbDst))
 	}
 
 	for dir := range syncDirs {

@@ -558,7 +558,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 			return
 		}
 		newIDs = append(newIDs, m.ID)
-		changes = append(changes, m.ChangeAddUID())
+		changes = append(changes, m.ChangeAddUID(*mb))
 		messages[mb.Name]++
 		if messages[mb.Name]%100 == 0 || prevMailbox != mb.Name {
 			prevMailbox = mb.Name
@@ -767,7 +767,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 			}
 			err = tx.Update(&m)
 			ximportcheckf(err, "updating message after flag update")
-			changes = append(changes, m.ChangeFlags(oflags))
+			changes = append(changes, m.ChangeFlags(oflags, *mb))
 		}
 		delete(mailboxMissingKeywordMessages, mailbox)
 	}

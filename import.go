@@ -380,7 +380,7 @@ func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 			err = a.MessageAdd(xctl.log, tx, &mb, m, msgf, opts)
 			xctl.xcheck(err, "delivering message")
 			newIDs = append(newIDs, m.ID)
-			changes = append(changes, m.ChangeAddUID())
+			changes = append(changes, m.ChangeAddUID(mb))
 
 			msgDirs[filepath.Dir(a.MessagePath(m.ID))] = struct{}{}
 

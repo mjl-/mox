@@ -581,7 +581,7 @@ var fetchAttWords = []string{
 }
 
 // ../rfc/9051:6557 ../rfc/3501:4751 ../rfc/7162:2483
-func (p *parser) xfetchAtt(isUID bool) (r fetchAtt) {
+func (p *parser) xfetchAtt() (r fetchAtt) {
 	defer p.context("fetchAtt")()
 	f := p.xtakelist(fetchAttWords...)
 	r.peek = strings.HasSuffix(f, ".PEEK")
@@ -616,7 +616,7 @@ func (p *parser) xfetchAtt(isUID bool) (r fetchAtt) {
 }
 
 // ../rfc/9051:6553 ../rfc/3501:4748
-func (p *parser) xfetchAtts(isUID bool) []fetchAtt {
+func (p *parser) xfetchAtts() []fetchAtt {
 	defer p.context("fetchAtts")()
 
 	fields := func(l ...string) []fetchAtt {
@@ -640,13 +640,13 @@ func (p *parser) xfetchAtts(isUID bool) []fetchAtt {
 	}
 
 	if !p.hasPrefix("(") {
-		return []fetchAtt{p.xfetchAtt(isUID)}
+		return []fetchAtt{p.xfetchAtt()}
 	}
 
 	l := []fetchAtt{}
 	p.xtake("(")
 	for {
-		l = append(l, p.xfetchAtt(isUID))
+		l = append(l, p.xfetchAtt())
 		if !p.take(" ") {
 			break
 		}
@@ -1053,4 +1053,146 @@ func (p *parser) xmetadataKeyValue() (key string, isString bool, value []byte) {
 	}
 
 	return
+}
+
+type eventGroup struct {
+	MailboxSpecifier mailboxSpecifier
+	Events           []notifyEvent // NONE is represented by an empty list.
+}
+
+type mbspecKind string
+
+const (
+	mbspecSelected        mbspecKind = "SELECTED"
+	mbspecSelectedDelayed mbspecKind = "SELECTED-DELAYED" // Only for NOTIFY.
+	mbspecInboxes         mbspecKind = "INBOXES"
+	mbspecPersonal        mbspecKind = "PERSONAL"
+	mbspecSubscribed      mbspecKind = "SUBSCRIBED"
+	mbspecSubtreeOne      mbspecKind = "SUBTREE-ONE" // For ESEARCH, we allow it for NOTIFY too.
+	mbspecSubtree         mbspecKind = "SUBTREE"
+	mbspecMailboxes       mbspecKind = "MAILBOXES"
+)
+
+// Used by both the ESEARCH and NOTIFY commands.
+type mailboxSpecifier struct {
+	Kind      mbspecKind
+	Mailboxes []string
+}
+
+type notifyEvent struct {
+	// Kind is always upper case. Should be one of eventKind, anything else must result
+	// in a BADEVENT response code.
+	Kind string
+
+	FetchAtt []fetchAtt // Only for MessageNew
+}
+
+// ../rfc/5465:943
+func (p *parser) xeventGroup() (eg eventGroup) {
+	p.xtake("(")
+	eg.MailboxSpecifier = p.xfilterMailbox(mbspecsNotify)
+	p.xspace()
+	if p.take("NONE") {
+		p.xtake(")")
+		return eg
+	}
+	p.xtake("(")
+	for {
+		e := p.xnotifyEvent()
+		eg.Events = append(eg.Events, e)
+		if !p.space() {
+			break
+		}
+	}
+	p.xtake(")")
+	p.xtake(")")
+	return eg
+}
+
+var mbspecsEsearch = []mbspecKind{
+	mbspecSelected, // selected-delayed is only for NOTIFY.
+	mbspecInboxes,
+	mbspecPersonal,
+	mbspecSubscribed,
+	mbspecSubtreeOne, // Must come before Subtree due to eager parsing.
+	mbspecSubtree,
+	mbspecMailboxes,
+}
+
+var mbspecsNotify = []mbspecKind{
+	mbspecSelectedDelayed, // Must come before mbspecSelected, for eager parsing and mbspecSelected.
+	mbspecSelected,
+	mbspecInboxes,
+	mbspecPersonal,
+	mbspecSubscribed,
+	mbspecSubtreeOne, // From ESEARCH, we also allow it in NOTIFY.
+	mbspecSubtree,
+	mbspecMailboxes,
+}
+
+// If not esearch with "subtree-one", then for notify with "selected-delayed".
+func (p *parser) xfilterMailbox(allowed []mbspecKind) (ms mailboxSpecifier) {
+	var kind mbspecKind
+	for _, s := range allowed {
+		if p.take(string(s)) {
+			kind = s
+			break
+		}
+	}
+	if kind == mbspecKind("") {
+		xsyntaxErrorf("expected mailbox specifier")
+	}
+
+	ms.Kind = kind
+	switch kind {
+	case "SUBTREE", "SUBTREE-ONE", "MAILBOXES":
+		p.xtake(" ")
+		// One or more mailboxes. Multiple start with a list. ../rfc/5465:937
+		if p.take("(") {
+			for {
+				ms.Mailboxes = append(ms.Mailboxes, p.xmailbox())
+				if !p.take(" ") {
+					break
+				}
+			}
+			p.xtake(")")
+		} else {
+			ms.Mailboxes = []string{p.xmailbox()}
+		}
+	}
+	return ms
+}
+
+type eventKind string
+
+const (
+	eventMessageNew            eventKind = "MESSAGENEW"
+	eventMessageExpunge        eventKind = "MESSAGEEXPUNGE"
+	eventFlagChange            eventKind = "FLAGCHANGE"
+	eventAnnotationChange      eventKind = "ANNOTATIONCHANGE"
+	eventMailboxName           eventKind = "MAILBOXNAME"
+	eventSubscriptionChange    eventKind = "SUBSCRIPTIONCHANGE"
+	eventMailboxMetadataChange eventKind = "MAILBOXMETADATACHANGE"
+	eventServerMetadataChange  eventKind = "SERVERMETADATACHANGE"
+)
+
+var messageEventKinds = []eventKind{eventMessageNew, eventMessageExpunge, eventFlagChange, eventAnnotationChange}
+
+// ../rfc/5465:974
+func (p *parser) xnotifyEvent() notifyEvent {
+	s := strings.ToUpper(p.xatom())
+	e := notifyEvent{Kind: s}
+	if eventKind(e.Kind) == eventMessageNew {
+		if p.take(" (") {
+			for {
+				a := p.xfetchAtt()
+				e.FetchAtt = append(e.FetchAtt, a)
+				if !p.take(" ") {
+					break
+				}
+			}
+			p.xtake(")")
+		}
+	}
+	return e
 }

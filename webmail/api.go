@@ -472,7 +472,7 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 			err = tx.Update(&mb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
-			changes = append(changes, nm.ChangeAddUID(), mb.ChangeCounts())
+			changes = append(changes, nm.ChangeAddUID(mb), mb.ChangeCounts())
 		})
 		newIDs = nil
 
@@ -1063,7 +1063,6 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					rm.ModSeq = modseq
 					err := tx.Update(&rm)
 					xcheckf(ctx, err, "updating flags of replied/forwarded message")
-					changes = append(changes, rm.ChangeFlags(oflags))
 
 					// Update modseq of mailbox of replied/forwarded message.
 					rmb, err := store.MailboxID(tx, rm.MailboxID)
@@ -1071,6 +1070,8 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					rmb.ModSeq = modseq
 					err = tx.Update(&rmb)
 					xcheckf(ctx, err, "update modseq of mailbox of replied/forwarded message")
+
+					changes = append(changes, rm.ChangeFlags(oflags, rmb))
 
 					err = acc.RetrainMessages(ctx, log, tx, []store.Message{rm})
 					xcheckf(ctx, err, "retraining messages after reply/forward")
@@ -1145,7 +1146,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			err = tx.Update(&sentmb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
-			changes = append(changes, sentm.ChangeAddUID(), sentmb.ChangeCounts())
+			changes = append(changes, sentm.ChangeAddUID(sentmb), sentmb.ChangeCounts())
 		})
 		newIDs = nil
 

@@ -118,7 +118,7 @@ func (t readerSizeSyncliteral) xwriteTo(c *conn, xw io.Writer) {
 		lit = "~"
 	}
 	fmt.Fprintf(xw, "%s{%d}\r\n", lit, t.size)
-	defer c.xtrace(mlog.LevelTracedata)()
+	defer c.xtracewrite(mlog.LevelTracedata)()
 	if _, err := io.Copy(xw, io.LimitReader(t.r, t.size)); err != nil {
 		panic(err)
 	}
@@ -143,7 +143,7 @@ func (t readerSyncliteral) xwriteTo(c *conn, xw io.Writer) {
 		panic(err)
 	}
 	fmt.Fprintf(xw, "{%d}\r\n", len(buf))
-	defer c.xtrace(mlog.LevelTracedata)()
+	defer c.xtracewrite(mlog.LevelTracedata)()
 	xw.Write(buf)
 }
 

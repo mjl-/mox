@@ -3454,7 +3454,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 						if err := tx.Update(mbrej); err != nil {
 							return fmt.Errorf("updating rejects mailbox: %v", err)
 						}
-						changes = append(changes, a.d.m.ChangeAddUID(), mbrej.ChangeCounts())
+						changes = append(changes, a.d.m.ChangeAddUID(*mbrej), mbrej.ChangeCounts())
 						stored = true
 						return nil
 					})

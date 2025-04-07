@@ -1118,7 +1118,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 				err = tx.Update(&sentmb)
 				xcheckf(err, "updating mailbox")
 
-				changes = append(changes, sentm.ChangeAddUID(), sentmb.ChangeCounts())
+				changes = append(changes, sentm.ChangeAddUID(sentmb), sentmb.ChangeCounts())
 			})
 			sentID = 0 // Commit.
 

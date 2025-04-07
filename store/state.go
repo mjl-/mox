@@ -14,6 +14,11 @@ import (
 	"github.com/mjl-/mox/mox-"
 )
 
+// CommPendingChangesMax is the maximum number of changes kept for a Comm before
+// registering a notification overflow and flushing changes. Variable because set
+// to low value during tests.
+var CommPendingChangesMax = 10000
+
 var (
 	register   = make(chan *Comm)
 	unregister = make(chan *Comm)
@@ -48,6 +53,10 @@ type ChangeAddUID struct {
 	ModSeq    ModSeq
 	Flags     Flags    // System flags.
 	Keywords  []string // Other flags.
+
+	// For IMAP NOTIFY.
+	MessageCountIMAP uint32
+	Unseen           uint32
 }
 
 func (c ChangeAddUID) ChangeModSeq() ModSeq { return c.ModSeq }
@@ -58,6 +67,11 @@ type ChangeRemoveUIDs struct {
 	UIDs      []UID // Must be in increasing UID order, for IMAP.
 	ModSeq    ModSeq
 	MsgIDs    []int64 // Message.ID, for erasing, order does not necessarily correspond with UIDs!
+
+	// For IMAP NOTIFY.
+	UIDNext          UID
+	MessageCountIMAP uint32
+	Unseen           uint32
 }
 
 func (c ChangeRemoveUIDs) ChangeModSeq() ModSeq { return c.ModSeq }
@@ -70,6 +84,10 @@ type ChangeFlags struct {
 	Mask      Flags    // Which flags are actually modified.
 	Flags     Flags    // New flag values. All are set, not just mask.
 	Keywords  []string // Non-system/well-known flags/keywords/labels.
+
+	// For IMAP NOTIFY.
+	UIDValidity uint32
+	Unseen      uint32
 }
 
 func (c ChangeFlags) ChangeModSeq() ModSeq { return c.ModSeq }
@@ -113,11 +131,19 @@ func (c ChangeRenameMailbox) ChangeModSeq() ModSeq { return c.ModSeq }
 
 // ChangeAddSubscription is sent for an added subscription to a mailbox.
 type ChangeAddSubscription struct {
-	Name  string
-	Flags []string // For additional IMAP flags like \NonExistent.
+	MailboxName string
+	ListFlags   []string // For additional IMAP flags like \NonExistent.
 }
 
 func (c ChangeAddSubscription) ChangeModSeq() ModSeq { return -1 }
+
+// ChangeRemoveSubscription is sent for a removed subscription of a mailbox.
+type ChangeRemoveSubscription struct {
+	MailboxName string
+	ListFlags   []string // For additional IMAP flags like \NonExistent.
+}
+
+func (c ChangeRemoveSubscription) ChangeModSeq() ModSeq { return -1 }
 
 // ChangeMailboxCounts is sent when the number of total/deleted/unseen/unread messages changes.
 type ChangeMailboxCounts struct {
@@ -327,11 +353,9 @@ func switchboard(stopc, donec chan struct{}, cleanc chan map[*Account][]int64) {
 			// possibly queue messages for cleaning. No need to take a lock, the caller does
 			// not use the comm anymore.
 			for _, ch := range c.changes {
-				rem, ok := ch.(ChangeRemoveUIDs)
-				if !ok {
-					continue
+				if rem, ok := ch.(ChangeRemoveUIDs); ok {
+					decreaseEraseRefs(c.acc, rem.MsgIDs...)
 				}
-				decreaseEraseRefs(c.acc, rem.MsgIDs...)
 			}
 
 			delete(regs[c.acc], c)
@@ -381,13 +405,30 @@ func switchboard(stopc, donec chan struct{}, cleanc chan map[*Account][]int64) {
 			for c := range regs[acc] {
 				// Do not send the broadcaster back their own changes. chReq.comm is nil if not
 				// originating from a comm, so won't match in that case.
+				// Relevant for IMAP IDLE, and NOTIFY ../rfc/5465:428
 				if c == chReq.comm {
 					continue
 				}
 
+				var overflow bool
 				c.Lock()
-				c.changes = append(c.changes, chReq.changes...)
+				if len(c.changes)+len(chReq.changes) > CommPendingChangesMax {
+					c.overflow = true
+					overflow = true
+				} else {
+					c.changes = append(c.changes, chReq.changes...)
+				}
 				c.Unlock()
+
+				// In case of overflow, we didn't add the pending changes to the comm, so we must
+				// decrease references again.
+				if overflow {
+					for _, ch := range chReq.changes {
+						if rem, ok := ch.(ChangeRemoveUIDs); ok {
+							decreaseEraseRefs(acc, rem.MsgIDs...)
+						}
+					}
+				}
 
 				select {
 				case c.Pending <- struct{}{}:
@@ -463,6 +504,9 @@ type Comm struct {
 
 	sync.Mutex
 	changes []Change
+	// Set if too many changes were queued, cleared when changes are retrieved. While
+	// in overflow, no new changes are added.
+	overflow bool
 }
 
 // Register starts a Comm for the account. Unregister must be called.
@@ -491,13 +535,16 @@ func (c *Comm) Broadcast(ch []Change) {
 }
 
 // Get retrieves all pending changes. If no changes are pending a nil or empty list
-// is returned.
-func (c *Comm) Get() []Change {
+// is returned. If too many changes were pending, overflow is true, and this Comm
+// stopped getting new changes. The caller should usually return an error to its
+// connection. Even with overflow, changes may still be non-empty. On
+// ChangeRemoveUIDs, the RemovalSeen must still be called by the caller.
+func (c *Comm) Get() (overflow bool, changes []Change) {
 	c.Lock()
 	defer c.Unlock()
-	l := c.changes
-	c.changes = nil
-	return l
+	overflow, changes = c.overflow, c.changes
+	c.overflow, c.changes = false, nil
+	return
 }
 
 // RemovalSeen must be called by consumers when they have applied the removal to
