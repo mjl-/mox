@@ -7,10 +7,10 @@ import (
 )
 
 func TestQuota1(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	// We don't implement setquota.
 	tc.transactf("bad", `setquota "" (STORAGE 123)`)
@@ -35,10 +35,10 @@ func TestQuota1(t *testing.T) {
 	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusDeletedStorage: 0}})
 
 	// tclimit does have a limit.
-	tclimit := startArgs(t, false, false, true, true, "limit")
+	tclimit := startArgs(t, false, false, false, true, true, "limit")
 	defer tclimit.close()
 
-	tclimit.client.Login("limit@mox.example", password0)
+	tclimit.login("limit@mox.example", password0)
 
 	tclimit.transactf("ok", "getquotaroot inbox")
 	tclimit.xuntagged(

@@ -136,6 +136,7 @@ var knownCodes = stringMap(
 	"INPROGRESS",                       // ../rfc/9585:104
 	"BADEVENT", "NOTIFICATIONOVERFLOW", // ../rfc/5465:1023
 	"SERVERBUG",
+	"UIDREQUIRED", // ../rfc/9586:136
 )
 
 func stringMap(l ...string) map[string]struct{} {
@@ -654,14 +655,17 @@ func (c *Conn) xuntagged() Untagged {
 			w = c.xword()
 			W = strings.ToUpper(w)
 			switch W {
-			case "FETCH":
+			case "FETCH", "UIDFETCH":
 				if num == 0 {
 					c.xerrorf("invalid zero number for untagged fetch response")
 				}
 				c.xspace()
-				r := c.xfetch(num)
+				attrs := c.xfetch()
 				c.xcrlf()
-				return r
+				if W == "UIDFETCH" {
+					return UntaggedUIDFetch{num, attrs}
+				}
+				return UntaggedFetch{num, attrs}
 
 			case "EXPUNGE":
 				if num == 0 {
@@ -691,14 +695,14 @@ func (c *Conn) xuntagged() Untagged {
 
 // ../rfc/3501:4864 ../rfc/9051:6742
 // Already parsed: "*" SP nznumber SP "FETCH" SP
-func (c *Conn) xfetch(num uint32) UntaggedFetch {
+func (c *Conn) xfetch() []FetchAttr {
 	c.xtake("(")
 	attrs := []FetchAttr{c.xmsgatt1()}
 	for c.space() {
 		attrs = append(attrs, c.xmsgatt1())
 	}
 	c.xtake(")")
-	return UntaggedFetch{num, attrs}
+	return attrs
 }
 
 // ../rfc/9051:6746

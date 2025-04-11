@@ -7,18 +7,26 @@ import (
 )
 
 func TestDelete(t *testing.T) {
-	tc := start(t)
+	testDelete(t, false)
+}
+
+func TestDeleteUIDOnly(t *testing.T) {
+	testDelete(t, false)
+}
+
+func testDelete(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
 
-	tc3 := startNoSwitchboard(t)
+	tc3 := startNoSwitchboard(t, uidonly)
 	defer tc3.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
-	tc2.client.Login("mjl@mox.example", password0)
-	tc3.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
+	tc3.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "delete")              // Missing mailbox.
 	tc.transactf("no", "delete inbox")         // Cannot delete inbox.

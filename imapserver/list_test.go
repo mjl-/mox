@@ -8,10 +8,18 @@ import (
 )
 
 func TestListBasic(t *testing.T) {
-	tc := start(t)
+	testListBasic(t, false)
+}
+
+func TestListBasicUIDOnly(t *testing.T) {
+	testListBasic(t, true)
+}
+
+func testListBasic(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	ulist := func(name string, flags ...string) imapclient.UntaggedList {
 		if len(flags) == 0 {
@@ -59,12 +67,20 @@ func TestListBasic(t *testing.T) {
 }
 
 func TestListExtended(t *testing.T) {
+	testListExtended(t, false)
+}
+
+func TestListExtendedUIDOnly(t *testing.T) {
+	testListExtended(t, true)
+}
+
+func testListExtended(t *testing.T, uidonly bool) {
 	defer mockUIDValidity()()
 
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	ulist := func(name string, flags ...string) imapclient.UntaggedList {
 		if len(flags) == 0 {

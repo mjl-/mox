@@ -62,9 +62,17 @@ func (tc *testconn) xesearch(exp imapclient.UntaggedEsearch) {
 }
 
 func TestSearch(t *testing.T) {
-	tc := start(t)
+	testSearch(t, false)
+}
+
+func TestSearchUIDOnly(t *testing.T) {
+	testSearch(t, true)
+}
+
+func testSearch(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	// Add 5 and delete first 4 messages. So UIDs start at 5.
@@ -73,7 +81,7 @@ func TestSearch(t *testing.T) {
 	for range 5 {
 		tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
 	}
-	tc.client.StoreFlagsSet("1:4", true, `\Deleted`)
+	tc.client.UIDStoreFlagsSet("1:4", true, `\Deleted`)
 	tc.client.Expunge()
 
 	received = time.Date(2022, time.January, 1, 9, 0, 0, 0, time.UTC)
@@ -98,298 +106,314 @@ func TestSearch(t *testing.T) {
 
 	// We now have sequence numbers 1,2,3 and UIDs 5,6,7.
 
-	// We need to be selected. Not the case for ESEARCH command.
-	tc.client.Unselect()
-	tc.transactf("no", "search all")
-	tc.client.Select("inbox")
+	if uidonly {
+		// We need to be selected. Not the case for ESEARCH command.
+		tc.client.Unselect()
+		tc.transactf("no", "uid search all")
+		tc.client.Select("inbox")
+	} else {
+		// We need to be selected. Not the case for ESEARCH command.
+		tc.client.Unselect()
+		tc.transactf("no", "search all")
+		tc.client.Select("inbox")
 
-	tc.transactf("ok", "search all")
-	tc.xsearch(1, 2, 3)
+		tc.transactf("ok", "search all")
+		tc.xsearch(1, 2, 3)
+	}
 
 	tc.transactf("ok", "uid search all")
 	tc.xsearch(5, 6, 7)
-
-	tc.transactf("ok", "search answered")
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search bcc "bcc@mox.example"`)
-	tc.xsearch(2, 3)
-
-	tc.transactf("ok", "search before 1-Jan-2038")
-	tc.xsearch(1, 2, 3)
-	tc.transactf("ok", "search before 1-Jan-2020")
-	tc.xsearch() // Before is about received, not date header of message.
-
-	// WITHIN extension with OLDER & YOUNGER.
-	tc.transactf("ok", "search older 60")
-	tc.xsearch(1, 2, 3)
-	tc.transactf("ok", "search younger 60")
-	tc.xsearch()
-
-	// SAVEDATE extension.
-	tc.transactf("ok", "search savedbefore %s", saveDate.Add(24*time.Hour).Format("2-Jan-2006"))
-	tc.xsearch(1, 2, 3)
-	tc.transactf("ok", "search savedbefore %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
-	tc.xsearch()
-	tc.transactf("ok", "search savedon %s", saveDate.Format("2-Jan-2006"))
-	tc.xsearch(1, 2, 3)
-	tc.transactf("ok", "search savedon %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
-	tc.xsearch()
-	tc.transactf("ok", "search savedsince %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
-	tc.xsearch(1, 2, 3)
-	tc.transactf("ok", "search savedsince %s", saveDate.Add(24*time.Hour).Format("2-Jan-2006"))
-	tc.xsearch()
-
-	tc.transactf("ok", `search body "Joe"`)
-	tc.xsearch(1)
-	tc.transactf("ok", `search body "Joe" body "bogus"`)
-	tc.xsearch()
-	tc.transactf("ok", `search body "Joe" text "Blurdybloop"`)
-	tc.xsearch(1)
-	tc.transactf("ok", `search body "Joe" not text "mox"`)
-	tc.xsearch(1)
-	tc.transactf("ok", `search body "Joe" not not body "Joe"`)
-	tc.xsearch(1)
-	tc.transactf("ok", `search body "this is plain text"`)
-	tc.xsearch(2, 3)
-	tc.transactf("ok", `search body "this is html"`)
-	tc.xsearch(2, 3)
-
-	tc.transactf("ok", `search cc "xcc@mox.example"`)
-	tc.xsearch(2, 3)
-
-	tc.transactf("ok", `search deleted`)
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search flagged`)
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search from "foobar@Blurdybloop.example"`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search keyword $Forwarded`)
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search keyword Custom1`)
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search keyword custom2`)
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search new`)
-	tc.xsearch() // New requires a message to be recent. We pretend all messages are not recent.
-
-	tc.transactf("ok", `search old`)
-	tc.xsearch(1, 2, 3)
-
-	tc.transactf("ok", `search on 1-Jan-2022`)
-	tc.xsearch(2, 3)
-
-	tc.transactf("ok", `search recent`)
-	tc.xsearch()
-
-	tc.transactf("ok", `search seen`)
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search since 1-Jan-2020`)
-	tc.xsearch(1, 2, 3)
-
-	tc.transactf("ok", `search subject "afternoon"`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search text "Joe"`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search to "mooch@owatagu.siam.edu.example"`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search unanswered`)
-	tc.xsearch(1, 2)
-
-	tc.transactf("ok", `search undeleted`)
-	tc.xsearch(1, 2)
-
-	tc.transactf("ok", `search unflagged`)
-	tc.xsearch(1, 2)
-
-	tc.transactf("ok", `search unkeyword $Junk`)
-	tc.xsearch(1, 2)
-
-	tc.transactf("ok", `search unkeyword custom1`)
-	tc.xsearch(1, 2)
-
-	tc.transactf("ok", `search unseen`)
-	tc.xsearch(1, 2)
-
-	tc.transactf("ok", `search draft`)
-	tc.xsearch(3)
-
-	tc.transactf("ok", `search header "subject" "afternoon"`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search larger 1`)
-	tc.xsearch(1, 2, 3)
-
-	tc.transactf("ok", `search not text "mox"`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search or seen unseen`)
-	tc.xsearch(1, 2, 3)
-
-	tc.transactf("ok", `search or unseen seen`)
-	tc.xsearch(1, 2, 3)
-
-	tc.transactf("ok", `search sentbefore 8-Feb-1994`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search senton 7-Feb-1994`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search sentsince 6-Feb-1994`)
-	tc.xsearch(1, 2, 3)
-
-	tc.transactf("ok", `search smaller 9999999`)
-	tc.xsearch(1, 2, 3)
-
-	tc.transactf("ok", `search uid 1`)
-	tc.xsearch()
-
-	tc.transactf("ok", `search uid 5`)
-	tc.xsearch(1)
-
-	tc.transactf("ok", `search or larger 1000000 smaller 1`)
-	tc.xsearch()
-
-	tc.transactf("ok", `search undraft`)
-	tc.xsearch(1, 2)
-
-	tc.transactf("no", `search charset unknown text "mox"`)
-	tc.transactf("ok", `search charset us-ascii text "mox"`)
-	tc.xsearch(2, 3)
-	tc.transactf("ok", `search charset utf-8 text "mox"`)
-	tc.xsearch(2, 3)
-
-	// Check for properly formed INPROGRESS response code.
-	orig := inProgressPeriod
-	inProgressPeriod = 0
-	tc.cmdf("tag1", "search undraft")
-	tc.response("ok")
-
-	inprogress := func(cur, goal uint32) imapclient.UntaggedResult {
-		return imapclient.UntaggedResult{
-			Status: "OK",
-			RespText: imapclient.RespText{
-				Code:    "INPROGRESS",
-				CodeArg: imapclient.CodeInProgress{Tag: "tag1", Current: &cur, Goal: &goal},
-				More:    "still searching",
-			},
-		}
-	}
-	tc.xuntagged(
-		imapclient.UntaggedSearch([]uint32{1, 2}),
-		// Due to inProgressPeriod 0, we get an inprogress response for each message in the mailbox.
-		inprogress(0, 3),
-		inprogress(1, 3),
-		inprogress(2, 3),
-	)
-	inProgressPeriod = orig
 
 	esearchall := func(ss string) imapclient.UntaggedEsearch {
 		return imapclient.UntaggedEsearch{All: esearchall0(ss)}
 	}
 
-	// Do new-style ESEARCH requests with RETURN. We should get an ESEARCH response.
-	tc.transactf("ok", "search return () all")
-	tc.xesearch(esearchall("1:3")) // Without any options, "ALL" is implicit.
+	if !uidonly {
+		tc.transactf("ok", "search answered")
+		tc.xsearch(3)
 
-	tc.transactf("ok", "search return (min max count all) all")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3, Count: uint32ptr(3), All: esearchall0("1:3")})
+		tc.transactf("ok", `search bcc "bcc@mox.example"`)
+		tc.xsearch(2, 3)
+
+		tc.transactf("ok", "search before 1-Jan-2038")
+		tc.xsearch(1, 2, 3)
+		tc.transactf("ok", "search before 1-Jan-2020")
+		tc.xsearch() // Before is about received, not date header of message.
+
+		// WITHIN extension with OLDER & YOUNGER.
+		tc.transactf("ok", "search older 60")
+		tc.xsearch(1, 2, 3)
+		tc.transactf("ok", "search younger 60")
+		tc.xsearch()
+
+		// SAVEDATE extension.
+		tc.transactf("ok", "search savedbefore %s", saveDate.Add(24*time.Hour).Format("2-Jan-2006"))
+		tc.xsearch(1, 2, 3)
+		tc.transactf("ok", "search savedbefore %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
+		tc.xsearch()
+		tc.transactf("ok", "search savedon %s", saveDate.Format("2-Jan-2006"))
+		tc.xsearch(1, 2, 3)
+		tc.transactf("ok", "search savedon %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
+		tc.xsearch()
+		tc.transactf("ok", "search savedsince %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
+		tc.xsearch(1, 2, 3)
+		tc.transactf("ok", "search savedsince %s", saveDate.Add(24*time.Hour).Format("2-Jan-2006"))
+		tc.xsearch()
+
+		tc.transactf("ok", `search body "Joe"`)
+		tc.xsearch(1)
+		tc.transactf("ok", `search body "Joe" body "bogus"`)
+		tc.xsearch()
+		tc.transactf("ok", `search body "Joe" text "Blurdybloop"`)
+		tc.xsearch(1)
+		tc.transactf("ok", `search body "Joe" not text "mox"`)
+		tc.xsearch(1)
+		tc.transactf("ok", `search body "Joe" not not body "Joe"`)
+		tc.xsearch(1)
+		tc.transactf("ok", `search body "this is plain text"`)
+		tc.xsearch(2, 3)
+		tc.transactf("ok", `search body "this is html"`)
+		tc.xsearch(2, 3)
+
+		tc.transactf("ok", `search cc "xcc@mox.example"`)
+		tc.xsearch(2, 3)
+
+		tc.transactf("ok", `search deleted`)
+		tc.xsearch(3)
+
+		tc.transactf("ok", `search flagged`)
+		tc.xsearch(3)
+
+		tc.transactf("ok", `search from "foobar@Blurdybloop.example"`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search keyword $Forwarded`)
+		tc.xsearch(3)
+
+		tc.transactf("ok", `search keyword Custom1`)
+		tc.xsearch(3)
+
+		tc.transactf("ok", `search keyword custom2`)
+		tc.xsearch(3)
+
+		tc.transactf("ok", `search new`)
+		tc.xsearch() // New requires a message to be recent. We pretend all messages are not recent.
+
+		tc.transactf("ok", `search old`)
+		tc.xsearch(1, 2, 3)
+
+		tc.transactf("ok", `search on 1-Jan-2022`)
+		tc.xsearch(2, 3)
+
+		tc.transactf("ok", `search recent`)
+		tc.xsearch()
+
+		tc.transactf("ok", `search seen`)
+		tc.xsearch(3)
+
+		tc.transactf("ok", `search since 1-Jan-2020`)
+		tc.xsearch(1, 2, 3)
+
+		tc.transactf("ok", `search subject "afternoon"`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search text "Joe"`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search to "mooch@owatagu.siam.edu.example"`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search unanswered`)
+		tc.xsearch(1, 2)
+
+		tc.transactf("ok", `search undeleted`)
+		tc.xsearch(1, 2)
+
+		tc.transactf("ok", `search unflagged`)
+		tc.xsearch(1, 2)
+
+		tc.transactf("ok", `search unkeyword $Junk`)
+		tc.xsearch(1, 2)
+
+		tc.transactf("ok", `search unkeyword custom1`)
+		tc.xsearch(1, 2)
+
+		tc.transactf("ok", `search unseen`)
+		tc.xsearch(1, 2)
+
+		tc.transactf("ok", `search draft`)
+		tc.xsearch(3)
+
+		tc.transactf("ok", `search header "subject" "afternoon"`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search larger 1`)
+		tc.xsearch(1, 2, 3)
+
+		tc.transactf("ok", `search not text "mox"`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search or seen unseen`)
+		tc.xsearch(1, 2, 3)
+
+		tc.transactf("ok", `search or unseen seen`)
+		tc.xsearch(1, 2, 3)
+
+		tc.transactf("ok", `search sentbefore 8-Feb-1994`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search senton 7-Feb-1994`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search sentsince 6-Feb-1994`)
+		tc.xsearch(1, 2, 3)
+
+		tc.transactf("ok", `search smaller 9999999`)
+		tc.xsearch(1, 2, 3)
+
+		tc.transactf("ok", `search uid 1`)
+		tc.xsearch()
+
+		tc.transactf("ok", `search uid 5`)
+		tc.xsearch(1)
+
+		tc.transactf("ok", `search or larger 1000000 smaller 1`)
+		tc.xsearch()
+
+		tc.transactf("ok", `search undraft`)
+		tc.xsearch(1, 2)
+
+		tc.transactf("no", `search charset unknown text "mox"`)
+		tc.transactf("ok", `search charset us-ascii text "mox"`)
+		tc.xsearch(2, 3)
+		tc.transactf("ok", `search charset utf-8 text "mox"`)
+		tc.xsearch(2, 3)
+
+		// Check for properly formed INPROGRESS response code.
+		orig := inProgressPeriod
+		inProgressPeriod = 0
+		tc.cmdf("tag1", "search undraft")
+		tc.response("ok")
+
+		inprogress := func(cur, goal uint32) imapclient.UntaggedResult {
+			return imapclient.UntaggedResult{
+				Status: "OK",
+				RespText: imapclient.RespText{
+					Code:    "INPROGRESS",
+					CodeArg: imapclient.CodeInProgress{Tag: "tag1", Current: &cur, Goal: &goal},
+					More:    "still searching",
+				},
+			}
+		}
+		tc.xuntagged(
+			imapclient.UntaggedSearch([]uint32{1, 2}),
+			// Due to inProgressPeriod 0, we get an inprogress response for each message in the mailbox.
+			inprogress(0, 3),
+			inprogress(1, 3),
+			inprogress(2, 3),
+		)
+		inProgressPeriod = orig
+
+		// Do new-style ESEARCH requests with RETURN. We should get an ESEARCH response.
+		tc.transactf("ok", "search return () all")
+		tc.xesearch(esearchall("1:3")) // Without any options, "ALL" is implicit.
+
+		tc.transactf("ok", "search return (min max count all) all")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3, Count: uint32ptr(3), All: esearchall0("1:3")})
+
+		tc.transactf("ok", "search return (min) all")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 1})
+
+		tc.transactf("ok", "search return (min) 3")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 3})
+
+		tc.transactf("ok", "search return (min) NOT all")
+		tc.xesearch(imapclient.UntaggedEsearch{}) // Min not present if no match.
+
+		tc.transactf("ok", "search return (max) all")
+		tc.xesearch(imapclient.UntaggedEsearch{Max: 3})
+
+		tc.transactf("ok", "search return (max) 1")
+		tc.xesearch(imapclient.UntaggedEsearch{Max: 1})
+
+		tc.transactf("ok", "search return (max) not all")
+		tc.xesearch(imapclient.UntaggedEsearch{}) // Max not present if no match.
+
+		tc.transactf("ok", "search return (min max) all")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3})
+
+		tc.transactf("ok", "search return (min max) 1")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 1})
+
+		tc.transactf("ok", "search return (min max) not all")
+		tc.xesearch(imapclient.UntaggedEsearch{})
+
+		tc.transactf("ok", "search return (all) not all")
+		tc.xesearch(imapclient.UntaggedEsearch{}) // All not present if no match.
+
+		tc.transactf("ok", "search return (min max all) not all")
+		tc.xesearch(imapclient.UntaggedEsearch{})
+
+		tc.transactf("ok", "search return (min max all count) not all")
+		tc.xesearch(imapclient.UntaggedEsearch{Count: uint32ptr(0)})
+
+		tc.transactf("ok", "search return (min max count all) 1,3")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3, Count: uint32ptr(2), All: esearchall0("1,3")})
+
+		tc.transactf("ok", "search return (min max count all) UID 5,7")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3, Count: uint32ptr(2), All: esearchall0("1,3")})
+	}
 
 	tc.transactf("ok", "UID search return (min max count all) all")
 	tc.xesearch(imapclient.UntaggedEsearch{UID: true, Min: 5, Max: 7, Count: uint32ptr(3), All: esearchall0("5:7")})
 
-	tc.transactf("ok", "search return (min) all")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 1})
-
-	tc.transactf("ok", "search return (min) 3")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 3})
-
-	tc.transactf("ok", "search return (min) NOT all")
-	tc.xesearch(imapclient.UntaggedEsearch{}) // Min not present if no match.
-
-	tc.transactf("ok", "search return (max) all")
-	tc.xesearch(imapclient.UntaggedEsearch{Max: 3})
-
-	tc.transactf("ok", "search return (max) 1")
-	tc.xesearch(imapclient.UntaggedEsearch{Max: 1})
-
-	tc.transactf("ok", "search return (max) not all")
-	tc.xesearch(imapclient.UntaggedEsearch{}) // Max not present if no match.
-
-	tc.transactf("ok", "search return (min max) all")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3})
-
-	tc.transactf("ok", "search return (min max) 1")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 1})
-
-	tc.transactf("ok", "search return (min max) not all")
-	tc.xesearch(imapclient.UntaggedEsearch{})
-
-	tc.transactf("ok", "search return (all) not all")
-	tc.xesearch(imapclient.UntaggedEsearch{}) // All not present if no match.
-
-	tc.transactf("ok", "search return (min max all) not all")
-	tc.xesearch(imapclient.UntaggedEsearch{})
-
-	tc.transactf("ok", "search return (min max all count) not all")
-	tc.xesearch(imapclient.UntaggedEsearch{Count: uint32ptr(0)})
-
-	tc.transactf("ok", "search return (min max count all) 1,3")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3, Count: uint32ptr(2), All: esearchall0("1,3")})
-
-	tc.transactf("ok", "search return (min max count all) UID 5,7")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 3, Count: uint32ptr(2), All: esearchall0("1,3")})
-
-	tc.transactf("ok", "uid search return (min max count all) 1,3")
-	tc.xesearch(imapclient.UntaggedEsearch{UID: true, Min: 5, Max: 7, Count: uint32ptr(2), All: esearchall0("5,7")})
+	if !uidonly {
+		tc.transactf("ok", "uid search return (min max count all) 1,3")
+		tc.xesearch(imapclient.UntaggedEsearch{UID: true, Min: 5, Max: 7, Count: uint32ptr(2), All: esearchall0("5,7")})
+	}
 
 	tc.transactf("ok", "uid search return (min max count all) UID 5,7")
 	tc.xesearch(imapclient.UntaggedEsearch{UID: true, Min: 5, Max: 7, Count: uint32ptr(2), All: esearchall0("5,7")})
 
-	tc.transactf("no", `search return () charset unknown text "mox"`)
-	tc.transactf("ok", `search return () charset us-ascii text "mox"`)
-	tc.xesearch(esearchall("2:3"))
-	tc.transactf("ok", `search return () charset utf-8 text "mox"`)
-	tc.xesearch(esearchall("2:3"))
+	if !uidonly {
+		tc.transactf("no", `search return () charset unknown text "mox"`)
+		tc.transactf("ok", `search return () charset us-ascii text "mox"`)
+		tc.xesearch(esearchall("2:3"))
+		tc.transactf("ok", `search return () charset utf-8 text "mox"`)
+		tc.xesearch(esearchall("2:3"))
 
-	tc.transactf("bad", `search return (unknown) all`)
+		tc.transactf("bad", `search return (unknown) all`)
 
-	tc.transactf("ok", "search return (save) 2")
-	tc.xnountagged() // ../rfc/9051:3800
-	tc.transactf("ok", "fetch $ (uid)")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(6)}})
+		tc.transactf("ok", "search return (save) 2")
+		tc.xnountagged() // ../rfc/9051:3800
+		tc.transactf("ok", "fetch $ (uid)")
+		tc.xuntagged(tc.untaggedFetch(2, 6))
 
-	tc.transactf("ok", "search return (all) $")
-	tc.xesearch(esearchall("2"))
+		tc.transactf("ok", "search return (all) $")
+		tc.xesearch(esearchall("2"))
 
-	tc.transactf("ok", "search return (save) $")
-	tc.xnountagged()
+		tc.transactf("ok", "search return (save) $")
+		tc.xnountagged()
 
-	tc.transactf("ok", "search return (save all) all")
-	tc.xesearch(esearchall("1:3"))
+		tc.transactf("ok", "search return (save all) all")
+		tc.xesearch(esearchall("1:3"))
 
-	tc.transactf("ok", "search return (all save) all")
-	tc.xesearch(esearchall("1:3"))
+		tc.transactf("ok", "search return (all save) all")
+		tc.xesearch(esearchall("1:3"))
 
-	tc.transactf("ok", "search return (min save) all")
-	tc.xesearch(imapclient.UntaggedEsearch{Min: 1})
-	tc.transactf("ok", "fetch $ (uid)")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(5)}})
+		tc.transactf("ok", "search return (min save) all")
+		tc.xesearch(imapclient.UntaggedEsearch{Min: 1})
+		tc.transactf("ok", "fetch $ (uid)")
+		tc.xuntagged(tc.untaggedFetch(1, 5))
+	}
 
 	// Do a seemingly old-style search command with IMAP4rev2 enabled. We'll still get ESEARCH responses.
 	tc.client.Enable("IMAP4rev2")
-	tc.transactf("ok", `search undraft`)
-	tc.xesearch(esearchall("1:2"))
+
+	if !uidonly {
+		tc.transactf("ok", `search undraft`)
+		tc.xesearch(esearchall("1:2"))
+	}
 
 	// Long commands should be rejected, not allocating too much memory.
 	lit := make([]byte, 100*1024+1)
@@ -470,21 +494,27 @@ func esearchall0(ss string) imapclient.NumSet {
 	return seqset
 }
 
-// Test the MULTISEARCH extension. Where we don't need to have a mailbox selected,
-// operating without messag sequence numbers, and return untagged esearch responses
-// that include the mailbox and uidvalidity.
-func TestSearchMulti(t *testing.T) {
-	testSearchMulti(t, false)
-	testSearchMulti(t, true)
+func TestSearchMultiUnselected(t *testing.T) {
+	testSearchMulti(t, false, false)
 }
 
-// Run multisearch tests with or without a mailbox selected.
-func testSearchMulti(t *testing.T, selected bool) {
+func TestSearchMultiSelected(t *testing.T) {
+	testSearchMulti(t, true, false)
+}
+
+func TestSearchMultiSelectedUIDOnly(t *testing.T) {
+	testSearchMulti(t, true, true)
+}
+
+// Test the MULTISEARCH extension, with and without selected mailbx. Operating
+// without messag sequence numbers, and return untagged esearch responses that
+// include the mailbox and uidvalidity.
+func testSearchMulti(t *testing.T, selected, uidonly bool) {
 	defer mockUIDValidity()()
 
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	// Add 5 messages to Inbox and delete first 4 messages. So UIDs start at 5.
@@ -492,7 +522,7 @@ func testSearchMulti(t *testing.T, selected bool) {
 	for range 6 {
 		tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
 	}
-	tc.client.StoreFlagsSet("1:4", true, `\Deleted`)
+	tc.client.UIDStoreFlagsSet("1:4", true, `\Deleted`)
 	tc.client.Expunge()
 
 	// Unselecting mailbox, esearch works in authenticated state.
@@ -681,12 +711,15 @@ func testSearchMulti(t *testing.T, selected bool) {
 	)
 
 	// Search with sequence set also for non-selected mailboxes(!). The min/max would
-	// get the first and last message, but the message sequence set forces a scan.
-	tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return (Min Max) 1:*`)
-	tc.response("ok")
-	tc.xuntagged(
-		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 7},
-	)
+	// get the first and last message, but the message sequence set forces a scan. Not
+	// allowed with UIDONLY.
+	if !uidonly {
+		tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return (Min Max) 1:*`)
+		tc.response("ok")
+		tc.xuntagged(
+			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 7},
+		)
+	}
 
 	// Search with uid set with "$highnum:*" forces getting highest uid.
 	tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return (Min Max) Uid *:100`)
@@ -709,9 +742,9 @@ func testSearchMulti(t *testing.T, selected bool) {
 	// with Inbox selected will not return the new message since it isn't available in
 	// the session yet. The message in Archive is returned, since there is no session
 	// limitation.
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Append("inbox", makeAppendTime(searchMsg, received))
 	tc2.client.Append("Archive", makeAppendTime(searchMsg, received))
 
@@ -722,7 +755,7 @@ func testSearchMulti(t *testing.T, selected bool) {
 			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Count: uint32ptr(3)},
 			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Count: uint32ptr(2)},
 			imapclient.UntaggedExists(4),
-			imapclient.UntaggedFetch{Seq: 4, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(8), imapclient.FetchFlags(nil)}},
+			tc.untaggedFetch(4, 8, imapclient.FetchFlags(nil)),
 		)
 	} else {
 		tc.xuntagged(

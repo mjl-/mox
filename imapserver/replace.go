@@ -82,31 +82,37 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 
 		// Resolve "*" for UID or message sequence.
 		if star {
-			if len(c.uids) == 0 {
-				return func() { xuserErrorf("cannot use * on empty mailbox") }
-			}
-			if isUID {
-				num = uint32(c.uids[len(c.uids)-1])
+			if c.uidonly {
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
+				q.FilterEqual("Expunged", false)
+				q.FilterLess("UID", c.uidnext)
+				q.SortDesc("UID")
+				q.Limit(1)
+				m, err := q.Get()
+				if err == bstore.ErrAbsent {
+					return func() { xsyntaxErrorf("cannot use * on empty mailbox") }
+				}
+				xcheckf(err, "get last message in mailbox")
+				num = uint32(m.UID)
+			} else if c.exists == 0 {
+				return func() { xsyntaxErrorf("cannot use * on empty mailbox") }
+			} else if isUID {
+				num = uint32(c.uids[c.exists-1])
 			} else {
-				num = uint32(len(c.uids))
+				num = uint32(c.exists)
 			}
 			star = false
 		}
 
 		// Find or verify UID of message to replace.
-		var seq msgseq
 		if isUID {
-			seq = c.sequence(store.UID(num))
-			if seq <= 0 {
-				return func() { xuserErrorf("unknown uid %d", num) }
-			}
-		} else if num > uint32(len(c.uids)) {
+			uidOld = store.UID(num)
+		} else if num > c.exists {
 			return func() { xuserErrorf("invalid msgseq") }
 		} else {
-			seq = msgseq(num)
+			uidOld = c.uids[int(num)-1]
 		}
-
-		uidOld = c.uids[int(seq)-1]
 
 		// Check the message still exists in the database. If it doesn't, it may have been
 		// deleted just now and we won't check the quota. We'll raise an error later on,
@@ -115,6 +121,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		q := bstore.QueryTx[store.Message](tx)
 		q.FilterNonzero(store.Message{MailboxID: c.mailboxID, UID: uidOld})
 		q.FilterEqual("Expunged", false)
+		q.FilterLess("UID", c.uidnext)
 		_, err = q.Get()
 		if err == bstore.ErrAbsent {
 			return nil
@@ -336,7 +343,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		c.uidAppend(nm.UID)
 		// We send an untagged OK with APPENDUID, for sane bookkeeping in clients. ../rfc/8508:401
 		c.xbwritelinef("* OK [APPENDUID %d %d] ", mbDst.UIDValidity, nm.UID)
-		c.xbwritelinef("* %d EXISTS", len(c.uids))
+		c.xbwritelinef("* %d EXISTS", c.exists)
 	}
 
 	// We must return vanished instead of expunge, and also highestmodseq, when qresync
@@ -345,13 +352,18 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 
 	// Now that we are in sync with msgseq, we can find our old msgseq and say it is
 	// expunged or vanished. ../rfc/7162:1900
-	omsgseq := c.xsequence(om.UID)
-	c.sequenceRemove(omsgseq, om.UID)
-	if qresync {
+	var oseq msgseq
+	if c.uidonly {
+		c.exists--
+	} else {
+		oseq = c.xsequence(om.UID)
+		c.sequenceRemove(oseq, om.UID)
+	}
+	if qresync || c.uidonly {
 		c.xbwritelinef("* VANISHED %d", om.UID)
 		// ../rfc/7162:1916
 	} else {
-		c.xbwritelinef("* %d EXPUNGE", omsgseq)
+		c.xbwritelinef("* %d EXPUNGE", oseq)
 	}
 	c.xwriteresultf("%s OK [HIGHESTMODSEQ %d] replaced", tag, nm.ModSeq.Client())
 }

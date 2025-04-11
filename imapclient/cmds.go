@@ -388,6 +388,42 @@ func (c *Conn) StoreFlagsClear(seqset string, silent bool, flags ...string) (unt
 	return c.Transactf("store %s %s (%s)", seqset, item, strings.Join(flags, " "))
 }
 
+// UIDStoreFlagsSet stores a new set of flags for messages from uid set with
+// the UID STORE command.
+//
+// If silent, no untagged responses with the updated flags will be sent by the
+// server.
+func (c *Conn) UIDStoreFlagsSet(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
+	defer c.recover(&rerr)
+	item := "flags"
+	if silent {
+		item += ".silent"
+	}
+	return c.Transactf("uid store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+}
+
+// UIDStoreFlagsAdd is like UIDStoreFlagsSet, but only adds flags, leaving
+// current flags on the message intact.
+func (c *Conn) UIDStoreFlagsAdd(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
+	defer c.recover(&rerr)
+	item := "+flags"
+	if silent {
+		item += ".silent"
+	}
+	return c.Transactf("uid store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+}
+
+// UIDStoreFlagsClear is like UIDStoreFlagsSet, but only removes flags, leaving
+// other flags on the message intact.
+func (c *Conn) UIDStoreFlagsClear(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
+	defer c.recover(&rerr)
+	item := "-flags"
+	if silent {
+		item += ".silent"
+	}
+	return c.Transactf("uid store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+}
+
 // Copy adds messages from the sequences in seqSet in the currently selected/active mailbox to dstMailbox.
 func (c *Conn) Copy(seqSet NumSet, dstMailbox string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)

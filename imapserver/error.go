@@ -57,3 +57,9 @@ func xsyntaxErrorf(format string, args ...any) {
 	err := errors.New(errmsg)
 	panic(syntaxError{"", "", errmsg, err})
 }
+
+func xsyntaxCodeErrorf(code, format string, args ...any) {
+	errmsg := fmt.Sprintf(format, args...)
+	err := errors.New(errmsg)
+	panic(syntaxError{"", code, errmsg, err})
+}

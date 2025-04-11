@@ -242,7 +242,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 9208	Partial	-	IMAP QUOTA Extension
 9394	Roadmap	-	IMAP PARTIAL Extension for Paged SEARCH and FETCH
 9585	Yes	-	IMAP Response Code for Command Progress Notifications
-9586	Roadmap	-	IMAP Extension for Using and Returning Unique Identifiers (UIDs) Only
+9586	Yes	-	IMAP Extension for Using and Returning Unique Identifiers (UIDs) Only
 9590	Yes	-	IMAP Extension for Returning Mailbox METADATA in Extended LIST
 9698	?	-	The JMAPACCESS Extension for IMAP
 9738	No	-	IMAP MESSAGELIMIT Extension

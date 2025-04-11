@@ -10,10 +10,10 @@ import (
 )
 
 func TestCompress(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "compress")
 	tc.transactf("bad", "compress bogus ")
@@ -30,11 +30,11 @@ func TestCompress(t *testing.T) {
 }
 
 func TestCompressStartTLS(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
 	tc.client.Starttls(&tls.Config{InsecureSkipVerify: true})
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.CompressDeflate()
 	tc.client.Select("inbox")
 	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(exampleMsg), exampleMsg)
@@ -53,7 +53,7 @@ func TestCompressBreak(t *testing.T) {
 	// state inconsistent. We must not call into the flate writer again because due to
 	// its broken internal state it may cause array out of bounds accesses.
 
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
 	msg := exampleMsg
@@ -69,7 +69,7 @@ func TestCompressBreak(t *testing.T) {
 		text = text[n:]
 	}
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.CompressDeflate()
 	tc.client.Select("inbox")
 	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(msg), msg)

@@ -167,8 +167,9 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 		c.xmailboxID(cmd.rtx, c.mailboxID)
 
 		// With changedSince, the client is likely asking for a small set of changes. Use a
-		// database query to trim down the uids we need to look at.
-		// ../rfc/7162:871
+		// database query to trim down the uids we need to look at. We need to go through
+		// the database for "VANISHED (EARLIER)" anyway, to see UIDs that aren't in the
+		// session anymore. Vanished must be used with changedSince. ../rfc/7162:871
 		if changedSince > 0 {
 			q := bstore.QueryTx[store.Message](cmd.rtx)
 			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
@@ -177,11 +178,16 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 				q.FilterEqual("Expunged", false)
 			}
 			err := q.ForEach(func(m store.Message) error {
-				if m.Expunged {
-					vanishedUIDs = append(vanishedUIDs, m.UID)
-				} else if isUID {
-					if nums.containsUID(m.UID, c.uids, c.searchResult) {
-						uids = append(uids, m.UID)
+				if m.UID >= c.uidnext {
+					return nil
+				}
+				if isUID {
+					if nums.xcontainsKnownUID(m.UID, c.searchResult, func() store.UID { return c.uidnext - 1 }) {
+						if m.Expunged {
+							vanishedUIDs = append(vanishedUIDs, m.UID)
+						} else {
+							uids = append(uids, m.UID)
+						}
 					}
 				} else {
 					seq := c.sequence(m.UID)
@@ -192,49 +198,52 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 				return nil
 			})
 			xcheckf(err, "looking up messages with changedsince")
-		} else {
-			uids = c.xnumSetUIDs(isUID, nums)
-		}
 
-		// Send vanished for all missing requested UIDs. ../rfc/7162:1718
-		if !vanished {
-			return
-		}
-
-		delModSeq, err := c.account.HighestDeletedModSeq(cmd.rtx)
-		xcheckf(err, "looking up highest deleted modseq")
-		if changedSince >= delModSeq.Client() {
-			return
-		}
-
-		// First sort the uids we already found, for fast lookup.
-		slices.Sort(vanishedUIDs)
-
-		// We'll be gathering any more vanished uids in more.
-		more := map[store.UID]struct{}{}
-		checkVanished := func(uid store.UID) {
-			if uidSearch(c.uids, uid) <= 0 && uidSearch(vanishedUIDs, uid) <= 0 {
-				more[uid] = struct{}{}
+			// In case of vanished where we don't have the full history, we must send VANISHED
+			// for all uids matching nums. ../rfc/7162:1718
+			delModSeq, err := c.account.HighestDeletedModSeq(cmd.rtx)
+			xcheckf(err, "looking up highest deleted modseq")
+			if !vanished || changedSince >= delModSeq.Client() {
+				return
 			}
-		}
-		// Now look through the requested uids. We may have a searchResult, handle it
-		// separately from a numset with potential stars, over which we can more easily
-		// iterate.
-		if nums.searchResult {
-			for _, uid := range c.searchResult {
-				checkVanished(uid)
-			}
-		} else {
-			iter := nums.interpretStar(c.uids).newIter()
-			for {
-				num, ok := iter.Next()
-				if !ok {
-					break
+
+			// We'll iterate through all UIDs in the numset, and add anything that isn't
+			// already in uids and vanishedUIDs. First sort the uids we already found, for fast
+			// lookup. We'll gather new UIDs in more, so we don't break the binary search.
+			slices.Sort(vanishedUIDs)
+			slices.Sort(uids)
+
+			more := map[store.UID]struct{}{} // We'll add them at the end.
+			checkVanished := func(uid store.UID) {
+				if uid < c.uidnext && uidSearch(uids, uid) <= 0 && uidSearch(vanishedUIDs, uid) <= 0 {
+					more[uid] = struct{}{}
 				}
-				checkVanished(store.UID(num))
 			}
+
+			// Now look through the requested uids. We may have a searchResult, handle it
+			// separately from a numset with potential stars, over which we can more easily
+			// iterate.
+			if nums.searchResult {
+				for _, uid := range c.searchResult {
+					checkVanished(uid)
+				}
+			} else {
+				xlastUID := c.newCachedLastUID(cmd.rtx, c.mailboxID, func(xerr error) { xuserErrorf("%s", xerr) })
+				iter := nums.xinterpretStar(xlastUID).newIter()
+				for {
+					num, ok := iter.Next()
+					if !ok {
+						break
+					}
+					checkVanished(store.UID(num))
+				}
+			}
+			vanishedUIDs = slices.AppendSeq(vanishedUIDs, maps.Keys(more))
+			slices.Sort(vanishedUIDs)
+		} else {
+			uids = c.xnumSetEval(cmd.rtx, isUID, nums)
 		}
-		vanishedUIDs = slices.AppendSeq(vanishedUIDs, maps.Keys(more))
+
 	})
 	// We are continuing without a lock, working off our snapshot of uids to process.
 
@@ -242,7 +251,6 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 	if len(vanishedUIDs) > 0 {
 		// Mention all vanished UIDs in compact numset form.
 		// ../rfc/7162:1985
-		slices.Sort(vanishedUIDs)
 		// No hard limit on response sizes, but clients are recommended to not send more
 		// than 8k. We send a more conservative max 4k.
 		for _, s := range compactUIDSet(vanishedUIDs).Strings(4*1024 - 32) {
@@ -260,7 +268,12 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 			xuserErrorf("processing fetch attribute: %v", err)
 		}
 
-		fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", cmd.conn.xsequence(cmd.uid))
+		// UIDFETCH in case of uidonly. ../rfc/9586:181
+		if c.uidonly {
+			fmt.Fprintf(cmd.conn.xbw, "* %d UIDFETCH ", cmd.uid)
+		} else {
+			fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", cmd.conn.xsequence(cmd.uid))
+		}
 		data.xwriteTo(cmd.conn, cmd.conn.xbw)
 		cmd.conn.xbw.Write([]byte("\r\n"))
 
@@ -426,7 +439,10 @@ func (cmd *fetchCmd) process(atts []fetchAtt) (rdata listspace, rerr error) {
 		}
 	}()
 
-	data := listspace{bare("UID"), number(cmd.uid)}
+	var data listspace
+	if !cmd.conn.uidonly {
+		data = append(data, bare("UID"), number(cmd.uid))
+	}
 
 	cmd.markSeen = false
 	cmd.needFlags = false
@@ -474,8 +490,11 @@ func (cmd *fetchCmd) process(atts []fetchAtt) (rdata listspace, rerr error) {
 func (cmd *fetchCmd) xprocessAtt(a fetchAtt) []token {
 	switch a.field {
 	case "UID":
-		// Always present.
-		return nil
+		// Present by default without uidonly. For uidonly, we only add it when explicitly
+		// requested. ../rfc/9586:184
+		if cmd.conn.uidonly {
+			return []token{bare("UID"), number(cmd.uid)}
+		}
 
 	case "ENVELOPE":
 		_, part := cmd.xensureParsed()

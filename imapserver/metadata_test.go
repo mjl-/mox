@@ -9,10 +9,18 @@ import (
 )
 
 func TestMetadata(t *testing.T) {
-	tc := start(t)
+	testMetadata(t, false)
+}
+
+func TestMetadataUIDOnly(t *testing.T) {
+	testMetadata(t, true)
+}
+
+func testMetadata(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	tc.transactf("ok", `getmetadata "" /private/comment`)
 	tc.xuntagged()
@@ -184,9 +192,9 @@ func TestMetadata(t *testing.T) {
 	})
 
 	// Broadcast should not happen when metadata capability is not enabled.
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc2.cmdf("", "idle")
@@ -255,10 +263,10 @@ func TestMetadata(t *testing.T) {
 }
 
 func TestMetadataLimit(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	maxKeys, maxSize := metadataMaxKeys, metadataMaxSize
 	defer func() {

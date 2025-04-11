@@ -8,20 +8,28 @@ import (
 )
 
 func TestSelect(t *testing.T) {
-	testSelectExamine(t, false)
+	testSelectExamine(t, false, false)
 }
 
 func TestExamine(t *testing.T) {
-	testSelectExamine(t, true)
+	testSelectExamine(t, true, false)
+}
+
+func TestSelectUIDOnly(t *testing.T) {
+	testSelectExamine(t, false, true)
+}
+
+func TestExamineUIDOnly(t *testing.T) {
+	testSelectExamine(t, true, true)
 }
 
 // select and examine are pretty much the same. but examine opens readonly instead of readwrite.
-func testSelectExamine(t *testing.T, examine bool) {
+func testSelectExamine(t *testing.T, examine, uidonly bool) {
 	defer mockUIDValidity()()
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	cmd := "select"
 	okcode := "READ-WRITE"
@@ -62,7 +70,11 @@ func testSelectExamine(t *testing.T, examine bool) {
 	// Append a message. It will be reported as UNSEEN.
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.transactf("ok", "%s inbox", cmd)
-	tc.xuntagged(uclosed, uflags, upermflags, urecent, uunseen, uexists1, uuidval1, uuidnext2, ulist)
+	if uidonly {
+		tc.xuntagged(uclosed, uflags, upermflags, urecent, uexists1, uuidval1, uuidnext2, ulist)
+	} else {
+		tc.xuntagged(uclosed, uflags, upermflags, urecent, uunseen, uexists1, uuidval1, uuidnext2, ulist)
+	}
 	tc.xcode(okcode)
 
 	// With imap4rev2, we no longer get untagged RECENT or untagged UNSEEN.

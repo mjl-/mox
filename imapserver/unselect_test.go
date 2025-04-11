@@ -7,10 +7,18 @@ import (
 )
 
 func TestUnselect(t *testing.T) {
-	tc := start(t)
+	testUnselect(t, false)
+}
+
+func TestUnselectUIDOnly(t *testing.T) {
+	testUnselect(t, true)
+}
+
+func testUnselect(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	tc.transactf("bad", "unselect bogus") // Leftover data.
@@ -19,7 +27,7 @@ func TestUnselect(t *testing.T) {
 
 	tc.client.Select("inbox")
 	tc.client.Append("inbox", makeAppend(exampleMsg))
-	tc.client.StoreFlagsAdd("1", true, `\Deleted`)
+	tc.client.UIDStoreFlagsAdd("1", true, `\Deleted`)
 	tc.transactf("ok", "unselect")
 	tc.transactf("ok", "status inbox (messages)")
 	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 1}}) // Message not removed.

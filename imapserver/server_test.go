@@ -41,6 +41,10 @@ func init() {
 	mox.Context = ctxbg
 }
 
+func ptr[T any](v T) *T {
+	return &v
+}
+
 func tocrlf(s string) string {
 	return strings.ReplaceAll(s, "\n", "\r\n")
 }
@@ -170,6 +174,7 @@ type testconn struct {
 	t          *testing.T
 	conn       net.Conn
 	client     *imapclient.Conn
+	uidonly    bool
 	done       chan struct{}
 	serverConn net.Conn
 	account    *store.Account
@@ -250,7 +255,7 @@ func tuntagged(t *testing.T, got imapclient.Untagged, dst any) {
 	gotv := reflect.ValueOf(got)
 	dstv := reflect.ValueOf(dst)
 	if gotv.Type() != dstv.Type().Elem() {
-		t.Fatalf("got %#v, expected %#v", gotv.Type(), dstv.Type().Elem())
+		t.Fatalf("got %#v, expected %#v", got, dstv.Elem().Interface())
 	}
 	dstv.Elem().Set(gotv)
 }
@@ -327,6 +332,33 @@ func (tc *testconn) waitDone() {
 	}
 }
 
+func (tc *testconn) login(username, password string) {
+	tc.client.Login(username, password)
+	if tc.uidonly {
+		tc.transactf("ok", "enable uidonly")
+	}
+}
+
+// untaggedFetch returns an imapclient.UntaggedFetch or
+// imapclient.UntaggedUIDFetch, depending on whether uidonly is enabled for the
+// connection.
+func (tc *testconn) untaggedFetch(seq, uid uint32, attrs ...imapclient.FetchAttr) any {
+	if tc.uidonly {
+		return imapclient.UntaggedUIDFetch{UID: uid, Attrs: attrs}
+	}
+	attrs = append([]imapclient.FetchAttr{imapclient.FetchUID(uid)}, attrs...)
+	return imapclient.UntaggedFetch{Seq: seq, Attrs: attrs}
+}
+
+// like untaggedFetch, but with explicit UID fetch attribute in case of uidonly.
+func (tc *testconn) untaggedFetchUID(seq, uid uint32, attrs ...imapclient.FetchAttr) any {
+	attrs = append([]imapclient.FetchAttr{imapclient.FetchUID(uid)}, attrs...)
+	if tc.uidonly {
+		return imapclient.UntaggedUIDFetch{UID: uid, Attrs: attrs}
+	}
+	return imapclient.UntaggedFetch{Seq: seq, Attrs: attrs}
+}
+
 func (tc *testconn) close() {
 	tc.close0(true)
 }
@@ -338,7 +370,7 @@ func (tc *testconn) closeNoWait() {
 func (tc *testconn) close0(waitclose bool) {
 	defer func() {
 		if unhandledPanics.Swap(0) > 0 {
-			tc.t.Fatalf("handled panic in server")
+			tc.t.Fatalf("unhandled panic in server")
 		}
 	}()
 
@@ -388,19 +420,19 @@ func makeAppendTime(msg string, tm time.Time) imapclient.Append {
 
 var connCounter int64
 
-func start(t *testing.T) *testconn {
-	return startArgs(t, true, false, true, true, "mjl")
+func start(t *testing.T, uidonly bool) *testconn {
+	return startArgs(t, uidonly, true, false, true, true, "mjl")
 }
 
-func startNoSwitchboard(t *testing.T) *testconn {
-	return startArgs(t, false, false, true, false, "mjl")
+func startNoSwitchboard(t *testing.T, uidonly bool) *testconn {
+	return startArgs(t, uidonly, false, false, true, false, "mjl")
 }
 
 const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
 const password1 = "tést    "                      // PRECIS normalized, with NFC.
 
-func startArgs(t *testing.T, first, immediateTLS bool, allowLoginWithoutTLS, setPassword bool, accname string) *testconn {
-	return startArgsMore(t, first, immediateTLS, nil, nil, allowLoginWithoutTLS, setPassword, accname, nil)
+func startArgs(t *testing.T, uidonly, first, immediateTLS bool, allowLoginWithoutTLS, setPassword bool, accname string) *testconn {
+	return startArgsMore(t, uidonly, first, immediateTLS, nil, nil, allowLoginWithoutTLS, setPassword, accname, nil)
 }
 
 // namedConn wraps a conn so it can return a RemoteAddr with a non-empty name.
@@ -415,7 +447,7 @@ func (c namedConn) RemoteAddr() net.Addr {
 }
 
 // todo: the parameters and usage are too much now. change to scheme similar to smtpserver, with params in a struct, and a separate method for init and making a connection.
-func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, setPassword bool, accname string, afterInit func() error) *testconn {
+func startArgsMore(t *testing.T, uidonly, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, setPassword bool, accname string, afterInit func() error) *testconn {
 	limitersInit() // Reset rate limiters.
 
 	switchStop := func() {}
@@ -506,7 +538,7 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 	}()
 	client, err := imapclient.New(connCounter, clientConn, true)
 	tcheck(t, err, "new client")
-	tc := &testconn{t: t, conn: clientConn, client: client, done: done, serverConn: serverConn, account: acc}
+	tc := &testconn{t: t, conn: clientConn, client: client, uidonly: uidonly, done: done, serverConn: serverConn, account: acc}
 	if first {
 		tc.switchStop = switchStop
 	}
@@ -542,7 +574,7 @@ func fakeCert(t *testing.T, randomkey bool) tls.Certificate {
 }
 
 func TestLogin(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
 	tc.transactf("bad", "login too many args")
@@ -556,11 +588,11 @@ func TestLogin(t *testing.T) {
 	tc.transactf("ok", `login mjl@mox.example "%s"`, password0)
 	tc.close()
 
-	tc = start(t)
+	tc = start(t, false)
 	tc.transactf("ok", `login "mjl@mox.example" "%s"`, password0)
 	tc.close()
 
-	tc = start(t)
+	tc = start(t, false)
 	tc.transactf("ok", `login "\"\"@mox.example" "%s"`, password0)
 	defer tc.close()
 
@@ -570,7 +602,7 @@ func TestLogin(t *testing.T) {
 
 // Test that commands don't work in the states they are not supposed to.
 func TestState(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 
 	notAuthenticated := []string{"starttls", "authenticate", "login"}
 	authenticatedOrSelected := []string{"enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub"}
@@ -581,7 +613,7 @@ func TestState(t *testing.T) {
 	tc.transactf("ok", "noop")
 	tc.transactf("ok", "logout")
 	tc.close()
-	tc = start(t)
+	tc = start(t, false)
 	defer tc.close()
 
 	// Not authenticated, lots of commands not allowed.
@@ -599,7 +631,7 @@ func TestState(t *testing.T) {
 }
 
 func TestNonIMAP(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
 	// imap greeting has already been read, we sidestep the imapclient.
@@ -612,10 +644,10 @@ func TestNonIMAP(t *testing.T) {
 }
 
 func TestLiterals(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Create("tmpbox", nil)
 
 	tc.transactf("ok", "rename {6+}\r\ntmpbox {7+}\r\nntmpbox")
@@ -636,9 +668,17 @@ func TestLiterals(t *testing.T) {
 
 // Test longer scenario with login, lists, subscribes, status, selects, etc.
 func TestScenario(t *testing.T) {
-	tc := start(t)
+	testScenario(t, false)
+}
+
+func TestScenarioUIDOnly(t *testing.T) {
+	testScenario(t, true)
+}
+
+func testScenario(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
-	tc.transactf("ok", `login mjl@mox.example "%s"`, password0)
+	tc.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", " missingcommand")
 
@@ -682,6 +722,44 @@ func TestScenario(t *testing.T) {
 	tc.check(err, "write message")
 	tc.response("ok")
 
+	tc.transactf("ok", "uid fetch 1 all")
+	tc.transactf("ok", "uid fetch 1 body")
+	tc.transactf("ok", "uid fetch 1 binary[]")
+
+	tc.transactf("ok", `uid store 1 flags (\seen \answered)`)
+	tc.transactf("ok", `uid store 1 +flags ($junk)`) // should train as junk.
+	tc.transactf("ok", `uid store 1 -flags ($junk)`) // should retrain as non-junk.
+	tc.transactf("ok", `uid store 1 -flags (\seen)`) // should untrain completely.
+	tc.transactf("ok", `uid store 1 -flags (\answered)`)
+	tc.transactf("ok", `uid store 1 +flags (\answered)`)
+	tc.transactf("ok", `uid store 1 flags.silent (\seen \answered)`)
+	tc.transactf("ok", `uid store 1 -flags.silent (\answered)`)
+	tc.transactf("ok", `uid store 1 +flags.silent (\answered)`)
+	tc.transactf("bad", `uid store 1 flags (\badflag)`)
+	tc.transactf("ok", "noop")
+
+	tc.transactf("ok", "uid copy 1 Trash")
+	tc.transactf("ok", "uid copy 1 Trash")
+	tc.transactf("ok", "uid move 1 Trash")
+
+	tc.transactf("ok", "close")
+	tc.transactf("ok", "select Trash")
+	tc.transactf("ok", `uid store 1 flags (\deleted)`)
+	tc.transactf("ok", "expunge")
+	tc.transactf("ok", "noop")
+
+	tc.transactf("ok", `uid store 1 flags (\deleted)`)
+	tc.transactf("ok", "close")
+	tc.transactf("ok", "delete Trash")
+
+	if uidonly {
+		return
+	}
+
+	tc.transactf("ok", "create Trash")
+	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(exampleMsg), exampleMsg)
+	tc.transactf("ok", "select inbox")
+
 	tc.transactf("ok", "fetch 1 all")
 	tc.transactf("ok", "fetch 1 body")
 	tc.transactf("ok", "fetch 1 binary[]")
@@ -714,9 +792,9 @@ func TestScenario(t *testing.T) {
 }
 
 func TestMailbox(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	invalid := []string{
 		"e\u0301", // é but as e + acute, not unicode-normalized
@@ -736,14 +814,14 @@ func TestMailbox(t *testing.T) {
 }
 
 func TestMailboxDeleted(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, false)
 	defer tc2.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
-	tc2.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 
 	tc.client.Create("testbox", nil)
 	tc2.client.Select("testbox")
@@ -759,9 +837,9 @@ func TestMailboxDeleted(t *testing.T) {
 	tc2.transactf("no", "uid fetch 1 all")
 	tc2.transactf("no", "store 1 flags ()")
 	tc2.transactf("no", "uid store 1 flags ()")
-	tc2.transactf("bad", "copy 1 inbox") // msgseq 1 not available.
+	tc2.transactf("no", "copy 1 inbox")
 	tc2.transactf("no", "uid copy 1 inbox")
-	tc2.transactf("bad", "move 1 inbox") // msgseq 1 not available.
+	tc2.transactf("no", "move 1 inbox")
 	tc2.transactf("no", "uid move 1 inbox")
 
 	tc2.transactf("ok", "unselect")
@@ -773,9 +851,9 @@ func TestMailboxDeleted(t *testing.T) {
 }
 
 func TestID(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	tc.transactf("ok", "id nil")
 	tc.xuntagged(imapclient.UntaggedID{"name": "mox", "version": moxvar.Version})
@@ -787,54 +865,84 @@ func TestID(t *testing.T) {
 }
 
 func TestSequence(t *testing.T) {
-	tc := start(t)
+	testSequence(t, false)
+}
+
+func TestSequenceUIDOnly(t *testing.T) {
+	testSequence(t, true)
+}
+
+func testSequence(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	tc.transactf("bad", "fetch * all") // ../rfc/9051:7018
+	tc.transactf("bad", "fetch 1:* all")
+	tc.transactf("bad", "fetch 1:2 all")
 	tc.transactf("bad", "fetch 1 all") // ../rfc/9051:7018
 
 	tc.transactf("ok", "uid fetch 1 all") // non-existing messages are OK for uids.
 	tc.transactf("ok", "uid fetch * all") // * is like uidnext, a non-existing message.
 
-	tc.client.Append("inbox", makeAppend(exampleMsg))
-	tc.client.Append("inbox", makeAppend(exampleMsg))
-	tc.transactf("ok", "fetch 2:1,1 uid") // We reorder 2:1 to 1:2, but we don't deduplicate numbers.
-	tc.xuntagged(
-		imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1)}},
-		imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(2)}},
-		imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1)}},
-	)
+	tc.transactf("ok", "uid search return (save) all") // Empty result.
+	tc.transactf("ok", "uid fetch $ uid")
+	tc.xuntagged()
 
-	tc.transactf("ok", "uid fetch 3:* uid") // Because * is the last message, which is 2, the range becomes 3:2, which matches the last message.
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(2)}})
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	if !uidonly {
+		tc.transactf("ok", "fetch 2:1,1 uid") // We reorder 2:1 to 1:2, and we deduplicate numbers.
+		tc.xuntagged(
+			tc.untaggedFetch(1, 1),
+			tc.untaggedFetch(2, 2),
+		)
+
+		tc.transactf("bad", "fetch 1:3 all")
+	}
+
+	tc.transactf("ok", "uid fetch * flags")
+	tc.xuntagged(tc.untaggedFetch(2, 2, imapclient.FetchFlags(nil)))
+
+	tc.transactf("ok", "uid fetch 3:* flags") // Because * is the last message, which is 2, the range becomes 3:2, which matches the last message.
+	tc.xuntagged(tc.untaggedFetch(2, 2, imapclient.FetchFlags(nil)))
+
+	tc.transactf("ok", "uid fetch *:3 flags")
+	tc.xuntagged(tc.untaggedFetch(2, 2, imapclient.FetchFlags(nil)))
+
+	tc.transactf("ok", "uid search return (save) all") // Empty result.
+	tc.transactf("ok", "uid fetch $ flags")
+	tc.xuntagged(
+		tc.untaggedFetch(1, 1, imapclient.FetchFlags(nil)),
+		tc.untaggedFetch(2, 2, imapclient.FetchFlags(nil)),
+	)
 }
 
 // Test that a message that is expunged by another session can be read as long as a
 // reference is held by a session. New sessions do not see the expunged message.
 // todo: possibly implement the additional reference counting. so far it hasn't been worth the trouble.
 func DisabledTestReference(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, false)
 	defer tc2.close()
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc.client.StoreFlagsSet("1", true, `\Deleted`)
 	tc.client.Expunge()
 
-	tc3 := startNoSwitchboard(t)
+	tc3 := startNoSwitchboard(t, false)
 	defer tc3.close()
-	tc3.client.Login("mjl@mox.example", password0)
+	tc3.login("mjl@mox.example", password0)
 	tc3.transactf("ok", `list "" "inbox" return (status (messages))`)
 	tc3.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"}, imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 0}})
 
 	tc2.transactf("ok", "fetch 1 rfc822.size")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchRFC822Size(len(exampleMsg))}})
+	tc.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchRFC822Size(len(exampleMsg))))
 }

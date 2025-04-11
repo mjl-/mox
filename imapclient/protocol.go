@@ -43,6 +43,7 @@ const (
 	CapPreview          Capability = "PREVIEW"            // ../rfc/8970:114
 	CapMultiSearch      Capability = "MULTISEARCH"        // ../rfc/7377:187
 	CapNotify           Capability = "NOTIFY"             // ../rfc/5465:195
+	CapUIDOnly          Capability = "UIDONLY"            // ../rfc/9586:129
 )
 
 // Status is the tagged final result of a command.
@@ -259,6 +260,14 @@ type UntaggedList struct {
 }
 type UntaggedFetch struct {
 	Seq   uint32
+	Attrs []FetchAttr
+}
+
+// UntaggedUIDFetch is like UntaggedFetch, but with UIDs instead of message
+// sequence numbers, and returned instead of regular fetch responses when UIDONLY
+// is enabled.
+type UntaggedUIDFetch struct {
+	UID   uint32
 	Attrs []FetchAttr
 }
 type UntaggedSearch []uint32

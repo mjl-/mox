@@ -7,10 +7,18 @@ import (
 )
 
 func TestLsub(t *testing.T) {
-	tc := start(t)
+	testLsub(t, false)
+}
+
+func TestLsubUIDOnly(t *testing.T) {
+	testLsub(t, true)
+}
+
+func testLsub(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "lsub")       // Missing params.
 	tc.transactf("bad", `lsub ""`)    // Missing param.

@@ -7,14 +7,14 @@ import (
 )
 
 func TestSubscribe(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, false)
 	defer tc2.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
-	tc2.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "subscribe")       // Missing param.
 	tc.transactf("bad", "subscribe ")      // Missing param.

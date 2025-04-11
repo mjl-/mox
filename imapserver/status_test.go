@@ -7,11 +7,19 @@ import (
 )
 
 func TestStatus(t *testing.T) {
+	testStatus(t, false)
+}
+
+func TestStatusUIDOnly(t *testing.T) {
+	testStatus(t, true)
+}
+
+func testStatus(t *testing.T, uidonly bool) {
 	defer mockUIDValidity()()
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "status")                      // Missing param.
 	tc.transactf("bad", "status inbox")                // Missing param.
@@ -53,7 +61,7 @@ func TestStatus(t *testing.T) {
 	})
 
 	tc.client.Select("inbox")
-	tc.client.StoreFlagsSet("1", true, `\Deleted`)
+	tc.client.UIDStoreFlagsSet("1", true, `\Deleted`)
 	tc.transactf("ok", "status inbox (messages uidnext uidvalidity unseen deleted size recent appendlimit)")
 	tc.xuntagged(imapclient.UntaggedStatus{
 		Mailbox: "Inbox",

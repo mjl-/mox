@@ -946,42 +946,6 @@ func (p *parser) xsearchKey() *searchKey {
 	return sk
 }
 
-// hasModseq returns whether there is a modseq filter anywhere in the searchkey.
-func (sk searchKey) hasModseq() bool {
-	if sk.clientModseq != nil {
-		return true
-	}
-	for _, e := range sk.searchKeys {
-		if e.hasModseq() {
-			return true
-		}
-	}
-	if sk.searchKey != nil && sk.searchKey.hasModseq() {
-		return true
-	}
-	if sk.searchKey2 != nil && sk.searchKey2.hasModseq() {
-		return true
-	}
-	return false
-}
-
-// Whether we need message sequence numbers to evaluate. If not, we cannot optimize
-// when only MAX is requested through a reverse query.
-func (sk searchKey) needSeq() bool {
-	for _, k := range sk.searchKeys {
-		if k.needSeq() {
-			return true
-		}
-	}
-	if sk.searchKey != nil && sk.searchKey.needSeq() {
-		return true
-	}
-	if sk.searchKey2 != nil && sk.searchKey2.needSeq() {
-		return true
-	}
-	return sk.seqSet != nil && !sk.seqSet.searchResult
-}
-
 // ../rfc/9051:6489 ../rfc/3501:4692
 func (p *parser) xdateDay() int {
 	d := p.xdigit()

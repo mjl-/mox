@@ -27,13 +27,13 @@ import (
 
 func TestAuthenticateLogin(t *testing.T) {
 	// NFD username and PRECIS-cleaned password.
-	tc := start(t)
+	tc := start(t, false)
 	tc.client.Login("mo\u0301x@mox.example", password1)
 	tc.close()
 }
 
 func TestAuthenticatePlain(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 
 	tc.transactf("no", "authenticate bogus ")
 	tc.transactf("bad", "authenticate plain not base64...")
@@ -54,20 +54,20 @@ func TestAuthenticatePlain(t *testing.T) {
 	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000"+password0)))
 	tc.close()
 
-	tc = start(t)
+	tc = start(t, false)
 	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("mjl@mox.example\u0000mjl@mox.example\u0000"+password0)))
 	tc.close()
 
 	// NFD username and PRECIS-cleaned password.
-	tc = start(t)
+	tc = start(t, false)
 	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("mo\u0301x@mox.example\u0000mo\u0301x@mox.example\u0000"+password1)))
 	tc.close()
 
-	tc = start(t)
+	tc = start(t, false)
 	tc.client.AuthenticatePlain("mjl@mox.example", password0)
 	tc.close()
 
-	tc = start(t)
+	tc = start(t, false)
 	defer tc.close()
 
 	tc.cmdf("", "authenticate plain")
@@ -82,7 +82,7 @@ func TestAuthenticatePlain(t *testing.T) {
 }
 
 func TestLoginDisabled(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
 	acc, err := store.OpenAccount(pkglog, "disabled", false)
@@ -120,7 +120,7 @@ func TestAuthenticateSCRAMSHA256PLUS(t *testing.T) {
 }
 
 func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.Hash) {
-	tc := startArgs(t, true, tls, true, true, "mjl")
+	tc := startArgs(t, false, true, tls, true, true, "mjl")
 	tc.client.AuthenticateSCRAM(method, h, "mjl@mox.example", password0)
 	tc.close()
 
@@ -168,7 +168,7 @@ func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.
 		}
 	}
 
-	tc = startArgs(t, true, tls, true, true, "mjl")
+	tc = startArgs(t, false, true, tls, true, true, "mjl")
 	auth("no", scram.ErrInvalidProof, "mjl@mox.example", "badpass")
 	auth("no", scram.ErrInvalidProof, "mjl@mox.example", "")
 	// todo: server aborts due to invalid username. we should probably make client continue with fake determinisitically generated salt and result in error in the end.
@@ -185,7 +185,7 @@ func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.
 }
 
 func TestAuthenticateCRAMMD5(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 
 	tc.transactf("no", "authenticate bogus ")
 	tc.transactf("bad", "authenticate CRAM-MD5 not base64...")
@@ -234,13 +234,13 @@ func TestAuthenticateCRAMMD5(t *testing.T) {
 	tc.close()
 
 	// NFD username, with PRECIS-cleaned password.
-	tc = start(t)
+	tc = start(t, false)
 	auth("ok", "mo\u0301x@mox.example", password1)
 	tc.close()
 }
 
 func TestAuthenticateTLSClientCert(t *testing.T) {
-	tc := startArgsMore(t, true, true, nil, nil, true, true, "mjl", nil)
+	tc := startArgsMore(t, false, true, true, nil, nil, true, true, "mjl", nil)
 	tc.transactf("no", "authenticate external ") // No TLS auth.
 	tc.close()
 
@@ -263,7 +263,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	}
 
 	// No preauth, explicit authenticate with TLS.
-	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
 	if tc.client.Preauth {
 		t.Fatalf("preauthentication while not configured for tls public key")
 	}
@@ -271,7 +271,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	tc.close()
 
 	// External with explicit username.
-	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
 	if tc.client.Preauth {
 		t.Fatalf("preauthentication while not configured for tls public key")
 	}
@@ -279,12 +279,12 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	tc.close()
 
 	// No preauth, also allow other mechanisms.
-	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
 	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000"+password0)))
 	tc.close()
 
 	// No preauth, also allow other username for same account.
-	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
 	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000móx@mox.example\u0000"+password0)))
 	tc.close()
 
@@ -295,12 +295,12 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	tcheck(t, err, "set password")
 	err = acc.Close()
 	tcheck(t, err, "close account")
-	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, true, nil, &clientConfig, false, true, "mjl", addClientCert)
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000other@mox.example\u0000test1234")))
 	tc.close()
 
 	// Starttls and external auth.
-	tc = startArgsMore(t, true, false, nil, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, false, nil, &clientConfig, false, true, "mjl", addClientCert)
 	tc.client.Starttls(&clientConfig)
 	tc.transactf("ok", "authenticate external =")
 	tc.close()
@@ -318,7 +318,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	defer cancel()
 	mox.StartTLSSessionTicketKeyRefresher(ctx, pkglog, &serverConfig)
 	clientConfig.ClientSessionCache = tls.NewLRUClientSessionCache(10)
-	tc = startArgsMore(t, true, true, &serverConfig, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, true, &serverConfig, &clientConfig, false, true, "mjl", addClientCert)
 	if !tc.client.Preauth {
 		t.Fatalf("not preauthentication while configured for tls public key")
 	}
@@ -330,7 +330,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	tc.close()
 
 	// Authentication works with TLS resumption.
-	tc = startArgsMore(t, true, true, &serverConfig, &clientConfig, false, true, "mjl", addClientCert)
+	tc = startArgsMore(t, false, true, true, &serverConfig, &clientConfig, false, true, "mjl", addClientCert)
 	if !tc.client.Preauth {
 		t.Fatalf("not preauthentication while configured for tls public key")
 	}

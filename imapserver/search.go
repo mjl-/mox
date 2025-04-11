@@ -107,6 +107,11 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		sk.searchKeys = append(sk.searchKeys, *p.xsearchKey())
 	}
 
+	// Sequence set search program must be rejected with UIDONLY enabled. ../rfc/9586:220
+	if c.uidonly && sk.hasSequenceNumbers() {
+		xsyntaxCodeErrorf("UIDREQUIRED", "cannot search message sequence numbers in search program with uidonly enabled")
+	}
+
 	// Even in case of error, we ensure search result is changed.
 	if save {
 		c.searchResult = []store.UID{}
@@ -340,7 +345,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		// Determine if search has a sequence set without search results. If so, we need
 		// sequence numbers for matching, and we must always go through the messages in
 		// forward order. No reverse search for MAX only.
-		needSeq := (len(mailboxes) > 1 || len(mailboxes) == 1 && mailboxes[0].ID != c.mailboxID) && sk.needSeq()
+		needSeq := (len(mailboxes) > 1 || len(mailboxes) == 1 && mailboxes[0].ID != c.mailboxID) && sk.hasSequenceNumbers()
 
 		forward := eargs == nil || max1 == 0 || len(eargs) != 1 || needSeq
 		reverse := max1 == 1 && (len(eargs) == 1 || min1+max1 == len(eargs)) && !needSeq
@@ -352,8 +357,8 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		goal := "nil"
 		var total uint32
 		for _, mb := range mailboxes {
-			if mb.ID == c.mailboxID {
-				total += uint32(len(c.uids))
+			if mb.ID == c.mailboxID && !c.uidonly {
+				total += c.exists
 			} else {
 				total += uint32(mb.Total + mb.Deleted)
 			}
@@ -370,27 +375,34 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 			result := Result{Mailbox: mb}
 
 			msgCount := uint32(mb.MailboxCounts.Total + mb.MailboxCounts.Deleted)
-			if mb.ID == c.mailboxID {
-				msgCount = uint32(len(c.uids))
+			if mb.ID == c.mailboxID && !c.uidonly {
+				msgCount = c.exists
 			}
 
 			// Used for interpreting UID sets with a star, like "1:*" and "10:*". Only called
 			// for UIDs that are higher than the number, since "10:*" evaluates to "10:5" if 5
 			// is the highest UID, and UID 5-10 would all match.
 			var cachedHighestUID store.UID
-			highestUID := func() (store.UID, error) {
+			xhighestUID := func() store.UID {
 				if cachedHighestUID > 0 {
-					return cachedHighestUID, nil
+					return cachedHighestUID
 				}
 
 				q := bstore.QueryTx[store.Message](tx)
 				q.FilterNonzero(store.Message{MailboxID: mb.ID})
 				q.FilterEqual("Expunged", false)
+				if mb.ID == c.mailboxID {
+					q.FilterLess("UID", c.uidnext)
+				}
 				q.SortDesc("UID")
 				q.Limit(1)
 				m, err := q.Get()
+				if err == bstore.ErrAbsent {
+					xuserErrorf("cannot use * on empty mailbox")
+				}
+				xcheckf(err, "get last uid")
 				cachedHighestUID = m.UID
-				return cachedHighestUID, err
+				return cachedHighestUID
 			}
 
 			progressOrig := progress
@@ -403,6 +415,9 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 				q := bstore.QueryTx[store.Message](tx)
 				q.FilterNonzero(store.Message{MailboxID: mb.ID})
 				q.FilterEqual("Expunged", false)
+				if mb.ID == c.mailboxID {
+					q.FilterLess("UID", c.uidnext)
+				}
 				q.SortAsc("UID")
 				for m, err := range q.All() {
 					xcheckf(err, "list messages in mailbox")
@@ -416,7 +431,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					}
 					progress++
 
-					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, highestUID) {
+					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, xhighestUID) {
 						result.UIDs = append(result.UIDs, m.UID)
 						result.MaxModSeq = max(result.MaxModSeq, m.ModSeq)
 						if min1 == 1 && min1+max1 == len(eargs) {
@@ -443,6 +458,9 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 				q.FilterNonzero(store.Message{MailboxID: mb.ID})
 				q.FilterEqual("Expunged", false)
 				q.FilterGreater("UID", lastUID)
+				if mb.ID == c.mailboxID {
+					q.FilterLess("UID", c.uidnext)
+				}
 				q.SortDesc("UID")
 				for m, err := range q.All() {
 					xcheckf(err, "list messages in mailbox")
@@ -454,7 +472,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					progress++
 
 					var seq msgseq // Filled in by searchMatch for messages in selected mailbox.
-					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, highestUID) {
+					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, xhighestUID) {
 						result.UIDs = append(result.UIDs, m.UID)
 						result.MaxModSeq = max(result.MaxModSeq, m.ModSeq)
 						break
@@ -483,10 +501,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		// Old-style SEARCH response. We must spell out each number. So we may be splitting
 		// into multiple responses. ../rfc/9051:6809 ../rfc/3501:4833
 		for len(result.UIDs) > 0 {
-			n := len(result.UIDs)
-			if n > 100 {
-				n = 100
-			}
+			n := min(100, len(result.UIDs))
 			s := ""
 			for _, v := range result.UIDs[:n] {
 				if !isUID {
@@ -516,9 +531,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		if save {
 			// ../rfc/9051:3784 ../rfc/5182:13
 			c.searchResult = results[0].UIDs
-			if sanityChecks {
-				checkUIDs(c.searchResult)
-			}
+			c.checkUIDs(c.searchResult, false)
 		}
 
 		// No untagged ESEARCH response if nothing was requested. ../rfc/9051:4160
@@ -584,27 +597,33 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 }
 
 type search struct {
-	c          *conn
-	tx         *bstore.Tx
-	msgCount   uint32 // Number of messages in mailbox (or session when selected).
-	seq        msgseq // Can be 0, for other mailboxes than selected in case of MAX.
-	m          store.Message
-	mr         *store.MsgReader
-	p          *message.Part
-	highestUID func() (store.UID, error)
+	c           *conn
+	tx          *bstore.Tx
+	msgCount    uint32 // Number of messages in mailbox (or session when selected).
+	seq         msgseq // Can be 0, for other mailboxes than selected in case of MAX.
+	m           store.Message
+	mr          *store.MsgReader
+	p           *message.Part
+	xhighestUID func() store.UID
 }
 
-func (c *conn) searchMatch(tx *bstore.Tx, msgCount uint32, seq msgseq, m store.Message, sk searchKey, bodySearch, textSearch *store.WordSearch, highestUID func() (store.UID, error)) bool {
+func (c *conn) searchMatch(tx *bstore.Tx, msgCount uint32, seq msgseq, m store.Message, sk searchKey, bodySearch, textSearch *store.WordSearch, xhighestUID func() store.UID) bool {
 	if m.MailboxID == c.mailboxID {
-		seq = c.sequence(m.UID)
-		if seq == 0 {
-			// Session has not yet seen this message, and is not expecting to get a result that
-			// includes it.
-			return false
+		// If session doesn't know about the message yet, don't return it.
+		if c.uidonly {
+			if m.UID >= c.uidnext {
+				return false
+			}
+		} else {
+			// Set seq for use in evaluations.
+			seq = c.sequence(m.UID)
+			if seq == 0 {
+				return false
+			}
 		}
 	}
 
-	s := search{c: c, tx: tx, msgCount: msgCount, seq: seq, m: m, highestUID: highestUID}
+	s := search{c: c, tx: tx, msgCount: msgCount, seq: seq, m: m, xhighestUID: xhighestUID}
 	defer func() {
 		if s.mr != nil {
 			err := s.mr.Close()
@@ -722,9 +741,7 @@ func (s *search) match0(sk searchKey) bool {
 			// is likely a mistake. No mention about it in the RFC. ../rfc/7377:257
 			xuserErrorf("cannot use search result from another mailbox")
 		}
-		match, err := sk.uidSet.containsKnownUID(s.m.UID, c.searchResult, s.highestUID)
-		xcheckf(err, "checking for presence in uid set")
-		return match
+		return sk.uidSet.xcontainsKnownUID(s.m.UID, c.searchResult, s.xhighestUID)
 	}
 
 	// Parsed part.

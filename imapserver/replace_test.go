@@ -7,45 +7,79 @@ import (
 )
 
 func TestReplace(t *testing.T) {
+	testReplace(t, false)
+}
+
+func TestReplaceUIDOnly(t *testing.T) {
+	testReplace(t, true)
+}
+
+func testReplace(t *testing.T, uidonly bool) {
 	defer mockUIDValidity()()
 
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
+
+	// Star not allowed on empty mailbox.
+	tc.transactf("bad", "uid replace * inbox {1}")
+	if !uidonly {
+		tc.transactf("bad", "replace * inbox {1}")
+	}
 
 	// Append 3 messages, remove first. Leaves msgseq 1,2 with uid 2,3.
 	tc.client.Append("inbox", makeAppend(exampleMsg), makeAppend(exampleMsg), makeAppend(exampleMsg))
-	tc.client.StoreFlagsSet("1", true, `\deleted`)
+	tc.client.UIDStoreFlagsSet("1", true, `\deleted`)
 	tc.client.Expunge()
 
-	tc.transactf("no", "replace 2 expungebox {1}") // Mailbox no longer exists.
+	tc.transactf("no", "uid replace 1 expungebox {1}") // Mailbox no longer exists.
 	tc.xcode("TRYCREATE")
 
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	// Replace last message (msgseq 2, uid 3) in same mailbox.
-	tc.lastUntagged, tc.lastResult, tc.lastErr = tc.client.Replace("2", "INBOX", makeAppend(searchMsg))
+	if uidonly {
+		tc.lastUntagged, tc.lastResult, tc.lastErr = tc.client.UIDReplace("3", "INBOX", makeAppend(searchMsg))
+	} else {
+		tc.lastUntagged, tc.lastResult, tc.lastErr = tc.client.Replace("2", "INBOX", makeAppend(searchMsg))
+	}
 	tcheck(tc.t, tc.lastErr, "read imap response")
-	tc.xuntagged(
-		imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "APPENDUID", CodeArg: imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4")}, More: ""}},
-		imapclient.UntaggedExists(3),
-		imapclient.UntaggedExpunge(2),
-	)
+	if uidonly {
+		tc.xuntagged(
+			imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "APPENDUID", CodeArg: imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4")}, More: ""}},
+			imapclient.UntaggedExists(3),
+			imapclient.UntaggedVanished{UIDs: xparseNumSet("3")},
+		)
+	} else {
+		tc.xuntagged(
+			imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "APPENDUID", CodeArg: imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4")}, More: ""}},
+			imapclient.UntaggedExists(3),
+			imapclient.UntaggedExpunge(2),
+		)
+	}
 	tc.xcodeArg(imapclient.CodeHighestModSeq(8))
 
 	// Check that other client sees Exists and Expunge.
 	tc2.transactf("ok", "noop")
-	tc2.xuntagged(
-		imapclient.UntaggedExpunge(2),
-		imapclient.UntaggedExists(2),
-		imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(4), imapclient.FetchFlags(nil)}},
-	)
+	if uidonly {
+		tc2.xuntagged(
+			imapclient.UntaggedVanished{UIDs: xparseNumSet("3")},
+			imapclient.UntaggedExists(2),
+			tc.untaggedFetch(2, 4, imapclient.FetchFlags(nil)),
+		)
+	} else {
+		tc2.xuntagged(
+			imapclient.UntaggedExpunge(2),
+			imapclient.UntaggedExists(2),
+			tc.untaggedFetch(2, 4, imapclient.FetchFlags(nil)),
+		)
+	}
 
 	// Enable qresync, replace uid 2 (msgseq 1) to different mailbox, see that we get vanished instead of expunged.
 	tc.transactf("ok", "enable qresync")
@@ -58,18 +92,38 @@ func TestReplace(t *testing.T) {
 	)
 	tc.xcodeArg(imapclient.CodeHighestModSeq(9))
 
+	// Use "*" for replacing.
+	tc.transactf("ok", "uid replace * inbox {1+}\r\nx")
+	tc.xuntagged(
+		imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "APPENDUID", CodeArg: imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("6")}, More: ""}},
+		imapclient.UntaggedExists(3),
+		imapclient.UntaggedVanished{UIDs: xparseNumSet("5")},
+	)
+	if !uidonly {
+		tc.transactf("ok", "replace * inbox {1+}\r\ny")
+		tc.xuntagged(
+			imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "APPENDUID", CodeArg: imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("7")}, More: ""}},
+			imapclient.UntaggedExists(3),
+			imapclient.UntaggedVanished{UIDs: xparseNumSet("6")},
+		)
+	}
+
 	// Non-existent mailbox with non-synchronizing literal should consume the literal.
-	tc.transactf("no", "replace 1 bogusbox {1+}\r\nx")
+	if uidonly {
+		tc.transactf("no", "uid replace 1 bogusbox {1+}\r\nx")
+	} else {
+		tc.transactf("no", "replace 1 bogusbox {1+}\r\nx")
+	}
 
 	// Leftover data.
 	tc.transactf("bad", "replace 1 inbox () {6+}\r\ntest\r\n ")
 }
 
 func TestReplaceBigNonsyncLit(t *testing.T) {
-	tc := start(t)
+	tc := start(t, false)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	// Adding a message >1mb with non-sync literal to non-existent mailbox should abort entire connection.
@@ -81,20 +135,28 @@ func TestReplaceBigNonsyncLit(t *testing.T) {
 }
 
 func TestReplaceQuota(t *testing.T) {
+	testReplaceQuota(t, false)
+}
+
+func TestReplaceQuotaUIDOnly(t *testing.T) {
+	testReplaceQuota(t, true)
+}
+
+func testReplaceQuota(t *testing.T, uidonly bool) {
 	// with quota limit
-	tc := startArgs(t, true, false, true, true, "limit")
+	tc := startArgs(t, uidonly, true, false, true, true, "limit")
 	defer tc.close()
 
-	tc.client.Login("limit@mox.example", password0)
+	tc.login("limit@mox.example", password0)
 	tc.client.Select("inbox")
 	tc.client.Append("inbox", makeAppend("x"))
 
 	// Synchronizing literal, we get failure immediately.
-	tc.transactf("no", "replace 1 inbox {6}\r\n")
+	tc.transactf("no", "uid replace 1 inbox {6}\r\n")
 	tc.xcode("OVERQUOTA")
 
 	// Synchronizing literal to non-existent mailbox, we get failure immediately.
-	tc.transactf("no", "replace 1 badbox {6}\r\n")
+	tc.transactf("no", "uid replace 1 badbox {6}\r\n")
 	tc.xcode("TRYCREATE")
 
 	buf := make([]byte, 4000, 4002)
@@ -104,14 +166,14 @@ func TestReplaceQuota(t *testing.T) {
 	buf = append(buf, "\r\n"...)
 
 	// Non-synchronizing literal. We get to write our data.
-	tc.client.Commandf("", "replace 1 inbox ~{4000+}")
+	tc.client.Commandf("", "uid replace 1 inbox ~{4000+}")
 	_, err := tc.client.Write(buf)
 	tc.check(err, "write replace message")
 	tc.response("no")
 	tc.xcode("OVERQUOTA")
 
 	// Non-synchronizing literal to bad mailbox.
-	tc.client.Commandf("", "replace 1 badbox {4000+}")
+	tc.client.Commandf("", "uid replace 1 badbox {4000+}")
 	_, err = tc.client.Write(buf)
 	tc.check(err, "write replace message")
 	tc.response("no")
@@ -119,22 +181,30 @@ func TestReplaceQuota(t *testing.T) {
 }
 
 func TestReplaceExpunged(t *testing.T) {
-	tc := start(t)
+	testReplaceExpunged(t, false)
+}
+
+func TestReplaceExpungedUIDOnly(t *testing.T) {
+	testReplaceExpunged(t, true)
+}
+
+func testReplaceExpunged(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 
 	// We start the command, but don't write data yet.
-	tc.client.Commandf("", "replace 1 inbox {4000}")
+	tc.client.Commandf("", "uid replace 1 inbox {4000}")
 
 	// Get in with second client and remove the message we are replacing.
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
-	tc2.client.StoreFlagsSet("1", true, `\Deleted`)
+	tc2.client.UIDStoreFlagsSet("1", true, `\Deleted`)
 	tc2.client.Expunge()
 	tc2.client.Unselect()
 	tc2.client.Close()
@@ -149,8 +219,15 @@ func TestReplaceExpunged(t *testing.T) {
 	_, err := tc.client.Write(buf)
 	tc.check(err, "write replace message")
 	tc.response("no")
-	tc.xuntagged(
-		imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1), imapclient.FetchFlags{`\Deleted`}}},
-		imapclient.UntaggedExpunge(1),
-	)
+	if uidonly {
+		tc.xuntagged(
+			tc.untaggedFetch(1, 1, imapclient.FetchFlags{`\Deleted`}),
+			imapclient.UntaggedVanished{UIDs: xparseNumSet("1")},
+		)
+	} else {
+		tc.xuntagged(
+			tc.untaggedFetch(1, 1, imapclient.FetchFlags{`\Deleted`}),
+			imapclient.UntaggedExpunge(1),
+		)
+	}
 }

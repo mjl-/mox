@@ -35,7 +35,8 @@ func (ss numSet) containsSeq(seq msgseq, uids []store.UID, searchResult []store.
 	return ss.containsSeqCount(seq, uint32(len(uids)))
 }
 
-// containsSeqCount returns whether seq is contained in ss, which must not be a searchResult, assuming the message count.
+// containsSeqCount returns whether seq is contained in ss, which must not be a
+// searchResult, assuming the message count.
 func (ss numSet) containsSeqCount(seq msgseq, msgCount uint32) bool {
 	if msgCount == 0 {
 		return false
@@ -64,45 +65,14 @@ func (ss numSet) containsSeqCount(seq msgseq, msgCount uint32) bool {
 	return false
 }
 
-func (ss numSet) containsUID(uid store.UID, uids []store.UID, searchResult []store.UID) bool {
-	if len(uids) == 0 {
-		return false
-	}
-	if ss.searchResult {
-		return uidSearch(searchResult, uid) > 0 && uidSearch(uids, uid) > 0
-	}
-	for _, r := range ss.ranges {
-		first := store.UID(r.first.number)
-		if r.first.star || first > uids[len(uids)-1] {
-			first = uids[len(uids)-1]
-		}
-		last := first
-		// Num in <num>:* can be larger than last, but it still matches the last...
-		// Similar for *:<num>. ../rfc/9051:4814
-		if r.last != nil {
-			last = store.UID(r.last.number)
-			if r.last.star || last > uids[len(uids)-1] {
-				last = uids[len(uids)-1]
-			}
-		}
-		if first > last {
-			first, last = last, first
-		}
-		if uid >= first && uid <= last && uidSearch(uids, uid) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 // containsKnownUID returns whether uid, which is known to exist, matches the numSet.
 // highestUID must return the highest/last UID in the mailbox, or an error. A last UID must
 // exist, otherwise this method wouldn't have been called with a known uid.
 // highestUID is needed for interpreting UID sets like "<num>:*" where num is
 // higher than the uid to check.
-func (ss numSet) containsKnownUID(uid store.UID, searchResult []store.UID, highestUID func() (store.UID, error)) (bool, error) {
+func (ss numSet) xcontainsKnownUID(uid store.UID, searchResult []store.UID, xhighestUID func() store.UID) bool {
 	if ss.searchResult {
-		return uidSearch(searchResult, uid) > 0, nil
+		return uidSearch(searchResult, uid) > 0
 	}
 
 	for _, r := range ss.ranges {
@@ -111,38 +81,61 @@ func (ss numSet) containsKnownUID(uid store.UID, searchResult []store.UID, highe
 		// Similar for *:<num>. ../rfc/9051:4814
 		if r.first.star {
 			if r.last != nil && uid >= store.UID(r.last.number) {
-				return true, nil
+				return true
 			}
-
-			var err error
-			a, err = highestUID()
-			if err != nil {
-				return false, err
-			}
+			a = xhighestUID()
 		}
 		b := a
 		if r.last != nil {
 			b = store.UID(r.last.number)
 			if r.last.star {
 				if uid >= a {
-					return true, nil
+					return true
 				}
-
-				var err error
-				b, err = highestUID()
-				if err != nil {
-					return false, err
-				}
+				b = xhighestUID()
 			}
 		}
 		if a > b {
 			a, b = b, a
 		}
 		if uid >= a && uid <= b {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
+}
+
+// xinterpretStar returns a numset that interprets stars in a uid set using
+// xlastUID, returning a new uid set without stars, with increasing first/last, and
+// without unneeded ranges (first.number != last.number).
+// If there are no messages in the mailbox, xlastUID must return zero and the
+// returned numSet will include 0.
+func (s numSet) xinterpretStar(xlastUID func() store.UID) numSet {
+	var ns numSet
+
+	for _, r := range s.ranges {
+		first := r.first.number
+		if r.first.star {
+			first = uint32(xlastUID())
+		}
+		last := first
+		if r.last != nil {
+			if r.last.star {
+				last = uint32(xlastUID())
+			} else {
+				last = r.last.number
+			}
+		}
+		if first > last {
+			first, last = last, first
+		}
+		nr := numRange{first: setNumber{number: first}}
+		if first != last {
+			nr.last = &setNumber{number: last}
+		}
+		ns.ranges = append(ns.ranges, nr)
+	}
+	return ns
 }
 
 // contains returns whether the numset contains the number.
@@ -214,38 +207,6 @@ func (ss numSet) String() string {
 		return ""
 	}
 	return l[0]
-}
-
-// interpretStar returns a numset that interprets stars in a numset, returning a new
-// numset without stars with increasing first/last.
-func (s numSet) interpretStar(uids []store.UID) numSet {
-	var ns numSet
-	if len(uids) == 0 {
-		return ns
-	}
-
-	for _, r := range s.ranges {
-		first := r.first.number
-		if r.first.star || first > uint32(uids[len(uids)-1]) {
-			first = uint32(uids[len(uids)-1])
-		}
-		last := first
-		if r.last != nil {
-			last = r.last.number
-			if r.last.star || last > uint32(uids[len(uids)-1]) {
-				last = uint32(uids[len(uids)-1])
-			}
-		}
-		if first > last {
-			first, last = last, first
-		}
-		nr := numRange{first: setNumber{number: first}}
-		if first != last {
-			nr.last = &setNumber{number: last}
-		}
-		ns.ranges = append(ns.ranges, nr)
-	}
-	return ns
 }
 
 // whether numSet only has numbers (no star/search), and is strictly increasing.
@@ -383,6 +344,40 @@ type searchKey struct {
 	searchKey2   *searchKey
 	uidSet       numSet
 	clientModseq *int64
+}
+
+// Whether we need message sequence numbers to evaluate. Sequence numbers are not
+// allowed with UIDONLY. And if we need sequence numbers we cannot optimize
+// searching for MAX with a query in reverse order.
+func (sk *searchKey) hasSequenceNumbers() bool {
+	for _, k := range sk.searchKeys {
+		if k.hasSequenceNumbers() {
+			return true
+		}
+	}
+	if sk.searchKey != nil && sk.searchKey.hasSequenceNumbers() || sk.searchKey2 != nil && sk.searchKey2.hasSequenceNumbers() {
+		return true
+	}
+	return sk.seqSet != nil && !sk.seqSet.searchResult
+}
+
+// hasModseq returns whether there is a modseq filter anywhere in the searchkey.
+func (sk *searchKey) hasModseq() bool {
+	if sk.clientModseq != nil {
+		return true
+	}
+	for _, e := range sk.searchKeys {
+		if e.hasModseq() {
+			return true
+		}
+	}
+	if sk.searchKey != nil && sk.searchKey.hasModseq() {
+		return true
+	}
+	if sk.searchKey2 != nil && sk.searchKey2.hasModseq() {
+		return true
+	}
+	return false
 }
 
 func compactUIDSet(l []store.UID) (r numSet) {

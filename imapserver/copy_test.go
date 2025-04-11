@@ -7,17 +7,25 @@ import (
 )
 
 func TestCopy(t *testing.T) {
+	testCopy(t, false)
+}
+
+func TestCopyUIDOnly(t *testing.T) {
+	testCopy(t, true)
+}
+
+func testCopy(t *testing.T, uidonly bool) {
 	defer mockUIDValidity()()
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("Trash")
 
 	tc.transactf("bad", "copy")          // Missing params.
@@ -27,48 +35,51 @@ func TestCopy(t *testing.T) {
 	// Seqs 1,2 and UIDs 3,4.
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.client.Append("inbox", makeAppend(exampleMsg))
-	tc.client.StoreFlagsSet("1:2", true, `\Deleted`)
+	tc.transactf("ok", `Uid Store 1:2 +Flags.Silent (\Deleted)`)
 	tc.client.Expunge()
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 
-	tc.transactf("no", "copy 1 nonexistent")
-	tc.xcode("TRYCREATE")
-	tc.transactf("no", "copy 1 expungebox")
-	tc.xcode("TRYCREATE")
+	if uidonly {
+		tc.transactf("ok", "uid copy 3:* Trash")
+	} else {
+		tc.transactf("no", "copy 1 nonexistent")
+		tc.xcode("TRYCREATE")
+		tc.transactf("no", "copy 1 expungebox")
+		tc.xcode("TRYCREATE")
 
-	tc.transactf("no", "copy 1 inbox") // Cannot copy to same mailbox.
+		tc.transactf("no", "copy 1 inbox") // Cannot copy to same mailbox.
 
-	tc2.transactf("ok", "noop") // Drain.
+		tc2.transactf("ok", "noop") // Drain.
 
-	tc.transactf("ok", "copy 1:* Trash")
-	ptr := func(v uint32) *uint32 { return &v }
-	tc.xcodeArg(imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: ptr(4)}}, To: []imapclient.NumRange{{First: 1, Last: ptr(2)}}})
+		tc.transactf("ok", "copy 1:* Trash")
+		tc.xcodeArg(imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}, To: []imapclient.NumRange{{First: 1, Last: uint32ptr(2)}}})
+	}
 	tc2.transactf("ok", "noop")
 	tc2.xuntagged(
 		imapclient.UntaggedExists(2),
-		imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1), imapclient.FetchFlags(nil)}},
-		imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(2), imapclient.FetchFlags(nil)}},
+		tc2.untaggedFetch(1, 1, imapclient.FetchFlags(nil)),
+		tc2.untaggedFetch(2, 2, imapclient.FetchFlags(nil)),
 	)
 
 	tc.transactf("no", "uid copy 1,2 Trash") // No match.
 	tc.transactf("ok", "uid copy 4,3 Trash")
-	tc.xcodeArg(imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: ptr(4)}}, To: []imapclient.NumRange{{First: 3, Last: ptr(4)}}})
+	tc.xcodeArg(imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}, To: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}})
 	tc2.transactf("ok", "noop")
 	tc2.xuntagged(
 		imapclient.UntaggedExists(4),
-		imapclient.UntaggedFetch{Seq: 3, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(3), imapclient.FetchFlags(nil)}},
-		imapclient.UntaggedFetch{Seq: 4, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(4), imapclient.FetchFlags(nil)}},
+		tc2.untaggedFetch(3, 3, imapclient.FetchFlags(nil)),
+		tc2.untaggedFetch(4, 4, imapclient.FetchFlags(nil)),
 	)
 
-	tclimit := startArgs(t, false, false, true, true, "limit")
+	tclimit := startArgs(t, uidonly, false, false, true, true, "limit")
 	defer tclimit.close()
-	tclimit.client.Login("limit@mox.example", password0)
+	tclimit.login("limit@mox.example", password0)
 	tclimit.client.Select("inbox")
 	// First message of 1 byte is within limits.
 	tclimit.transactf("ok", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tclimit.xuntagged(imapclient.UntaggedExists(1))
 	// Second message would take account past limit.
-	tclimit.transactf("no", "copy 1:* Trash")
+	tclimit.transactf("no", "uid copy 1:* Trash")
 	tclimit.xcode("OVERQUOTA")
 }

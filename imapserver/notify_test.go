@@ -9,15 +9,19 @@ import (
 	"github.com/mjl-/mox/store"
 )
 
-func ptr[T any](v T) *T {
-	return &v
+func TestNotify(t *testing.T) {
+	testNotify(t, false)
 }
 
-func TestNotify(t *testing.T) {
+func TestNotifyUIDOnly(t *testing.T) {
+	testNotify(t, true)
+}
+
+func testNotify(t *testing.T, uidonly bool) {
 	defer mockUIDValidity()()
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	// Check for some invalid syntax.
@@ -42,9 +46,9 @@ func TestNotify(t *testing.T) {
 	tc.transactf("no", "Notify Set Status (Personal (unknownEvent))")
 	tc.xcode("BADEVENT")
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	var modseq uint32 = 4
@@ -60,15 +64,9 @@ func TestNotify(t *testing.T) {
 	tc.transactf("ok", "noop")
 	tc.xuntagged(
 		imapclient.UntaggedExists(1),
-		imapclient.UntaggedFetch{
-			Seq: 1,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(1),
-				imapclient.FetchFlags(nil),
-			},
-		},
+		tc.untaggedFetch(1, 1, imapclient.FetchFlags(nil)),
 	)
-	tc2.client.StoreFlagsAdd("1:*", true, `\Deleted`)
+	tc2.client.UIDStoreFlagsAdd("1:*", true, `\Deleted`)
 	modseq++
 	tc2.client.Expunge()
 	modseq++
@@ -97,67 +95,56 @@ func TestNotify(t *testing.T) {
 	modseq++
 	tc.readuntagged(
 		imapclient.UntaggedExists(1),
-		imapclient.UntaggedFetch{
-			Seq: 1,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(2),
-				imapclient.FetchBodystructure{
-					RespAttr: "BODYSTRUCTURE",
-					Body: imapclient.BodyTypeMpart{
-						Bodies: []any{
-							imapclient.BodyTypeText{
-								MediaType:    "TEXT",
-								MediaSubtype: "PLAIN",
-								BodyFields: imapclient.BodyFields{
-									Params: [][2]string{[...]string{"CHARSET", "utf-8"}},
-									Octets: 21,
-								},
-								Lines: 1,
-								Ext:   &imapclient.BodyExtension1Part{},
+		tc.untaggedFetchUID(1, 2,
+			imapclient.FetchBodystructure{
+				RespAttr: "BODYSTRUCTURE",
+				Body: imapclient.BodyTypeMpart{
+					Bodies: []any{
+						imapclient.BodyTypeText{
+							MediaType:    "TEXT",
+							MediaSubtype: "PLAIN",
+							BodyFields: imapclient.BodyFields{
+								Params: [][2]string{[...]string{"CHARSET", "utf-8"}},
+								Octets: 21,
 							},
-							imapclient.BodyTypeText{
-								MediaType:    "TEXT",
-								MediaSubtype: "HTML",
-								BodyFields: imapclient.BodyFields{
-									Params: [][2]string{[...]string{"CHARSET", "utf-8"}},
-									Octets: 15,
-								},
-								Lines: 1,
-								Ext:   &imapclient.BodyExtension1Part{},
-							},
+							Lines: 1,
+							Ext:   &imapclient.BodyExtension1Part{},
 						},
-						MediaSubtype: "ALTERNATIVE",
-						Ext: &imapclient.BodyExtensionMpart{
-							Params: [][2]string{{"BOUNDARY", "x"}},
+						imapclient.BodyTypeText{
+							MediaType:    "TEXT",
+							MediaSubtype: "HTML",
+							BodyFields: imapclient.BodyFields{
+								Params: [][2]string{[...]string{"CHARSET", "utf-8"}},
+								Octets: 15,
+							},
+							Lines: 1,
+							Ext:   &imapclient.BodyExtension1Part{},
 						},
 					},
+					MediaSubtype: "ALTERNATIVE",
+					Ext: &imapclient.BodyExtensionMpart{
+						Params: [][2]string{{"BOUNDARY", "x"}},
+					},
 				},
-				imapclient.FetchPreview{Preview: ptr("this is plain text.")},
-				imapclient.FetchModSeq(modseq),
 			},
-		},
+			imapclient.FetchPreview{Preview: ptr("this is plain text.")},
+			imapclient.FetchModSeq(modseq),
+		),
 	)
 
 	// Change flags.
-	tc2.client.StoreFlagsAdd("1:*", true, `\Deleted`)
+	tc2.client.UIDStoreFlagsAdd("1:*", true, `\Deleted`)
 	modseq++
-	tc.readuntagged(
-		imapclient.UntaggedFetch{
-			Seq: 1,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(2),
-				imapclient.FetchFlags{`\Deleted`},
-				imapclient.FetchModSeq(modseq),
-			},
-		},
-	)
+	tc.readuntagged(tc.untaggedFetch(1, 2, imapclient.FetchFlags{`\Deleted`}, imapclient.FetchModSeq(modseq)))
 
 	// Remove message.
 	tc2.client.Expunge()
 	modseq++
-	tc.readuntagged(
-		imapclient.UntaggedExpunge(1),
-	)
+	if uidonly {
+		tc.readuntagged(imapclient.UntaggedVanished{UIDs: xparseNumSet("2")})
+	} else {
+		tc.readuntagged(imapclient.UntaggedExpunge(1))
+	}
 
 	// MailboxMetadataChange for mailbox annotation.
 	tc2.transactf("ok", `setmetadata Archive (/private/comment "test")`)
@@ -228,13 +215,7 @@ func TestNotify(t *testing.T) {
 	modseq++
 	tc.readuntagged(
 		imapclient.UntaggedExists(1),
-		imapclient.UntaggedFetch{
-			Seq: 1,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(3),
-				imapclient.FetchModSeq(modseq),
-			},
-		},
+		tc.untaggedFetchUID(1, 3, imapclient.FetchModSeq(modseq)),
 	)
 
 	// Next round of events must be ignored. We shouldn't get anything until we add a
@@ -242,7 +223,7 @@ func TestNotify(t *testing.T) {
 	tc.transactf("ok", "Notify Set (Selected None) (mailboxes testbox (messageNew messageExpunge)) (personal None)")
 	tc2.client.Append("inbox", makeAppend(searchMsg)) // MessageNew
 	modseq++
-	tc2.client.StoreFlagsAdd("1:*", true, `\Deleted`) // FlagChange
+	tc2.client.UIDStoreFlagsAdd("1:*", true, `\Deleted`) // FlagChange
 	modseq++
 	tc2.client.Expunge() // MessageExpunge
 	modseq++
@@ -275,27 +256,27 @@ func TestNotify(t *testing.T) {
 	tc.client.Unsubscribe("other/a/b")
 
 	// Inboxes
-	tc3 := startNoSwitchboard(t)
+	tc3 := startNoSwitchboard(t, uidonly)
 	defer tc3.closeNoWait()
-	tc3.client.Login("mjl@mox.example", password0)
+	tc3.login("mjl@mox.example", password0)
 	tc3.transactf("ok", "Notify Set (Inboxes (messageNew messageExpunge))")
 
 	// Subscribed
-	tc4 := startNoSwitchboard(t)
+	tc4 := startNoSwitchboard(t, uidonly)
 	defer tc4.closeNoWait()
-	tc4.client.Login("mjl@mox.example", password0)
+	tc4.login("mjl@mox.example", password0)
 	tc4.transactf("ok", "Notify Set (Subscribed (messageNew messageExpunge))")
 
 	// Subtree
-	tc5 := startNoSwitchboard(t)
+	tc5 := startNoSwitchboard(t, uidonly)
 	defer tc5.closeNoWait()
-	tc5.client.Login("mjl@mox.example", password0)
+	tc5.login("mjl@mox.example", password0)
 	tc5.transactf("ok", "Notify Set (Subtree (Nonexistent inbox) (messageNew messageExpunge))")
 
 	// Subtree-One
-	tc6 := startNoSwitchboard(t)
+	tc6 := startNoSwitchboard(t, uidonly)
 	defer tc6.closeNoWait()
-	tc6.client.Login("mjl@mox.example", password0)
+	tc6.login("mjl@mox.example", password0)
 	tc6.transactf("ok", "Notify Set (Subtree-One (Nonexistent Inbox/a other) (messageNew messageExpunge))")
 
 	// We append to other/a/b first. It would normally come first in the notifications,
@@ -336,7 +317,7 @@ func TestNotify(t *testing.T) {
 	tc.client.Select("statusbox")
 	tc2.client.Append("inbox", makeAppend(searchMsg))
 	modseq++
-	tc2.client.StoreFlagsSet("1", true, `\Seen`)
+	tc2.client.UIDStoreFlagsSet("*", true, `\Seen`)
 	modseq++
 	tc2.client.Append("statusbox", imapclient.Append{Flags: []string{"newflag"}, Size: int64(len(searchMsg)), Data: strings.NewReader(searchMsg)})
 	modseq++
@@ -350,40 +331,32 @@ func TestNotify(t *testing.T) {
 	tc.transactf("ok", "noop")
 	tc.xuntagged(
 		imapclient.UntaggedExists(2),
-		imapclient.UntaggedFetch{
-			Seq: 2,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(2),
-				imapclient.FetchFlags{`newflag`},
-				imapclient.FetchModSeq(modseq),
-			},
-		},
+		tc.untaggedFetch(2, 2, imapclient.FetchFlags{"newflag"}, imapclient.FetchModSeq(modseq)),
 		imapclient.UntaggedFlags{`\Seen`, `\Answered`, `\Flagged`, `\Deleted`, `\Draft`, `$Forwarded`, `$Junk`, `$NotJunk`, `$Phishing`, `$MDNSent`, `newflag`},
 	)
 
-	tc2.client.StoreFlagsSet("2", true, `\Deleted`)
+	tc2.client.UIDStoreFlagsSet("2", true, `\Deleted`)
 	modseq++
 	tc2.client.Expunge()
 	modseq++
 	tc.transactf("ok", "noop")
-	tc.xuntagged(
-		imapclient.UntaggedFetch{
-			Seq: 2,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(2),
-				imapclient.FetchFlags{`\Deleted`},
-				imapclient.FetchModSeq(modseq - 1),
-			},
-		},
-		imapclient.UntaggedExpunge(2),
-	)
+	if uidonly {
+		tc.xuntagged(
+			tc.untaggedFetch(2, 2, imapclient.FetchFlags{`\Deleted`}, imapclient.FetchModSeq(modseq-1)),
+			imapclient.UntaggedVanished{UIDs: xparseNumSet("2")},
+		)
+	} else {
+		tc.xuntagged(
+			tc.untaggedFetch(2, 2, imapclient.FetchFlags{`\Deleted`}, imapclient.FetchModSeq(modseq-1)),
+			imapclient.UntaggedExpunge(2),
+		)
+	}
 
 	// With Selected-Delayed, we should get events for selected mailboxes immediately when using IDLE.
-	tc2.client.StoreFlagsSet("*", true, `\Answered`)
+	tc2.client.UIDStoreFlagsSet("*", true, `\Answered`)
 	modseq++
-
 	tc2.client.Select("inbox")
-	tc2.client.StoreFlagsClear("1", true, `\Seen`)
+	tc2.client.UIDStoreFlagsClear("*", true, `\Seen`)
 	modseq++
 	tc2.client.Select("statusbox")
 
@@ -394,14 +367,7 @@ func TestNotify(t *testing.T) {
 	tc.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	tc.cmdf("", "idle")
 	tc.readprefixline("+ ")
-	tc.readuntagged(imapclient.UntaggedFetch{
-		Seq: 1,
-		Attrs: []imapclient.FetchAttr{
-			imapclient.FetchUID(1),
-			imapclient.FetchFlags{`\Answered`},
-			imapclient.FetchModSeq(modseq - 1),
-		},
-	})
+	tc.readuntagged(tc.untaggedFetch(1, 1, imapclient.FetchFlags{`\Answered`}, imapclient.FetchModSeq(modseq-1)))
 	tc.writelinef("done")
 	tc.response("ok")
 	tc.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
@@ -409,7 +375,7 @@ func TestNotify(t *testing.T) {
 	// If any event matches, we normally return it. But NONE prevents looking further.
 	tc.client.Unselect()
 	tc.transactf("ok", "notify set (mailboxes statusbox NONE) (personal (mailboxName))")
-	tc2.client.StoreFlagsSet("*", true, `\Answered`) // Matches NONE, ignored.
+	tc2.client.UIDStoreFlagsSet("*", true, `\Answered`) // Matches NONE, ignored.
 	//modseq++
 	tc2.client.Create("eventbox", nil)
 	//modseq++
@@ -425,23 +391,19 @@ func TestNotify(t *testing.T) {
 	offset := strings.Index(searchMsg, "\r\n\r\n")
 	tc.readuntagged(
 		imapclient.UntaggedExists(2),
-		imapclient.UntaggedFetch{
-			Seq: 2,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(3),
-				imapclient.FetchBody{
-					RespAttr: "BODY[HEADER]",
-					Section:  "HEADER",
-					Body:     searchMsg[:offset+4],
-				},
-				imapclient.FetchBody{
-					RespAttr: "BODY[TEXT]",
-					Section:  "TEXT",
-					Body:     searchMsg[offset+4:],
-				},
-				imapclient.FetchFlags(nil),
+		tc.untaggedFetch(2, 3,
+			imapclient.FetchBody{
+				RespAttr: "BODY[HEADER]",
+				Section:  "HEADER",
+				Body:     searchMsg[:offset+4],
 			},
-		},
+			imapclient.FetchBody{
+				RespAttr: "BODY[TEXT]",
+				Section:  "TEXT",
+				Body:     searchMsg[offset+4:],
+			},
+			imapclient.FetchFlags(nil),
+		),
 	)
 
 	// If we encounter an error during fetch, an untagged NO is returned.
@@ -457,18 +419,21 @@ func TestNotify(t *testing.T) {
 				More: "generating notify fetch response: requested part does not exist",
 			},
 		},
-		imapclient.UntaggedFetch{
-			Seq: 3,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(4),
-			},
-		},
+		tc.untaggedFetchUID(3, 4),
 	)
 
 	// When adding new tests, uncomment modseq++ lines above.
 }
 
 func TestNotifyOverflow(t *testing.T) {
+	testNotifyOverflow(t, false)
+}
+
+func TestNotifyOverflowUIDOnly(t *testing.T) {
+	testNotifyOverflow(t, true)
+}
+
+func testNotifyOverflow(t *testing.T, uidonly bool) {
 	orig := store.CommPendingChangesMax
 	store.CommPendingChangesMax = 3
 	defer func() {
@@ -476,15 +441,15 @@ func TestNotifyOverflow(t *testing.T) {
 	}()
 
 	defer mockUIDValidity()()
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 	tc.transactf("ok", "noop")
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	// Generates 4 changes, crossing max 3.
@@ -507,26 +472,22 @@ func TestNotifyOverflow(t *testing.T) {
 	tc.transactf("ok", "noop")
 	tc.xuntagged()
 
-	// Enable notify again. We won't get a notification because the message isn't yet
-	// known in the session.
+	// Enable notify again. Without uidonly, we won't get a notification because the
+	// message isn't known in the session.
 	tc.transactf("ok", "notify set (selected (messageNew messageExpunge flagChange))")
-	tc2.client.StoreFlagsAdd("1", true, `\Seen`)
-	tc.transactf("ok", "noop")
-	tc.xuntagged()
+	tc2.client.UIDStoreFlagsAdd("1", true, `\Seen`)
+	if uidonly {
+		tc.readuntagged(tc.untaggedFetch(1, 1, imapclient.FetchFlags{`\Seen`}))
+	} else {
+		tc.transactf("ok", "noop")
+		tc.xuntagged()
+	}
 
 	// Reselect to get the message visible in the session.
 	tc.client.Select("inbox")
-	tc2.client.StoreFlagsClear("1", true, `\Seen`)
+	tc2.client.UIDStoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "noop")
-	tc.xuntagged(
-		imapclient.UntaggedFetch{
-			Seq: 1,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(1),
-				imapclient.FetchFlags(nil),
-			},
-		},
-	)
+	tc.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchFlags(nil)))
 
 	// Trigger overflow for changes for "selected-delayed".
 	store.CommPendingChangesMax = 10
@@ -536,8 +497,8 @@ func TestNotifyOverflow(t *testing.T) {
 		selectedDelayedChangesMax = delayedMax
 	}()
 	tc.transactf("ok", "notify set (selected-delayed (messageNew messageExpunge flagChange))")
-	tc2.client.StoreFlagsAdd("1", true, `\Seen`)
-	tc2.client.StoreFlagsClear("1", true, `\Seen`)
+	tc2.client.UIDStoreFlagsAdd("1", true, `\Seen`)
+	tc2.client.UIDStoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "noop")
 	tc.xuntagged(
 		imapclient.UntaggedResult{
@@ -550,21 +511,13 @@ func TestNotifyOverflow(t *testing.T) {
 	)
 
 	// Again, no new notifications until we select and enable again.
-	tc2.client.StoreFlagsAdd("1", true, `\Seen`)
+	tc2.client.UIDStoreFlagsAdd("1", true, `\Seen`)
 	tc.transactf("ok", "noop")
 	tc.xuntagged()
 
 	tc.client.Select("inbox")
 	tc.transactf("ok", "notify set (selected-delayed (messageNew messageExpunge flagChange))")
-	tc2.client.StoreFlagsClear("1", true, `\Seen`)
+	tc2.client.UIDStoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "noop")
-	tc.xuntagged(
-		imapclient.UntaggedFetch{
-			Seq: 1,
-			Attrs: []imapclient.FetchAttr{
-				imapclient.FetchUID(1),
-				imapclient.FetchFlags(nil),
-			},
-		},
-	)
+	tc.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchFlags(nil)))
 }

@@ -6,16 +6,24 @@ import (
 	"github.com/mjl-/mox/imapclient"
 )
 
-// todo: check that UIDValidity is indeed updated properly.
 func TestRename(t *testing.T) {
-	tc := start(t)
+	testRename(t, false)
+}
+
+func TestRenameUIDOnly(t *testing.T) {
+	testRename(t, true)
+}
+
+// todo: check that UIDValidity is indeed updated properly.
+func testRename(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
-	tc2.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "rename")      // Missing parameters.
 	tc.transactf("bad", "rename x")    // Missing destination.
@@ -104,7 +112,7 @@ func TestRename(t *testing.T) {
 	)
 	tc.transactf("ok", `select x/minbox`)
 	tc.transactf("ok", `uid fetch 1:* flags`)
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1), imapclient.FetchFlags{"label1"}}})
+	tc.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchFlags{"label1"}))
 
 	// Renaming to new hiearchy that does not have any subscribes.
 	tc.transactf("ok", "rename x/minbox w/w")

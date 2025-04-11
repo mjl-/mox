@@ -7,14 +7,22 @@ import (
 )
 
 func TestCreate(t *testing.T) {
-	tc := start(t)
+	testCreate(t, false)
+}
+
+func TestCreateUIDOnly(t *testing.T) {
+	testCreate(t, true)
+}
+
+func testCreate(t *testing.T, uidonly bool) {
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
-	tc2.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 
 	tc.transactf("no", "create inbox") // Already exists and not allowed. ../rfc/9051:1913
 	tc.transactf("no", "create Inbox") // Idem.

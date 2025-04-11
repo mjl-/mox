@@ -184,6 +184,7 @@ var serverCapabilities = strings.Join([]string{
 	"INPROGRESS",                      // ../rfc/9585:101
 	"MULTISEARCH",                     // ../rfc/7377:187
 	"NOTIFY",                          // ../rfc/5465:195
+	"UIDONLY",                         // ../rfc/9586:127
 	// "COMPRESS=DEFLATE", // ../rfc/4978, disabled for interoperability issues: The flate reader (inflate) still blocks on partial flushes, preventing progress.
 }, " ")
 
@@ -244,6 +245,9 @@ type conn struct {
 
 	mailboxID int64       // Only for StateSelected.
 	readonly  bool        // If opened mailbox is readonly.
+	uidonly   bool        // If uidonly is enabled, uids is empty and cannot be used.
+	uidnext   store.UID   // We don't return search/fetch/etc results for uids >= uidnext, which is updated when applying changes.
+	exists    uint32      // Needed for uidonly, equal to len(uids) for non-uidonly sessions.
 	uids      []store.UID // UIDs known in this session, sorted. todo future: store more space-efficiently, as ranges.
 }
 
@@ -258,6 +262,7 @@ const (
 	capCondstore  capability = "CONDSTORE"
 	capQresync    capability = "QRESYNC"
 	capMetadata   capability = "METADATA"
+	capUIDOnly    capability = "UIDONLY"
 )
 
 type lineErr struct {
@@ -287,6 +292,10 @@ var (
 	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress", "esearch", "notify")
 	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace", "esearch")
 )
+
+// Commands that use sequence numbers. Cannot be used when UIDONLY is enabled.
+// Commands like UID SEARCH have additional checks for some parameters.
+var commandsSequence = stateCommands("search", "fetch", "store", "copy", "move", "replace")
 
 var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	// Any state.
@@ -499,6 +508,8 @@ func (c *conn) unselect() {
 		c.state = stateAuthenticated
 	}
 	c.mailboxID = 0
+	c.uidnext = 0
+	c.exists = 0
 	c.uids = nil
 }
 
@@ -1343,6 +1354,11 @@ func (c *conn) command() {
 		xserverErrorf("unrecognized command")
 	}
 
+	// ../rfc/9586:172
+	if _, ok := commandsSequence[cmdlow]; ok && c.uidonly {
+		xsyntaxCodeErrorf("UIDREQUIRED", "cannot use message sequence numbers with uidonly")
+	}
+
 	fn(c, tag, cmd, p)
 }
 
@@ -1414,6 +1430,9 @@ func xmailboxPatternMatcher(ref string, patterns []string) matchStringer {
 }
 
 func (c *conn) sequence(uid store.UID) msgseq {
+	if c.uidonly {
+		panic("sequence with uidonly")
+	}
 	return uidSearch(c.uids, uid)
 }
 
@@ -1435,6 +1454,9 @@ func uidSearch(uids []store.UID, uid store.UID) msgseq {
 }
 
 func (c *conn) xsequence(uid store.UID) msgseq {
+	if c.uidonly {
+		panic("xsequence with uidonly")
+	}
 	seq := c.sequence(uid)
 	if seq <= 0 {
 		xserverErrorf("unknown uid %d (%w)", uid, errProtocol)
@@ -1443,36 +1465,55 @@ func (c *conn) xsequence(uid store.UID) msgseq {
 }
 
 func (c *conn) sequenceRemove(seq msgseq, uid store.UID) {
+	if c.uidonly {
+		panic("sequenceRemove with uidonly")
+	}
 	i := seq - 1
 	if c.uids[i] != uid {
 		xserverErrorf("got uid %d at msgseq %d, expected uid %d", uid, seq, c.uids[i])
 	}
 	copy(c.uids[i:], c.uids[i+1:])
-	c.uids = c.uids[:len(c.uids)-1]
-	if sanityChecks {
-		checkUIDs(c.uids)
-	}
+	c.uids = c.uids[:c.exists-1]
+	c.exists--
+	c.checkUIDs(c.uids, true)
 }
 
-// add uid to the session. care must be taken that pending changes are fetched
-// while holding the account wlock, and applied before adding this uid, because
-// those pending changes may contain another new uid that has to be added first.
-func (c *conn) uidAppend(uid store.UID) msgseq {
+// add uid to session, through c.uidnext, and if uidonly isn't enabled to c.uids.
+// care must be taken that pending changes are fetched while holding the account
+// wlock, and applied before adding this uid, because those pending changes may
+// contain another new uid that has to be added first.
+func (c *conn) uidAppend(uid store.UID) {
+	if c.uidonly {
+		if uid < c.uidnext {
+			panic(fmt.Sprintf("new uid %d < uidnext %d", uid, c.uidnext))
+		}
+		c.exists++
+		c.uidnext = uid + 1
+		return
+	}
+
 	if uidSearch(c.uids, uid) > 0 {
 		xserverErrorf("uid already present (%w)", errProtocol)
 	}
-	if len(c.uids) > 0 && uid < c.uids[len(c.uids)-1] {
-		xserverErrorf("new uid %d is smaller than last uid %d (%w)", uid, c.uids[len(c.uids)-1], errProtocol)
+	if c.exists > 0 && uid < c.uids[c.exists-1] {
+		xserverErrorf("new uid %d is smaller than last uid %d (%w)", uid, c.uids[c.exists-1], errProtocol)
 	}
+	c.exists++
+	c.uidnext = uid + 1
 	c.uids = append(c.uids, uid)
-	if sanityChecks {
-		checkUIDs(c.uids)
-	}
-	return msgseq(len(c.uids))
+	c.checkUIDs(c.uids, true)
 }
 
 // sanity check that uids are in ascending order.
-func checkUIDs(uids []store.UID) {
+func (c *conn) checkUIDs(uids []store.UID, checkExists bool) {
+	if !sanityChecks {
+		return
+	}
+
+	if checkExists && uint32(len(uids)) != c.exists {
+		panic(fmt.Sprintf("exists %d does not match len(uids) %d", c.exists, len(c.uids)))
+	}
+
 	for i, uid := range uids {
 		if uid == 0 || i > 0 && uid <= uids[i-1] {
 			xserverErrorf("bad uids %v", uids)
@@ -1480,75 +1521,121 @@ func checkUIDs(uids []store.UID) {
 	}
 }
 
-func (c *conn) xnumSetUIDs(isUID bool, nums numSet) []store.UID {
-	_, uids := c.xnumSetConditionUIDs(false, true, isUID, nums)
-	return uids
+func slicesAny[T any](l []T) []any {
+	r := make([]any, len(l))
+	for i, v := range l {
+		r[i] = v
+	}
+	return r
 }
 
-func (c *conn) xnumSetCondition(isUID bool, nums numSet) []any {
-	uidargs, _ := c.xnumSetConditionUIDs(true, false, isUID, nums)
-	return uidargs
-}
-
-func (c *conn) xnumSetConditionUIDs(forDB, returnUIDs bool, isUID bool, nums numSet) ([]any, []store.UID) {
-	if nums.searchResult {
-		// Update previously stored UIDs. Some may have been deleted.
-		// Once deleted a UID will never come back, so we'll just remove those uids.
-		o := 0
-		for _, uid := range c.searchResult {
-			if uidSearch(c.uids, uid) > 0 {
-				c.searchResult[o] = uid
-				o++
+// newCachedLastUID returns a method that returns the highest uid for a mailbox,
+// for interpretation of "*". If mailboxID is for the selected mailbox, the UIDs
+// visible in the session are taken into account. If there is no UID, 0 is
+// returned. If an error occurs, xerrfn is called, which should not return.
+func (c *conn) newCachedLastUID(tx *bstore.Tx, mailboxID int64, xerrfn func(err error)) func() store.UID {
+	var last store.UID
+	var have bool
+	return func() store.UID {
+		if have {
+			return last
+		}
+		if c.mailboxID == mailboxID {
+			if c.exists == 0 {
+				return 0
+			}
+			if !c.uidonly {
+				return c.uids[c.exists-1]
 			}
 		}
-		c.searchResult = c.searchResult[:o]
-		uidargs := make([]any, len(c.searchResult))
-		for i, uid := range c.searchResult {
-			uidargs[i] = uid
+		q := bstore.QueryTx[store.Message](tx)
+		q.FilterNonzero(store.Message{MailboxID: mailboxID})
+		q.FilterEqual("Expunged", false)
+		if c.mailboxID == mailboxID {
+			q.FilterLess("UID", c.uidnext)
 		}
-		return uidargs, c.searchResult
+		q.SortDesc("UID")
+		q.Limit(1)
+		m, err := q.Get()
+		if err == bstore.ErrAbsent {
+			have = true
+			return last
+		}
+		if err != nil {
+			xerrfn(err)
+			panic(err) // xerrfn should have called panic.
+		}
+		have = true
+		last = m.UID
+		return last
 	}
+}
 
-	var uidargs []any
-	var uids []store.UID
+// xnumSetEval evaluates nums to uids given the current session state and messages
+// in the selected mailbox. The returned UIDs are sorted, without duplicates.
+func (c *conn) xnumSetEval(tx *bstore.Tx, isUID bool, nums numSet) []store.UID {
+	if nums.searchResult {
+		// UIDs that do not exist can be ignored.
+		if c.exists == 0 {
+			return nil
+		}
 
-	add := func(uid store.UID) {
-		if forDB {
-			uidargs = append(uidargs, uid)
+		// Update previously stored UIDs. Some may have been deleted.
+		// Once deleted a UID will never come back, so we'll just remove those uids.
+		if c.uidonly {
+			var uids []store.UID
+			if len(c.searchResult) > 0 {
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
+				q.FilterEqual("Expunged", false)
+				q.FilterEqual("UID", slicesAny(c.searchResult)...)
+				q.SortAsc("UID")
+				for m, err := range q.All() {
+					xcheckf(err, "looking up messages from search result")
+					uids = append(uids, m.UID)
+				}
+			}
+			c.searchResult = uids
+		} else {
+			o := 0
+			for _, uid := range c.searchResult {
+				if uidSearch(c.uids, uid) > 0 {
+					c.searchResult[o] = uid
+					o++
+				}
+			}
+			c.searchResult = c.searchResult[:o]
 		}
-		if returnUIDs {
-			uids = append(uids, uid)
-		}
+		return c.searchResult
 	}
 
 	if !isUID {
+		uids := map[store.UID]struct{}{}
+
 		// Sequence numbers that don't exist, or * on an empty mailbox, should result in a BAD response. ../rfc/9051:7018
 		for _, r := range nums.ranges {
 			var ia, ib int
 			if r.first.star {
-				if len(c.uids) == 0 {
+				if c.exists == 0 {
 					xsyntaxErrorf("invalid seqset * on empty mailbox")
 				}
-				ia = len(c.uids) - 1
+				ia = int(c.exists) - 1
 			} else {
 				ia = int(r.first.number - 1)
-				if ia >= len(c.uids) {
+				if ia >= int(c.exists) {
 					xsyntaxErrorf("msgseq %d not in mailbox", r.first.number)
 				}
 			}
 			if r.last == nil {
-				add(c.uids[ia])
+				uids[c.uids[ia]] = struct{}{}
 				continue
 			}
 
 			if r.last.star {
-				if len(c.uids) == 0 {
-					xsyntaxErrorf("invalid seqset * on empty mailbox")
-				}
-				ib = len(c.uids) - 1
+				ib = int(c.exists) - 1
 			} else {
 				ib = int(r.last.number - 1)
-				if ib >= len(c.uids) {
+				if ib >= int(c.exists) {
 					xsyntaxErrorf("msgseq %d not in mailbox", r.last.number)
 				}
 			}
@@ -1556,15 +1643,39 @@ func (c *conn) xnumSetConditionUIDs(forDB, returnUIDs bool, isUID bool, nums num
 				ia, ib = ib, ia
 			}
 			for _, uid := range c.uids[ia : ib+1] {
-				add(uid)
+				uids[uid] = struct{}{}
 			}
 		}
-		return uidargs, uids
+		return slices.Sorted(maps.Keys(uids))
 	}
 
 	// UIDs that do not exist can be ignored.
-	if len(c.uids) == 0 {
-		return nil, nil
+	if c.exists == 0 {
+		return nil
+	}
+
+	uids := map[store.UID]struct{}{}
+
+	if c.uidonly {
+		xlastUID := c.newCachedLastUID(tx, c.mailboxID, func(xerr error) { xuserErrorf("%s", xerr) })
+		for _, r := range nums.xinterpretStar(xlastUID).ranges {
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
+			q.FilterEqual("Expunged", false)
+			if r.last == nil {
+				q.FilterEqual("UID", r.first.number)
+			} else {
+				q.FilterGreaterEqual("UID", r.first.number)
+				q.FilterLessEqual("UID", r.last.number)
+			}
+			q.FilterLess("UID", c.uidnext)
+			q.SortAsc("UID")
+			for m, err := range q.All() {
+				xcheckf(err, "enumerating uids")
+				uids[m.UID] = struct{}{}
+			}
+		}
+		return slices.Sorted(maps.Keys(uids))
 	}
 
 	for _, r := range nums.ranges {
@@ -1575,12 +1686,12 @@ func (c *conn) xnumSetConditionUIDs(forDB, returnUIDs bool, isUID bool, nums num
 
 		uida := store.UID(r.first.number)
 		if r.first.star {
-			uida = c.uids[len(c.uids)-1]
+			uida = c.uids[c.exists-1]
 		}
 
 		uidb := store.UID(last.number)
 		if last.star {
-			uidb = c.uids[len(c.uids)-1]
+			uidb = c.uids[c.exists-1]
 		}
 
 		if uida > uidb {
@@ -1589,7 +1700,7 @@ func (c *conn) xnumSetConditionUIDs(forDB, returnUIDs bool, isUID bool, nums num
 
 		// Binary search for uida.
 		s := 0
-		e := len(c.uids)
+		e := int(c.exists)
 		for s < e {
 			m := (s + e) / 2
 			if uida < c.uids[m] {
@@ -1603,14 +1714,13 @@ func (c *conn) xnumSetConditionUIDs(forDB, returnUIDs bool, isUID bool, nums num
 
 		for _, uid := range c.uids[s:] {
 			if uid >= uida && uid <= uidb {
-				add(uid)
+				uids[uid] = struct{}{}
 			} else if uid > uidb {
 				break
 			}
 		}
 	}
-
-	return uidargs, uids
+	return slices.Sorted(maps.Keys(uids))
 }
 
 func (c *conn) ok(tag, cmd string) {
@@ -1751,8 +1861,7 @@ func (c *conn) xapplyChanges(overflow bool, changes []store.Change, initial, sen
 			if !ok {
 				break
 			}
-			seq := c.sequence(ch.UID)
-			if seq > 0 && initial {
+			if initial && !c.uidonly && c.sequence(ch.UID) > 0 {
 				continue
 			}
 			c.uidAppend(ch.UID)
@@ -1765,15 +1874,19 @@ func (c *conn) xapplyChanges(overflow bool, changes []store.Change, initial, sen
 			// Write the exists, and the UID and flags as well. Hopefully the client waits for
 			// long enough after the EXISTS to see these messages, and doesn't request them
 			// again with a FETCH.
-			c.xbwritelinef("* %d EXISTS", len(c.uids))
+			c.xbwritelinef("* %d EXISTS", c.exists)
 			for _, add := range adds {
-				seq := c.xsequence(add.UID)
 				var modseqStr string
 				if condstore {
 					modseqStr = fmt.Sprintf(" MODSEQ (%d)", add.ModSeq.Client())
 				}
-
-				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, add.UID, flaglist(add.Flags, add.Keywords).pack(c), modseqStr)
+				// UIDFETCH in case of uidonly. ../rfc/9586:228
+				if c.uidonly {
+					c.xbwritelinef("* %d UIDFETCH (FLAGS %s%s)", add.UID, flaglist(add.Flags, add.Keywords).pack(c), modseqStr)
+				} else {
+					seq := c.xsequence(add.UID)
+					c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, add.UID, flaglist(add.Flags, add.Keywords).pack(c), modseqStr)
+				}
 			}
 			continue
 		}
@@ -1785,6 +1898,15 @@ func (c *conn) xapplyChanges(overflow bool, changes []store.Change, initial, sen
 		case store.ChangeRemoveUIDs:
 			var vanishedUIDs numSet
 			for _, uid := range ch.UIDs {
+				// With uidonly, we must always return VANISHED. ../rfc/9586:232
+				if c.uidonly {
+					if !initial {
+						c.exists--
+						vanishedUIDs.append(uint32(uid))
+					}
+					continue
+				}
+
 				var seq msgseq
 				if initial {
 					seq = c.sequence(uid)
@@ -1803,7 +1925,7 @@ func (c *conn) xapplyChanges(overflow bool, changes []store.Change, initial, sen
 					}
 				}
 			}
-			if qresync {
+			if !vanishedUIDs.empty() {
 				// VANISHED without EARLIER. ../rfc/7162:2004
 				for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
 					c.xbwritelinef("* VANISHED %s", s)
@@ -1811,15 +1933,21 @@ func (c *conn) xapplyChanges(overflow bool, changes []store.Change, initial, sen
 			}
 
 		case store.ChangeFlags:
-			// The uid can be unknown if we just expunged it while another session marked it as deleted just before.
-			seq := c.sequence(ch.UID)
-			if seq <= 0 {
+			if initial {
 				continue
 			}
-			if !initial {
-				var modseqStr string
-				if condstore {
-					modseqStr = fmt.Sprintf(" MODSEQ (%d)", ch.ModSeq.Client())
+			var modseqStr string
+			if condstore {
+				modseqStr = fmt.Sprintf(" MODSEQ (%d)", ch.ModSeq.Client())
+			}
+			// UIDFETCH in case of uidonly. ../rfc/9586:228
+			if c.uidonly {
+				c.xbwritelinef("* %d UIDFETCH (FLAGS %s%s)", ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+			} else {
+				// The uid can be unknown if we just expunged it while another session marked it as deleted just before.
+				seq := c.sequence(ch.UID)
+				if seq <= 0 {
+					continue
 				}
 				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
 			}
@@ -1969,10 +2097,10 @@ func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
 				continue
 			}
 
-			seq := c.uidAppend(ch.UID)
+			c.uidAppend(ch.UID)
 
 			// ../rfc/5465:515
-			c.xbwritelinef("* %d EXISTS", len(c.uids))
+			c.xbwritelinef("* %d EXISTS", c.exists)
 
 			// If client did not specify attributes, we'll send the defaults.
 			if len(ev.FetchAtt) == 0 {
@@ -1982,7 +2110,12 @@ func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
 				}
 				// NOTIFY does not specify the default fetch attributes to return, we send UID and
 				// FLAGS.
-				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+				// UIDFETCH in case of uidonly. ../rfc/9586:228
+				if c.uidonly {
+					c.xbwritelinef("* %d UIDFETCH (FLAGS %s%s)", ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+				} else {
+					c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", c.xsequence(ch.UID), ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+				}
 				continue
 			}
 
@@ -1995,9 +2128,15 @@ func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
 				// developer sees the message.
 				c.log.Errorx("generating notify fetch response", err, slog.Int64("mailboxid", ch.MailboxID), slog.Any("uid", ch.UID))
 				c.xbwritelinef("* NO generating notify fetch response: %s", err.Error())
+				// Always add UID, also for uidonly, to ensure a non-empty list.
 				data = listspace{bare("UID"), number(ch.UID)}
 			}
-			fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", seq)
+			// UIDFETCH in case of uidonly. ../rfc/9586:228
+			if c.uidonly {
+				fmt.Fprintf(cmd.conn.xbw, "* %d UIDFETCH ", ch.UID)
+			} else {
+				fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", c.xsequence(ch.UID))
+			}
 			func() {
 				defer c.xtracewrite(mlog.LevelTracedata)()
 				data.xwriteTo(cmd.conn, cmd.conn.xbw)
@@ -2050,6 +2189,12 @@ func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
 
 			var vanishedUIDs numSet
 			for _, uid := range ch.UIDs {
+				// With uidonly, we must always return VANISHED. ../rfc/9586:232
+				if c.uidonly {
+					c.exists--
+					vanishedUIDs.append(uint32(uid))
+					continue
+				}
 
 				seq := c.xsequence(uid)
 				c.sequenceRemove(seq, uid)
@@ -2059,7 +2204,7 @@ func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
 					c.xbwritelinef("* %d EXPUNGE", seq)
 				}
 			}
-			if qresync {
+			if !vanishedUIDs.empty() {
 				// VANISHED without EARLIER. ../rfc/7162:2004
 				for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
 					c.xbwritelinef("* VANISHED %s", s)
@@ -2092,9 +2237,12 @@ func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
 			}
 
 			// The uid can be unknown if we just expunged it while another session marked it as deleted just before.
-			seq := c.sequence(ch.UID)
-			if seq <= 0 {
-				continue
+			var seq msgseq
+			if !c.uidonly {
+				seq = c.sequence(ch.UID)
+				if seq <= 0 {
+					continue
+				}
 			}
 
 			var modseqStr string
@@ -2102,7 +2250,12 @@ func (c *conn) xapplyChangesNotify(changes []store.Change, sendDelayed bool) {
 				modseqStr = fmt.Sprintf(" MODSEQ (%d)", ch.ModSeq.Client())
 			}
 			// UID and FLAGS are required. ../rfc/5465:463
-			c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+			// UIDFETCH in case of uidonly. ../rfc/9586:228
+			if c.uidonly {
+				c.xbwritelinef("* %d UIDFETCH (FLAGS %s%s)", ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+			} else {
+				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+			}
 
 		case store.ChangeThread:
 			continue
@@ -2950,6 +3103,11 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 		case capMetadata:
 			c.enabled[cap] = true
 			enabled += " " + s
+		case capUIDOnly:
+			c.enabled[cap] = true
+			enabled += " " + s
+			c.uidonly = true
+			c.uids = nil
 		}
 	}
 	// QRESYNC enabled CONDSTORE too ../rfc/7162:1391
@@ -3075,6 +3233,11 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 		c.unselect()
 	}
 
+	if c.uidonly && qrknownSeqSet != nil {
+		// ../rfc/9586:255
+		xsyntaxCodeErrorf("UIDREQUIRED", "cannot use message sequence match data with uidonly enabled")
+	}
+
 	name = xcheckmailboxname(name, true)
 
 	var highestModSeq store.ModSeq
@@ -3085,24 +3248,27 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 		c.xdbread(func(tx *bstore.Tx) {
 			mb = c.xmailbox(tx, name, "")
 
-			q := bstore.QueryTx[store.Message](tx)
-			q.FilterNonzero(store.Message{MailboxID: mb.ID})
-			q.FilterEqual("Expunged", false)
-			q.SortAsc("UID")
-			c.uids = []store.UID{}
-			var seq msgseq = 1
-			err := q.ForEach(func(m store.Message) error {
-				c.uids = append(c.uids, m.UID)
-				if firstUnseen == 0 && !m.Seen {
-					firstUnseen = seq
-				}
-				seq++
-				return nil
-			})
-			if sanityChecks {
-				checkUIDs(c.uids)
+			c.uidnext = mb.UIDNext
+			if c.uidonly {
+				c.exists = uint32(mb.MailboxCounts.Total + mb.MailboxCounts.Deleted)
+			} else {
+				c.uids = []store.UID{}
+
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: mb.ID})
+				q.FilterEqual("Expunged", false)
+				q.SortAsc("UID")
+				err := q.ForEach(func(m store.Message) error {
+					c.uids = append(c.uids, m.UID)
+					if firstUnseen == 0 && !m.Seen {
+						firstUnseen = msgseq(len(c.uids))
+					}
+					return nil
+				})
+				xcheckf(err, "fetching uids")
+
+				c.exists = uint32(len(c.uids))
 			}
-			xcheckf(err, "fetching uids")
 
 			// Condstore extension, find the highest modseq.
 			if c.enabled[capCondstore] {
@@ -3111,6 +3277,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 			// For QRESYNC, we need to know the highest modset of deleted expunged records to
 			// maintain synchronization.
 			if c.enabled[capQresync] {
+				var err error
 				highDeletedModSeq, err = c.account.HighestDeletedModSeq(tx)
 				xcheckf(err, "getting highest deleted modseq")
 			}
@@ -3129,7 +3296,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 	if !c.enabled[capIMAP4rev2] {
 		c.xbwritelinef(`* 0 RECENT`)
 	}
-	c.xbwritelinef(`* %d EXISTS`, len(c.uids))
+	c.xbwritelinef(`* %d EXISTS`, c.exists)
 	if !c.enabled[capIMAP4rev2] && firstUnseen > 0 {
 		// ../rfc/9051:8051 ../rfc/3501:1774
 		c.xbwritelinef(`* OK [UNSEEN %d] x`, firstUnseen)
@@ -3173,7 +3340,8 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 					xsyntaxErrorf("invalid combination of known sequence set and uid set, must be of equal length")
 				}
 				i := int(msgseq - 1)
-				if i < 0 || i >= len(c.uids) || c.uids[i] != store.UID(uid) {
+				// Access to c.uids is safe, qrknownSeqSet and uidonly cannot both be set.
+				if i < 0 || i >= int(c.exists) || c.uids[i] != store.UID(uid) {
 					if uidSearch(c.uids, store.UID(uid)) <= 0 {
 						// We will check this old client UID for consistency below.
 						oldClientUID = store.UID(uid)
@@ -3223,6 +3391,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 			// Note: we don't filter by Expunged.
 			q.FilterGreater("ModSeq", store.ModSeqFromClient(qrmodseq))
 			q.FilterLessEqual("ModSeq", highestModSeq)
+			q.FilterLess("UID", c.uidnext)
 			q.SortAsc("ModSeq")
 			err := q.ForEach(func(m store.Message) error {
 				if m.Expunged && m.UID < preVanished {
@@ -3236,38 +3405,72 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 					vanishedUIDs[m.UID] = struct{}{}
 					return nil
 				}
-				msgseq := c.sequence(m.UID)
-				if msgseq > 0 {
+				// UIDFETCH in case of uidonly. ../rfc/9586:228
+				if c.uidonly {
+					c.xbwritelinef("* %d UIDFETCH (FLAGS %s MODSEQ (%d))", m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+				} else if msgseq := c.sequence(m.UID); msgseq > 0 {
 					c.xbwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", msgseq, m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
 				}
 				return nil
 			})
 			xcheckf(err, "listing changed messages")
-		})
 
-		// Add UIDs from client's known UID set to vanished list if we don't have enough history.
-		if qrmodseq < highDeletedModSeq.Client() {
-			// If no known uid set was in the request, we substitute 1:max or the empty set.
-			// ../rfc/7162:1524
-			if qrknownUIDs == nil {
-				if len(c.uids) > 0 {
-					qrknownUIDs = &numSet{ranges: []numRange{{first: setNumber{number: 1}, last: &setNumber{number: uint32(c.uids[len(c.uids)-1])}}}}
+			// If we don't have enough history, we go through all UIDs and look them up, and
+			// add them to the vanished list if they have disappeared.
+			if qrmodseq < highDeletedModSeq.Client() {
+				// If no "known uid set" was in the request, we substitute 1:max or the empty set.
+				// ../rfc/7162:1524
+				if qrknownUIDs == nil {
+					qrknownUIDs = &numSet{ranges: []numRange{{first: setNumber{number: 1}, last: &setNumber{number: uint32(c.uidnext - 1)}}}}
+				}
+
+				if c.uidonly {
+					// note: qrknownUIDs will not contain "*".
+					for _, r := range qrknownUIDs.xinterpretStar(func() store.UID { return 0 }).ranges {
+						// Gather UIDs for this range.
+						var uids []store.UID
+						q := bstore.QueryTx[store.Message](tx)
+						q.FilterNonzero(store.Message{MailboxID: mb.ID})
+						q.FilterEqual("Expunged", false)
+						if r.last == nil {
+							q.FilterEqual("UID", r.first.number)
+						} else {
+							q.FilterGreaterEqual("UID", r.first.number)
+							q.FilterLessEqual("UID", r.last.number)
+						}
+						q.SortAsc("UID")
+						for m, err := range q.All() {
+							xcheckf(err, "enumerating uids")
+							uids = append(uids, m.UID)
+						}
+
+						// Find UIDs missing from the database.
+						iter := r.newIter()
+						for {
+							uid, ok := iter.Next()
+							if !ok {
+								break
+							}
+							if uidSearch(uids, store.UID(uid)) <= 0 {
+								vanishedUIDs[store.UID(uid)] = struct{}{}
+							}
+						}
+					}
 				} else {
-					qrknownUIDs = &numSet{}
+					// Ensure it is in ascending order, no needless first/last ranges. qrknownUIDs cannot contain a star.
+					iter := qrknownUIDs.newIter()
+					for {
+						v, ok := iter.Next()
+						if !ok {
+							break
+						}
+						if c.sequence(store.UID(v)) <= 0 {
+							vanishedUIDs[store.UID(v)] = struct{}{}
+						}
+					}
 				}
 			}
-
-			iter := qrknownUIDs.newIter()
-			for {
-				v, ok := iter.Next()
-				if !ok {
-					break
-				}
-				if c.sequence(store.UID(v)) <= 0 {
-					vanishedUIDs[store.UID(v)] = struct{}{}
-				}
-			}
-		}
+		})
 
 		// Now that we have all vanished UIDs, send them over compactly.
 		if len(vanishedUIDs) > 0 {
@@ -4044,7 +4247,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			c.uidAppend(a.m.UID)
 		}
 		// todo spec: with condstore/qresync, is there a mechanism to let the client know the modseq for the appended uid? in theory an untagged fetch with the modseq after the OK APPENDUID could make sense, but this probably isn't allowed.
-		c.xbwritelinef("* %d EXISTS", len(c.uids))
+		c.xbwritelinef("* %d EXISTS", c.exists)
 	}
 
 	// ../rfc/4315:289 ../rfc/3502:236 APPENDUID
@@ -4263,13 +4466,17 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (expunged []store
 			}
 			xcheckf(err, "get mailbox")
 
+			xlastUID := c.newCachedLastUID(tx, c.mailboxID, func(err error) { xuserErrorf("%s", err) })
+
 			qm := bstore.QueryTx[store.Message](tx)
 			qm.FilterNonzero(store.Message{MailboxID: c.mailboxID})
 			qm.FilterEqual("Deleted", true)
 			qm.FilterEqual("Expunged", false)
+			qm.FilterLess("UID", c.uidnext)
 			qm.FilterFn(func(m store.Message) bool {
-				// Only remove if this session knows about the message and if present in optional uidSet.
-				return uidSearch(c.uids, m.UID) > 0 && (uidSet == nil || uidSet.containsUID(m.UID, c.uids, c.searchResult))
+				// Only remove if this session knows about the message and if present in optional
+				// uidSet.
+				return uidSet == nil || uidSet.xcontainsKnownUID(m.UID, c.searchResult, xlastUID)
 			})
 			qm.SortAsc("UID")
 			expunged, err = qm.List()
@@ -4363,6 +4570,12 @@ func (c *conn) cmdxExpunge(tag, cmd string, uidSet *numSet) {
 	var vanishedUIDs numSet
 	qresync := c.enabled[capQresync]
 	for _, m := range expunged {
+		// With uidonly, we must always return VANISHED. ../rfc/9586:210
+		if c.uidonly {
+			c.exists--
+			vanishedUIDs.append(uint32(m.UID))
+			continue
+		}
 		seq := c.xsequence(m.UID)
 		c.sequenceRemove(seq, m.UID)
 		if qresync {
@@ -4445,20 +4658,14 @@ func (c *conn) cmdUIDReplace(tag, cmd string, p *parser) {
 	c.cmdxReplace(true, tag, cmd, p)
 }
 
-func (c *conn) gatherCopyMoveUIDs(isUID bool, nums numSet) ([]store.UID, []any) {
+func (c *conn) gatherCopyMoveUIDs(tx *bstore.Tx, isUID bool, nums numSet) []store.UID {
 	// Gather uids, then sort so we can return a consistently simple and hard to
 	// misinterpret COPYUID/MOVEUID response. It seems safer to have UIDs in ascending
 	// order, because requested uid set of 12:10 is equal to 10:12, so if we would just
 	// echo whatever the client sends us without reordering, the client can reorder our
 	// response and interpret it differently than we intended.
 	// ../rfc/9051:5072
-	uids := c.xnumSetUIDs(isUID, nums)
-	slices.Sort(uids)
-	uidargs := make([]any, len(uids))
-	for i, uid := range uids {
-		uidargs[i] = uid
-	}
-	return uids, uidargs
+	return c.xnumSetEval(tx, isUID, nums)
 }
 
 // Copy copies messages from the currently selected/active mailbox to another named
@@ -4477,8 +4684,6 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 
 	name = xcheckmailboxname(name, true)
 
-	uids, uidargs := c.gatherCopyMoveUIDs(isUID, nums)
-
 	// Files that were created during the copy. Remove them if the operation fails.
 	var newIDs []int64
 	defer func() {
@@ -4489,9 +4694,12 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 		}
 	}()
 
+	// UIDs to copy.
+	var uids []store.UID
+
 	var mbDst store.Mailbox
 	var nkeywords int
-	var origUIDs, newUIDs []store.UID
+	var newUIDs []store.UID
 	var flags []store.Flags
 	var keywords [][]string
 	var modseq store.ModSeq // For messages in new mailbox, assigned when first message is copied.
@@ -4500,12 +4708,15 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 
 		c.xdbwrite(func(tx *bstore.Tx) {
 			mbSrc := c.xmailboxID(tx, c.mailboxID) // Validate.
+
 			mbDst = c.xmailbox(tx, name, "TRYCREATE")
 			if mbDst.ID == mbSrc.ID {
 				xuserErrorf("cannot copy to currently selected mailbox")
 			}
 
-			if len(uidargs) == 0 {
+			uids = c.gatherCopyMoveUIDs(tx, isUID, nums)
+
+			if len(uids) == 0 {
 				xuserErrorf("no matching messages to copy")
 			}
 
@@ -4522,17 +4733,17 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 
 			// Reserve the uids in the destination mailbox.
 			uidFirst := mbDst.UIDNext
-			mbDst.UIDNext += store.UID(len(uidargs))
+			mbDst.UIDNext += store.UID(len(uids))
 
 			// Fetch messages from database.
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
-			q.FilterEqual("UID", uidargs...)
+			q.FilterEqual("UID", slicesAny(uids)...)
 			q.FilterEqual("Expunged", false)
 			xmsgs, err := q.List()
 			xcheckf(err, "fetching messages")
 
-			if len(xmsgs) != len(uidargs) {
+			if len(xmsgs) != len(uids) {
 				xserverErrorf("uid and message mismatch")
 			}
 
@@ -4588,7 +4799,6 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				xcheckf(err, "inserting message")
 				msgs[uid] = m
 				nmsgs[i] = m
-				origUIDs = append(origUIDs, uid)
 				newUIDs = append(newUIDs, m.UID)
 				newMsgIDs = append(newMsgIDs, m.ID)
 				flags = append(flags, m.Flags)
@@ -4666,7 +4876,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 	})
 
 	// ../rfc/9051:6881 ../rfc/4315:183
-	c.xwriteresultf("%s OK [COPYUID %d %s %s] copied", tag, mbDst.UIDValidity, compactUIDSet(origUIDs).String(), compactUIDSet(newUIDs).String())
+	c.xwriteresultf("%s OK [COPYUID %d %s %s] copied", tag, mbDst.UIDValidity, compactUIDSet(uids).String(), compactUIDSet(newUIDs).String())
 }
 
 // Move moves messages from the currently selected/active mailbox to a named mailbox.
@@ -4688,7 +4898,8 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 		xuserErrorf("mailbox open in read-only mode")
 	}
 
-	uids, uidargs := c.gatherCopyMoveUIDs(isUID, nums)
+	// UIDs to move.
+	var uids []store.UID
 
 	var mbDst store.Mailbox
 	var uidFirst store.UID
@@ -4713,6 +4924,8 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				xuserErrorf("cannot move to currently selected mailbox")
 			}
 
+			uids = c.gatherCopyMoveUIDs(tx, isUID, nums)
+
 			if len(uids) == 0 {
 				xuserErrorf("no matching messages to move")
 			}
@@ -4727,11 +4940,11 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			// Make query selecting messages to move.
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: mbSrc.ID})
-			q.FilterEqual("UID", uidargs...)
+			q.FilterEqual("UID", slicesAny(uids)...)
 			q.FilterEqual("Expunged", false)
 			q.SortAsc("UID")
 
-			newIDs, chl := c.xmoveMessages(tx, q, len(uidargs), modseq, &mbSrc, &mbDst)
+			newIDs, chl := c.xmoveMessages(tx, q, len(uids), modseq, &mbSrc, &mbDst)
 			changes = append(changes, chl...)
 			cleanupIDs = newIDs
 		})
@@ -4748,6 +4961,13 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	qresync := c.enabled[capQresync]
 	var vanishedUIDs numSet
 	for i := range uids {
+		// With uidonly, we must always return VANISHED. ../rfc/9586:232
+		if c.uidonly {
+			c.exists--
+			vanishedUIDs.append(uint32(uids[i]))
+			continue
+		}
+
 		seq := c.xsequence(uids[i])
 		c.sequenceRemove(seq, uids[i])
 		if qresync {
@@ -4988,9 +5208,9 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 			mb = c.xmailboxID(tx, c.mailboxID) // Validate.
 			origmb = mb
 
-			uidargs := c.xnumSetCondition(isUID, nums)
+			uids := c.xnumSetEval(tx, isUID, nums)
 
-			if len(uidargs) == 0 {
+			if len(uids) == 0 {
 				return
 			}
 
@@ -5005,7 +5225,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
-			q.FilterEqual("UID", uidargs...)
+			q.FilterEqual("UID", slicesAny(uids)...)
 			q.FilterEqual("Expunged", false)
 			err := q.ForEach(func(m store.Message) error {
 				// Client may specify a message multiple times, but we only process it once. ../rfc/7162:823
@@ -5111,16 +5331,25 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	// ../rfc/7162:549
 	if !silent || c.enabled[capCondstore] {
 		for _, m := range updated {
-			var flags string
+			var args []string
 			if !silent {
-				flags = fmt.Sprintf(" FLAGS %s", flaglist(m.Flags, m.Keywords).pack(c))
+				args = append(args, fmt.Sprintf("FLAGS %s", flaglist(m.Flags, m.Keywords).pack(c)))
 			}
-			var modseqStr string
 			if c.enabled[capCondstore] {
-				modseqStr = fmt.Sprintf(" MODSEQ (%d)", m.ModSeq.Client())
+				args = append(args, fmt.Sprintf("MODSEQ (%d)", m.ModSeq.Client()))
 			}
 			// ../rfc/9051:6749 ../rfc/3501:4869 ../rfc/7162:2490
-			c.xbwritelinef("* %d FETCH (UID %d%s%s)", c.xsequence(m.UID), m.UID, flags, modseqStr)
+			// UIDFETCH in case of uidonly. ../rfc/9586:228
+			if c.uidonly {
+				// Ensure list is non-empty.
+				if len(args) == 0 {
+					args = append(args, fmt.Sprintf("UID %d", m.UID))
+				}
+				c.xbwritelinef("* %d UIDFETCH (%s)", m.UID, strings.Join(args, " "))
+			} else {
+				args = append([]string{fmt.Sprintf("UID %d", m.UID)}, args...)
+				c.xbwritelinef("* %d FETCH (%s)", c.xsequence(m.UID), strings.Join(args, " "))
+			}
 		}
 	}
 
@@ -5138,7 +5367,12 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	// Also gather UIDs or sequences for the MODIFIED response below. ../rfc/7162:571
 	var mnums []store.UID
 	for _, m := range changed {
-		c.xbwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", c.xsequence(m.UID), m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+		// UIDFETCH in case of uidonly. ../rfc/9586:228
+		if c.uidonly {
+			c.xbwritelinef("* %d UIDFETCH (FLAGS %s MODSEQ (%d))", m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+		} else {
+			c.xbwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", c.xsequence(m.UID), m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+		}
 		if isUID {
 			mnums = append(mnums, m.UID)
 		} else {

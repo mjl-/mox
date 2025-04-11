@@ -7,17 +7,25 @@ import (
 )
 
 func TestExpunge(t *testing.T) {
+	testExpunge(t, false)
+}
+
+func TestExpungeUIDOnly(t *testing.T) {
+	testExpunge(t, true)
+}
+
+func testExpunge(t *testing.T, uidonly bool) {
 	defer mockUIDValidity()()
-	tc := start(t)
+	tc := start(t, uidonly)
 	defer tc.close()
 
-	tc2 := startNoSwitchboard(t)
+	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
 
-	tc.client.Login("mjl@mox.example", password0)
+	tc.login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
-	tc2.client.Login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc.transactf("bad", "expunge leftover") // Leftover data.
@@ -37,15 +45,23 @@ func TestExpunge(t *testing.T) {
 	tc.transactf("ok", "expunge") // Still nothing to remove.
 	tc.xuntagged()
 
-	tc.client.StoreFlagsAdd("1,3", true, `\Deleted`)
+	tc.transactf("ok", `uid store 1,3 +flags.silent \Deleted`)
 
 	tc2.transactf("ok", "noop") // Drain.
 
 	tc.transactf("ok", "expunge")
-	tc.xuntagged(imapclient.UntaggedExpunge(1), imapclient.UntaggedExpunge(2))
+	if uidonly {
+		tc.xuntagged(imapclient.UntaggedVanished{UIDs: xparseNumSet("1,3")})
+	} else {
+		tc.xuntagged(imapclient.UntaggedExpunge(1), imapclient.UntaggedExpunge(2))
+	}
 
 	tc2.transactf("ok", "noop") // Drain.
-	tc2.xuntagged(imapclient.UntaggedExpunge(1), imapclient.UntaggedExpunge(2))
+	if uidonly {
+		tc2.xuntagged(imapclient.UntaggedVanished{UIDs: xparseNumSet("1,3")})
+	} else {
+		tc2.xuntagged(imapclient.UntaggedExpunge(1), imapclient.UntaggedExpunge(2))
+	}
 
 	tc.transactf("ok", "expunge") // Nothing to remove anymore.
 	tc.xuntagged()
@@ -59,7 +75,7 @@ func TestExpunge(t *testing.T) {
 	tc.transactf("bad", "uid expunge 1 leftover") // Leftover data.
 	tc.transactf("bad", "uid expunge 1 leftover") // Leftover data.
 
-	tc.client.StoreFlagsAdd("1,2,4", true, `\Deleted`) // Marks UID 2,4,6 as deleted.
+	tc.transactf("ok", `uid store 2,4,6 +flags.silent \Deleted`)
 
 	tc.transactf("ok", "uid expunge 1")
 	tc.xuntagged() // No match.
@@ -67,8 +83,16 @@ func TestExpunge(t *testing.T) {
 	tc2.transactf("ok", "noop") // Drain.
 
 	tc.transactf("ok", "uid expunge 4:6") // Removes UID 4,6 at seqs 2,4.
-	tc.xuntagged(imapclient.UntaggedExpunge(2), imapclient.UntaggedExpunge(3))
+	if uidonly {
+		tc.xuntagged(imapclient.UntaggedVanished{UIDs: xparseNumSet("4,6")})
+	} else {
+		tc.xuntagged(imapclient.UntaggedExpunge(2), imapclient.UntaggedExpunge(3))
+	}
 
 	tc2.transactf("ok", "noop")
-	tc.xuntagged(imapclient.UntaggedExpunge(2), imapclient.UntaggedExpunge(3))
+	if uidonly {
+		tc2.xuntagged(imapclient.UntaggedVanished{UIDs: xparseNumSet("4,6")})
+	} else {
+		tc2.xuntagged(imapclient.UntaggedExpunge(2), imapclient.UntaggedExpunge(3))
+	}
 }
