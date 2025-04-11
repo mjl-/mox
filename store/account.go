@@ -298,6 +298,16 @@ type SpecialUse struct {
 	Trash   bool
 }
 
+// UIDNextAdd increases the UIDNext value by n, returning an error on overflow.
+func (mb *Mailbox) UIDNextAdd(n int) error {
+	uidnext := mb.UIDNext + UID(n)
+	if uidnext < mb.UIDNext {
+		return fmt.Errorf("uid overflow on mailbox %q (id %d): uidnext %d, adding %d; consider recreating the mailbox and copying its messages to compact", mb.Name, mb.ID, mb.UIDNext, n)
+	}
+	mb.UIDNext = uidnext
+	return nil
+}
+
 // CalculateCounts calculates the full current counts for messages in the mailbox.
 func (mb *Mailbox) CalculateCounts(tx *bstore.Tx) (mc MailboxCounts, err error) {
 	q := bstore.QueryTx[Message](tx)
@@ -2218,7 +2228,9 @@ func (a *Account) MessageAdd(log mlog.Log, tx *bstore.Tx, mb *Mailbox, m *Messag
 	}
 	if m.UID == 0 {
 		m.UID = mb.UIDNext
-		mb.UIDNext++
+		if err := mb.UIDNextAdd(1); err != nil {
+			return fmt.Errorf("adding uid: %v", err)
+		}
 	}
 	if m.ModSeq == 0 {
 		modseq, err := a.NextModSeq(tx)

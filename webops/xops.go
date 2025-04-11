@@ -473,7 +473,8 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		nm := om
 		nm.MailboxID = mbDst.ID
 		nm.UID = mbDst.UIDNext
-		mbDst.UIDNext++
+		err := mbDst.UIDNextAdd(1)
+		x.Checkf(ctx, err, "adding uid")
 		nm.ModSeq = *modseq
 		nm.CreateSeq = *modseq
 		nm.SaveDate = &now
@@ -490,7 +491,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 
 		nm.JunkFlagsForMailbox(mbDst, accConf)
 
-		err := tx.Update(&nm)
+		err = tx.Update(&nm)
 		x.Checkf(ctx, err, "updating message with new mailbox")
 
 		mbDst.Add(nm.MailboxCounts())

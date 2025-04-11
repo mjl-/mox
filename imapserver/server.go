@@ -4733,7 +4733,8 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 
 			// Reserve the uids in the destination mailbox.
 			uidFirst := mbDst.UIDNext
-			mbDst.UIDNext += store.UID(len(uids))
+			err = mbDst.UIDNextAdd(len(uids))
+			xcheckf(err, "adding uid")
 
 			// Fetch messages from database.
 			q := bstore.QueryTx[store.Message](tx)
@@ -5043,7 +5044,8 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 		nm := om
 		nm.MailboxID = mbDst.ID
 		nm.UID = mbDst.UIDNext
-		mbDst.UIDNext++
+		err := mbDst.UIDNextAdd(1)
+		xcheckf(err, "adding uid")
 		nm.ModSeq = modseq
 		nm.CreateSeq = modseq
 		nm.SaveDate = &now
@@ -5057,7 +5059,7 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 
 		nm.JunkFlagsForMailbox(*mbDst, accConf)
 
-		err := tx.Update(&nm)
+		err = tx.Update(&nm)
 		xcheckf(err, "updating message with new mailbox")
 
 		mbDst.Add(nm.MailboxCounts())
