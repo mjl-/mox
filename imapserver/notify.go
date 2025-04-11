@@ -276,7 +276,7 @@ func (c *conn) cmdNotify(tag, cmd string, p *parser) {
 			select {
 			case <-c.comm.Pending:
 				overflow, changes := c.comm.Get()
-				c.xapplyChanges(overflow, changes, true, true)
+				c.xapplyChanges(overflow, changes, true)
 			default:
 			}
 

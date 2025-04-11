@@ -329,7 +329,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	// Must update our msgseq/uids tracking with latest pending changes.
 	l := pendingChanges
 	pendingChanges = nil
-	c.xapplyChanges(overflow, l, false, false)
+	c.xapplyChanges(overflow, l, false)
 
 	// If we couldn't find the message, send a NO response. We've just applied pending
 	// changes, which should have expunged the absent message.
