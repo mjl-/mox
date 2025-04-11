@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -126,7 +127,11 @@ func FuzzServer(f *testing.F) {
 
 				err := clientConn.SetDeadline(time.Now().Add(time.Second))
 				flog(err, "set client deadline")
-				client, _ := imapclient.New(mox.Cid(), clientConn, true)
+				opts := imapclient.Opts{
+					Logger: slog.Default().With("cid", mox.Cid()),
+					Error:  func(err error) { panic(err) },
+				}
+				client, _ := imapclient.New(clientConn, &opts)
 
 				for _, cmd := range cmds {
 					client.Commandf("", "%s", cmd)

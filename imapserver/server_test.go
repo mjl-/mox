@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
 	"os"
@@ -536,8 +537,11 @@ func startArgsMore(t *testing.T, uidonly, first, immediateTLS bool, serverConfig
 		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS, viaHTTPS, "")
 		close(done)
 	}()
-	client, err := imapclient.New(connCounter, clientConn, true)
-	tcheck(t, err, "new client")
+	opts := imapclient.Opts{
+		Logger: slog.Default().With("cid", connCounter),
+		Error:  func(err error) { panic(err) },
+	}
+	client, _ := imapclient.New(clientConn, &opts)
 	tc := &testconn{t: t, conn: clientConn, client: client, uidonly: uidonly, done: done, serverConn: serverConn, account: acc}
 	if first {
 		tc.switchStop = switchStop

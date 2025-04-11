@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
 	"os"
@@ -524,7 +525,11 @@ func TestCtl(t *testing.T) {
 	testctl(func(xctl *ctl) {
 		a, b := net.Pipe()
 		go func() {
-			client, err := imapclient.New(mox.Cid(), a, true)
+			opts := imapclient.Opts{
+				Logger: slog.Default().With("cid", mox.Cid()),
+				Error:  func(err error) { panic(err) },
+			}
+			client, err := imapclient.New(a, &opts)
 			tcheck(t, err, "new imapclient")
 			client.Select("inbox")
 			client.Logout()

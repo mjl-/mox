@@ -45,7 +45,7 @@ type Conn struct {
 	xtw          *moxio.TraceWriter
 
 	log       mlog.Log
-	panic     bool
+	errHandle func(err error) // If set, called for all errors. Can panic. Used for imapserver tests.
 	tagGen    int
 	record    bool // If true, bytes read are added to recordBuf. recorded() resets.
 	recordBuf []byte
@@ -67,28 +67,46 @@ func (e Error) Unwrap() error {
 	return e.err
 }
 
+// Opts has optional fields that influence behaviour of a Conn.
+type Opts struct {
+	Logger *slog.Logger
+
+	// Error is called for both IMAP-level and connection-level errors. Is allowed to
+	// call panic.
+	Error func(err error)
+}
+
 // New creates a new client on conn.
-//
-// If xpanic is true, functions that would return an error instead panic. For parse
-// errors, the resulting stack traces show typically show what was being parsed.
 //
 // The initial untagged greeting response is read and must be "OK" or
 // "PREAUTH". If preauth, the connection is already in authenticated state,
 // typically through TLS client certificate. This is indicated in Conn.Preauth.
-func New(cid int64, conn net.Conn, xpanic bool) (client *Conn, rerr error) {
-	log := mlog.New("imapclient", nil).WithCid(cid)
+//
+// Logging is written to log, in particular IMAP protocol traces are written with
+// prefixes "CR: " and "CW: " (client read/write) as quoted strings at levels
+// Debug-4, with authentication messages at Debug-6 and (user) data at level
+// Debug-8.
+func New(conn net.Conn, opts *Opts) (client *Conn, rerr error) {
 	c := Conn{
 		conn:         conn,
-		log:          log,
-		panic:        xpanic,
 		CapAvailable: map[Capability]struct{}{},
 		CapEnabled:   map[Capability]struct{}{},
 	}
-	c.tr = moxio.NewTraceReader(log, "CR: ", &c)
+
+	var clog *slog.Logger
+	if opts != nil {
+		c.errHandle = opts.Error
+		clog = opts.Logger
+	} else {
+		clog = slog.Default()
+	}
+	c.log = mlog.New("imapclient", clog)
+
+	c.tr = moxio.NewTraceReader(c.log, "CR: ", &c)
 	c.br = bufio.NewReader(c.tr)
 
 	// Writes are buffered and write to Conn, which may panic.
-	c.xtw = moxio.NewTraceWriter(log, "CW: ", &c)
+	c.xtw = moxio.NewTraceWriter(c.log, "CW: ", &c)
 	c.xbw = bufio.NewWriter(c.xtw)
 
 	defer c.recover(&rerr)
@@ -116,10 +134,6 @@ func New(cid int64, conn net.Conn, xpanic bool) (client *Conn, rerr error) {
 }
 
 func (c *Conn) recover(rerr *error) {
-	if c.panic {
-		return
-	}
-
 	x := recover()
 	if x == nil {
 		return
@@ -127,6 +141,9 @@ func (c *Conn) recover(rerr *error) {
 	err, ok := x.(Error)
 	if !ok {
 		panic(x)
+	}
+	if c.errHandle != nil {
+		c.errHandle(err)
 	}
 	*rerr = err
 }
@@ -199,11 +216,6 @@ func (c *Conn) xtracewrite(level slog.Level) func() {
 		c.xflush()
 		c.xtw.SetTrace(mlog.LevelTrace)
 	}
-}
-
-// SetPanic sets whether errors cause a panic instead of returning errors.
-func (c *Conn) SetPanic(panic bool) {
-	c.panic = panic
 }
 
 // Close closes the connection, flushing and closing any compression and TLS layer.
