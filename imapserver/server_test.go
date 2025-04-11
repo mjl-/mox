@@ -921,8 +921,7 @@ func testSequence(t *testing.T, uidonly bool) {
 
 // Test that a message that is expunged by another session can be read as long as a
 // reference is held by a session. New sessions do not see the expunged message.
-// todo: possibly implement the additional reference counting. so far it hasn't been worth the trouble.
-func DisabledTestReference(t *testing.T) {
+func TestReference(t *testing.T) {
 	tc := start(t, false)
 	defer tc.close()
 	tc.login("mjl@mox.example", password0)
@@ -930,7 +929,7 @@ func DisabledTestReference(t *testing.T) {
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 
 	tc2 := startNoSwitchboard(t, false)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
@@ -938,11 +937,14 @@ func DisabledTestReference(t *testing.T) {
 	tc.client.Expunge()
 
 	tc3 := startNoSwitchboard(t, false)
-	defer tc3.close()
+	defer tc3.closeNoWait()
 	tc3.login("mjl@mox.example", password0)
 	tc3.transactf("ok", `list "" "inbox" return (status (messages))`)
-	tc3.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"}, imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 0}})
+	tc3.xuntagged(
+		imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"},
+		imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 0}},
+	)
 
 	tc2.transactf("ok", "fetch 1 rfc822.size")
-	tc.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchRFC822Size(len(exampleMsg))))
+	tc2.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchRFC822Size(len(exampleMsg))))
 }
