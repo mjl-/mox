@@ -8,7 +8,7 @@ import (
 
 func TestStarttls(t *testing.T) {
 	tc := start(t, false)
-	tc.client.Starttls(&tls.Config{InsecureSkipVerify: true})
+	tc.client.StartTLS(&tls.Config{InsecureSkipVerify: true})
 	tc.transactf("bad", "starttls") // TLS already active.
 	tc.login("mjl@mox.example", password0)
 	tc.close()
@@ -19,10 +19,10 @@ func TestStarttls(t *testing.T) {
 
 	tc = startArgs(t, false, true, false, false, true, "mjl")
 	tc.transactf("no", `login "mjl@mox.example" "%s"`, password0)
-	tc.xcode("PRIVACYREQUIRED")
+	tc.xcodeWord("PRIVACYREQUIRED")
 	tc.transactf("no", "authenticate PLAIN %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000"+password0)))
-	tc.xcode("PRIVACYREQUIRED")
-	tc.client.Starttls(&tls.Config{InsecureSkipVerify: true})
+	tc.xcodeWord("PRIVACYREQUIRED")
+	tc.client.StartTLS(&tls.Config{InsecureSkipVerify: true})
 	tc.login("mjl@mox.example", password0)
 	tc.close()
 }

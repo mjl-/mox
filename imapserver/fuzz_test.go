@@ -134,11 +134,11 @@ func FuzzServer(f *testing.F) {
 				client, _ := imapclient.New(clientConn, &opts)
 
 				for _, cmd := range cmds {
-					client.Commandf("", "%s", cmd)
-					client.Response()
+					client.WriteCommandf("", "%s", cmd)
+					client.ReadResponse()
 				}
-				client.Commandf("", "%s", s)
-				client.Response()
+				client.WriteCommandf("", "%s", s)
+				client.ReadResponse()
 			}()
 
 			err = serverConn.SetDeadline(time.Now().Add(time.Second))

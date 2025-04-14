@@ -50,14 +50,14 @@ func testAppend(t *testing.T, uidonly bool) {
 	tc2.client.Select("inbox")
 
 	tc2.transactf("no", "append nobox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" {1}")
-	tc2.xcode("TRYCREATE")
+	tc2.xcodeWord("TRYCREATE")
 
 	tc2.transactf("no", "append expungebox (\\Seen) {1}")
-	tc2.xcode("TRYCREATE")
+	tc2.xcodeWord("TRYCREATE")
 
 	tc2.transactf("ok", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc2.xuntagged(imapclient.UntaggedExists(1))
-	tc2.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("1")})
+	tc2.xcode(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("1")})
 
 	tc.transactf("ok", "noop")
 	flags := imapclient.FetchFlags{`\Seen`, "$label2", "label1"}
@@ -67,11 +67,11 @@ func testAppend(t *testing.T, uidonly bool) {
 
 	tc2.transactf("ok", "append inbox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" UTF8 (~{47+}\r\ncontent-type: just completely invalid;;\r\n\r\ntest)")
 	tc2.xuntagged(imapclient.UntaggedExists(2))
-	tc2.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("2")})
+	tc2.xcode(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("2")})
 
 	tc2.transactf("ok", "append inbox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" UTF8 (~{31+}\r\ncontent-type: text/plain;\n\ntest)")
 	tc2.xuntagged(imapclient.UntaggedExists(3))
-	tc2.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("3")})
+	tc2.xcode(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("3")})
 
 	// Messages that we cannot parse are marked as application/octet-stream. Perhaps
 	// the imap client knows how to deal with them.
@@ -92,7 +92,7 @@ func testAppend(t *testing.T, uidonly bool) {
 	tc.transactf("ok", "noop") // Flush pending untagged responses.
 	tc.transactf("ok", "append inbox {6+}\r\ntest\r\n ~{6+}\r\ntost\r\n")
 	tc.xuntagged(imapclient.UntaggedExists(5))
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4:5")})
+	tc.xcode(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4:5")})
 
 	// Cancelled with zero-length message.
 	tc.transactf("no", "append inbox {6+}\r\ntest\r\n {0+}\r\n")
@@ -106,7 +106,7 @@ func testAppend(t *testing.T, uidonly bool) {
 	tclimit.xuntagged(imapclient.UntaggedExists(1))
 	// Second message would take account past limit.
 	tclimit.transactf("no", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
-	tclimit.xcode("OVERQUOTA")
+	tclimit.xcodeWord("OVERQUOTA")
 
 	// Empty mailbox.
 	if uidonly {
@@ -119,10 +119,10 @@ func testAppend(t *testing.T, uidonly bool) {
 	// Multiappend with first message within quota, and second message with sync
 	// literal causing quota error. Request should get error response immediately.
 	tclimit.transactf("no", "append inbox {1+}\r\nx {100000}")
-	tclimit.xcode("OVERQUOTA")
+	tclimit.xcodeWord("OVERQUOTA")
 
 	// Again, but second message now with non-sync literal, which is fully consumed by server.
-	tclimit.client.Commandf("", "append inbox {1+}\r\nx {4000+}")
+	tclimit.client.WriteCommandf("", "append inbox {1+}\r\nx {4000+}")
 	buf := make([]byte, 4000, 4002)
 	for i := range buf {
 		buf[i] = 'x'
@@ -131,5 +131,5 @@ func testAppend(t *testing.T, uidonly bool) {
 	_, err := tclimit.client.Write(buf)
 	tclimit.check(err, "write append message")
 	tclimit.response("no")
-	tclimit.xcode("OVERQUOTA")
+	tclimit.xcodeWord("OVERQUOTA")
 }

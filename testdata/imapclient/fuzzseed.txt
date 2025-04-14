@@ -1,0 +1,1056 @@
+001 OK done
+001 OK LIST complete
+002 OK done
+003 OK done
+003 OK [READ-WRITE] SELECT completed
+004 OK done
+005 OK done
+008 OK done
+009 NO Delete failed; mailbox is not empty.
+010 OK done
+011 OK done
+012 OK done
+013 OK done
+01 OK ENABLE completed
+022 OK done
+023 OK done
+032 NO UID command rejected because UIDVALIDITY changed!
+03 OK [MESSAGELIMIT 1000 23221] FETCH completed with 1000
+04 OK [MESSAGELIMIT 1000 23221] SEARCH completed with 1000
+05 NO [MESSAGELIMIT 1000 20001] Too many messages to copy,
+06 OK [MESSAGELIMIT 1000 20001] MOVE completed for the last
+07 BAD [UIDREQUIRED] Message numbers are not allowed
+07 OK [MESSAGELIMIT 1000 19578] STORE completed for the last
+08 OK [MESSAGELIMIT 1000 11627] UID EXPUNGE completed for
+09 OK EXPUNGE completed
+101 OK FETCH completed
+10 NO [MESSAGELIMIT 1000] FETCH exceeds the maximum 1000-
+10 OK Completed
+10 OK FETCH completed
+10 OK [MESSAGELIMIT 1000 23007] FETCH exceeds the maximum
+11 OK [APPENDUID 1521475658 2] Completed
+11 OK Completed (0.001 secs 3 calls)
+11 OK [EXPUNGEISSUED] Some messages were also expunged
+11 OK FETCH completed
+12 OK expunged
+12 OK SEARCH completed
+15 OK UID MOVE Completed
+17 OK [APPENDUID 1521475658 3] Completed
+1b OK done
+1 OK [CAPABILITY IMAP4rev1 JMAPACCESS] done
+1 OK completed
+22 OK Completed (0.000 sec)
+23 OK Completed
+24 OK Completed (0.000 sec)
+25 OK [READ-WRITE] Completed
+26 OK Completed (0.000 sec)
+27 OK Completed (1 msgs in 0.000 secs)
+27 OK [READ-WRITE] Completed
+28 OK Completed (2 msgs in 0.000 secs)
+2b OK done
+2 OK [CAPABILITY IMAP4REV1 IDLE NAMESPACE MAILBOX-REFERRALS SCAN
+2 OK done
+3 OK done
+3 OK [MAILBOXID (F2212ea87-6097-4256-9d51-71338625)] Completed
+4 NO done
+4 OK [MAILBOXID (F6352ae03-b7f5-463c-896f-d8b48ee3)] Completed
+5 NO Mailbox already exists
+5 OK [APPENDUID 1521475658 1] Completed
+6 OK Completed
+7 OK Completed
+8 OK Completed
+9 OK Completed
+A0001 OK CRAM authentication successful
+a000 OK CAPABILITY completed
+A001 NO COPY rejected, because some of the requested
+A001 NO [REFERRAL IMAP://user;AUTH=*@SERVER1/FOO
+A001 NO [REFERRAL IMAP://user;AUTH=*@SERVER2/FOO
+A001 NO [REFERRAL IMAP://user;AUTH=*@SERVER2/REMOTE
+A001 NO [REFERRAL IMAP://user;AUTH=*@SERVER2/SHARED/FOO]
+A001 NO [REFERRAL IMAP://user;AUTH=*@SERVER2/SHARED/STUFF]
+a001 OK "Begin TLS negotiation now"
+a001 OK CAPABILITY completed
+a001 OK CONVERT COMPLETED
+A001 OK COPY completed
+A001 OK [COPYUID 1022843275 414,567 5:6] Completed
+A001 OK CREATE succeeded
+A001 OK done
+A001 OK Getacl complete
+A001 OK GSSAPI authentication successful
+A001 OK Kerberos V4 authentication successful
+A001 OK LANGUAGE-Befehl ausgefuehrt
+A001 OK LIST Completed
+a001 OK Listrights completed
+a001 OK LOGIN completed
+A001 OK LOGIN completed
+A001 OK LOGIN Completed
+A001 OK NAMESPACE command completed
+A001 OK [READ-WRITE] SELECT completed
+A001 OK Search completed (23.387 + 0.004 + 0.017 secs).
+A001 OK SELECT completed
+A001 OK Setacl complete
+A001 OK Setquota completed
+a001 OK submitserver logged in
+A001 OK URLFETCH completed
+A001 OK Welcome sheridan@babylon5.example.org
+A001 OK Will use i;basic for collation
+a002 NO "Cannot assume requested authorization identity"
+a002 NO "Not authorized to requested authorization identity"
+A002 NO [REFERRAL IMAP://user;AUTH=*@SERVER2/SHARED/FOO]
+A002 NO The requested item could not be found.
+A002 NO Unsupported language MUL
+a002 OK "Authenticated"
+a002 OK Begin TLS negotiation now
+A002 OK [COPYUID 1022843345 111 94] Copy completed
+A002 OK CREATE command completed
+A002 OK done
+A002 OK FIND ALL.MAILBOXES completed
+A002 OK FIND MAILBOXES completed
+A002 OK Getacl complete
+A002 OK IDLE terminated
+A002 OK LIST command completed
+A002 OK LIST completed
+A002 OK LIST Completed
+A002 OK LSUB completed
+a002 OK NOOP completed
+A002 OK [READ-WRITE] Selected completed
+A002 OK Setacl complete
+A002 OK SUBSCRIBE completed
+A002 OK SUBSCRIBE MAILBOX to #news.comp.mail.mime
+A002 OK UNSUBSCRIBE completed
+A002 OK UNSUBSCRIBE MAILBOX from #news.comp.mail.mime
+a002 OK URLFETCH completed
+A002 OK user john authenticated
+A002 OK user lennier authenticated
+A003 NO [BADURL "/INBOX;UIDVALIDITY=785799047/;UID=113330;
+A003 NO [OVERQUOTA] APPEND Failed
+A003 NO Sorry, message is too big
+A003 OK append Completed
+A003 OK APPEND completed
+A003 OK APPEND Completed
+A003 OK [APPENDUID 1022843275 77712,77713] completed
+A003 OK [APPENDUID 1022843275 77712] APPEND completed
+A003 OK [APPENDUID 1022843275 77712] completed
+A003 OK [APPENDUID 38505 3955] APPEND completed
+A003 OK [APPENDUID 385759045 45] append Completed
+a003 OK CAPABILITY completed
+A003 OK catenate append completed
+A003 OK Copy completed
+A003 OK COPY completed
+A003 OK [COPYUID 38505 304,319:320 3956:3958] COPY completed
+A003 OK CREATE command completed
+A003 OK CREATE completed
+A003 OK FETCH completed
+A003 OK Getacl complete
+A003 OK Getquota completed
+A003 OK LIST command completed.
+A003 OK LIST Completed
+a003 OK Logout successful
+A003 OK LSUB completed
+A003 OK Myrights complete
+A003 OK Replace completed
+A003 OK STORE completed
+A003 OK SUBSCRIBE to MAILBOX completed
+A003 OK Supported languages have been enumerated
+A003 OK UID EXPUNGE completed
+A003 OK UID FETCH completed
+A003 OK UNSUBSCRIBE from MAILBOX completed
+A003 OK Welcome, trace information has been logged.
+A004 NO [TRYCREATE] No such mailbox as bogusname
+A004 OK [COPYUID 38505 304,319:320 3956:3958] COPY
+A004 OK [COPYUID 38505 304,319:320 3956:3958] Done
+A004 OK CREATE command completed
+A004 OK CREATE completed
+A004 OK Fetch Completed
+A004 OK IDLE terminated
+a004 OK LOGIN completed
+A004 OK Replace completed
+A004 OK SEARCH completed
+A004 OK STORE completed
+a004 OK Success (tls protection)
+A005 NO APPEND failed: Disk quota exceeded
+A005 OK Copy completed
+A005 OK CREATE command completed
+A005 OK CREATE completed
+A005 OK FETCH completed
+A005 OK No matching messages, so nothing copied
+A005 OK PARTIAL completed
+A006 OK CREATE command completed
+A006 OK Done
+A007 OK Fetch Completed
+A007 OK [READ-WRITE] SELECT completed
+a007 OK SETMETADATA complete
+A00 OK Completed.
+A010 OK [APPENDUID 1 3002] APPEND complete
+A011 OK REPLACE completed
+A015 OK Completed
+A016 OK Mailbox deletion completed successfully
+A01 OK Completed.
+A01 OK done
+A01 OK List completed.
+A01 OK NAMESPACE command completed
+A01 OK Search completed.
+A01 OK STARTTLS completed
+A01 OK STATUS completed
+A01 OK Success (tls protection)
+a023 OK ID completed
+A023 OK LOGOUT completed
+A02 OK CAPABILITY completed
+A02 OK Completed.
+A02 OK done
+A02 OK LIST command completed
+A02 OK List completed.
+A02 OK [READ-WRITE] Select completed.
+A02 OK [READ-WRITE] Sorry, UIDVALIDITY mismatch
+A035 BAD Uppercase rights are not allowed
+A036 BAD The q right is not supported
+A03 OK Completed.
+A03 OK done
+A03 OK Fetch completed.
+A03 OK Myrights completed
+A03 OK [READ-WRITE] mailbox selected
+A03 OK Success (tls protection)
+a042 OK ID command completed
+A042 OK STATUS completed
+A044 BAD No such command as "BLURDYBLOOP"
+a047 OK NOOP completed
+A04 NO [TRYCREATE] Mailbox does not exist: INBOX/Archive
+A04 OK Completed.
+A04 OK done
+A04 OK List completed.
+A04 OK [READ-WRITE] mailbox selected
+A05 OK Create completed
+A05 OK done
+A06 OK [APPENDUID 1533375901 2312] Append completed.
+A06 OK done
+a100 OK [READ-WRITE] Completed
+A101 OK Fetch completed.
+A101 OK LIST Completed
+A102 OK LIST Completed
+a102 OK [MODIFIED 12] Conditional STORE failed
+A102 OK Search completed.
+a103 OK Conditional Store completed
+A103 OK LIST Completed
+A103 OK Search completed.
+a104 OK Store (conditional) completed
+a106 OK Conditional STORE completed
+a106 OK [MODIFIED 101] Conditional STORE failed
+A142 OK [READ-WRITE] SELECT completed
+A142 OK [READ-WRITE] SELECT completed, CONDSTORE is now enabled
+A143 OK completed
+A143 OK FETCH completed
+A143 OK [READ-WRITE] SELECT completed
+A143 OK Search complete
+A144 OK FETCH completed
+A150 OK [MODIFIED 3] done
+A151 OK [HIGHESTMODSEQ 99] Still delaying VANISHED
+A153 OK [HIGHESTMODSEQ 104] done
+A160 OK Store completed
+A1 OK Capability command completed.
+a1 OK Conditional Store enabled
+a1 OK done
+A1 OK FETCH complete.
+A1 OK [MODIFIED 3] done
+a1 OK Search complete
+A1 OK Search completed.
+a200 NO STORE failed : no space left to store $MDNSent keyword
+a200 OK STORE completed
+A202 OK done
+A202 OK EXPUNGE completed
+A202 OK [HIGHESTMODSEQ 20010715194045319] done
+A202 OK [HIGHESTMODSEQ 20010715194045319] expunged
+A202 OK LIST completed
+A210 OK EXPUNGE completed
+A222 NO COPY failed: disk is full
+A222 OK COPY completed
+A223 NO COPY failed: disk is full
+A240 OK Store completed
+A282 OK SEARCH completed
+A282 OK SEARCH completed, result saved
+A282 OK SORT completed
+A283 OK completed
+A283 OK SEARCH completed
+A283 OK SORT completed
+A283 OK THREAD completed
+A284 OK SEARCH completed
+A284 OK SORT completed
+A284 OK THREAD completed
+A285 OK SEARCH completed
+A285 OK THREAD completed
+A286 OK SEARCH completed
+a2 OK done
+A2 OK FETCH complete.
+A2 OK [HIGHESTMODSEQ 99] Still delaying VANISHED
+a2 OK Search complete
+A2 OK Search completed.
+a300 OK FETCH completed
+A300 OK SEARCH completed
+A301 OK completed
+a31 OK All keys removed
+a3.1 OK done
+a32 OK [URLMECH INTERNAL] mechs
+A330 OK Store completed
+a33 OK [URLMECH INTERNAL XSAMPLE=P34OKhO7VEkCbsiYY8rGEg==] done
+A341 OK CLOSE completed
+A341 OK Unselect completed
+A342 OK Unselect completed
+a3 OK done
+A3 OK [HIGHESTMODSEQ 104] done
+a3 OK Search complete
+a400 OK SEARCH completed
+a441 OK CAPABILITY completed
+A442 OK XPIG-LATIN ompleted-cay
+A443 OK Expunge completed
+a4 OK Search complete
+A654 OK FETCH completed
+A682 OK LIST completed
+A683 OK DELETE completed
+A683 OK RENAME completed
+A684 NO Name "foo" has inferior hierarchical names
+A684 OK RENAME Completed
+A685 OK DELETE Completed
+A685 OK LIST completed
+A686 OK LIST completed
+A687 OK DELETE Completed
+a775 BAD missing access identifier in supplied URL
+a776 BAD missing owner username in supplied URL
+a777 OK GENURLAUTH completed
+A777 OK LIST completed
+A82 OK LIST completed
+A83 OK DELETE completed
+A84 OK DELETE Completed
+A85 OK LIST completed
+A86 OK LIST completed
+A932 OK [READ-ONLY] EXAMINE completed
+A999 OK UID FETCH completed
+a BAD Unknown parameter in SELECT command
+abcd OK CAPABILITY completed
+* ACAP (SASL "CRAM-MD5" "PLAIN")
+* ACAP (SASL "CRAM-MD5") (STARTTLS)
+* ACAP (SASL "DIGEST-MD5")
+* ACAP (SASL "DIGEST-MD5" "EXTERNAL")
+* ACL INBOX/Drafts Fred rwipslxetad Chris lrswi
+* ACL INBOX/Drafts Fred rwipslxetad Chris lrswicdakxet
+* ACL INBOX Fred rwipsldexta
+* ACL INBOX Fred rwipslxcetda Byron lrswikcdeta
+* ACL INBOX Fred rwipslxcetda David lrswideta
+* ACL INBOX Fred rwipslxetad -Fred wetd $team w
+* ACL INBOX -Fred wetd $team w
+a NO [METADATA TOOMANY] SETMETADATA failed
+a NO [UNAVAILABLE] User's backend down for maintenance
+a OK APPEND completed
+a OK CONVERSIONS completed
+a OK Done
+a OK [DOWNGRADED 70,105,108,109] Done
+a OK EXAMINE complete
+a OK Extended SEARCH completed
+a OK Extended SORT completed
+a OK Fetch complete
+a OK GETMETADATA complete
+a OK [METADATA LONGENTRIES 2199] GETMETADATA complete
+a OK NOOP complete
+a OK Password matched
+a OK [READ-WRITE] Completed
+a OK Search complete
+a OK SELECT complete
+a OK SELECT completed
+a OK SETMETADATA complete
+a OK Sort complete
+a OK Store complete
+a OK STORE complete
+a OK TLS active
+b001 NO All conversions failed
+B001 NO [MODIFIED 2] Some of the messages no longer exist.
+B001 NO Server is unable to enumerate supported languages
+b001 OK CONVERT COMPLETED
+B001 OK Getacl complete
+B001 OK user is authenticated
+b002 NO All conversions failed
+b002 NO [TEMPFAIL] All conversions failed
+B002 OK Deleteacl complete
+B002 OK DELETE completed
+B002 OK NOOP Completed.
+B002 OK [READ-WRITE] Selected completed
+b002 OK Some conversions failed
+b003 NO All conversions failed
+b003 OK Conditional Store completed
+B003 OK FETCH Completed
+B003 OK Getacl complete
+B004 OK LOGOUT Completed
+b005 NO All conversions failed
+B01 BAD Tag reuse
+B01 OK Search completed, will notify.
+B02 OK Search completed, will not notify.
+B03 OK Nothing done.
+B04 OK No further updates.
+B04 OK [READ-WRITE] mailbox selected
+b108 OK Conditional Store completed
+B1 OK FETCH completed.
+B1 OK Search completed.
+B202 OK [HIGHESTMODSEQ 20010715194045319] expunged
+B282 OK SEARCH completed
+B283 NO [BADCHARSET UTF-8] KOI8-R is not supported
+B2 OK Fetch completed.
+* BAD Command line too long
+* BAD Disk crash, attempting salvage to a new disk!
+* BAD Empty command line
+BBB OK done
+b NO [AUTHENTICATIONFAILED] Authentication failed
+b OK CONVERSIONS completed
+b OK done
+b OK FETCH completed
+b OK Logged in as arnt
+* BYE Autologout; idle for too long
+* BYE IMAP4rev1 server logging out
+* BYE IMAP4rev1 Server logging out
+* BYE IMAP4rev2 Server logging out
+* BYE IMAP4 Server logging out
+* BYE See you later
+c000 OK CONVERT COMPLETED
+c001 OK CONVERT COMPLETED
+C001 OK Sprachwechsel durch LANGUAGE-Befehl ausgefuehrt
+C01 OK Completed
+C01 OK done
+C021 OK fetch completed
+C02 OK done
+C035 OK Completed
+C037 OK completed
+C04 OK done
+c101 OK Store (conditional) completed
+C180 OK Noop completed
+c1 NO [AUTHORIZATIONFAILED] No such authorization-ID
+C1 OK Capability command completed.
+C1 OK Sort completed.
+C270 OK Noop completed
+C282 OK SEARCH completed
+C283 OK SEARCH completed
+C284 OK SEARCH completed
+C285 OK SEARCH completed
+C286 OK SEARCH completed
+c2 NO [AUTHORIZATIONFAILED] Authenticator is not an admin
+C2 OK SEARCH completed.
+C2 OK Sort completed.
+C360 OK Noop completed
+C3 OK FETCH completed.
+C3 OK Sort completed.
+C4 OK FETCH completed.
+CA3 OK done
+* CAPABILITY IMAP4
+* CAPABILITY IMAP4 IMAP4rev1 AUTH=DIGEST-MD5 AUTH=ANONYMOUS
+* CAPABILITY IMAP4rev1 AUTH=DIGEST-MD5
+* CAPABILITY IMAP4rev1 AUTH=GSSAPI AUTH=PLAIN
+* CAPABILITY IMAP4rev1 AUTH=KERBEROS_V4
+* CAPABILITY IMAP4rev1 AUTH=KERBEROS_V4 XPIG-LATIN
+* CAPABILITY IMAP4rev1 AUTH=PLAIN
+* CAPABILITY IMAP4rev1 CONVERT BINARY [...]
+* CAPABILITY IMAP4rev1 CREATE-SPECIAL-USE
+* CAPABILITY IMAP4rev1 ID APPENDLIMIT
+* CAPABILITY IMAP4rev1 ID APPENDLIMIT=257890
+* CAPABILITY IMAP4rev1 ID LITERAL+ ENABLE X-GOOD-IDEA
+* CAPABILITY IMAP4rev1 IMAP4rev2 \
+* CAPABILITY IMAP4rev1 LITERAL+ AUTH=DIGEST-MD5
+* CAPABILITY IMAP4rev1 PREVIEW
+* CAPABILITY IMAP4rev1 PREVIEW SEARCHRES
+* CAPABILITY IMAP4rev1 SASL-IR AUTH=PLAIN
+* CAPABILITY IMAP4rev1 SASL-IR AUTH=PLAIN AUTH=EXTERNAL
+* CAPABILITY IMAP4rev1 SPECIAL-USE
+* CAPABILITY IMAP4rev1 STARTTLS AUTH=GSSAPI
+* CAPABILITY IMAP4rev1 STARTTLS AUTH=GSSAPI XPIG-LATIN
+* CAPABILITY IMAP4REV1 STARTTLS LITERAL+
+* CAPABILITY IMAP4rev1 STARTTLS LOGINDISABLED
+* CAPABILITY IMAP4rev1 XPIG-LATIN
+* CAPABILITY IMAP4rev2 AUTH=GSSAPI AUTH=PLAIN
+* CAPABILITY IMAP4rev2 AUTH=PLAIN
+* CAPABILITY IMAP4rev2 AUTH=PLAIN AUTH=EXTERNAL
+* CAPABILITY IMAP4rev2 ID LITERAL+ X-GOOD-IDEA
+* CAPABILITY IMAP4rev2 STARTTLS AUTH=GSSAPI
+* CAPABILITY IMAP4rev2 STARTTLS LOGINDISABLED
+* CAPABILITY IMAP4rev2 XPIG-LATIN
+* CAPABILITY IMAP4 XPIG-LATIN
+* CAPABILITY [...] QUOTA QUOTA=RES-STORAGE [...]
+* CAPABILITY [...] QUOTA QUOTA=RES-STORAGE QUOTA=RES-
+* CAPABILITY [...] QUOTA QUOTA=RES-STORAGE QUOTA=RES-MESSAGE
+* CAPABILITY [...] QUOTA QUOTASET QUOTA=RES-STORAGE QUOTA=RES-
+* CAPABILITY STARTTLS AUTH=GSSAPI IMAP4rev2 LOGINDISABLED
+c NO [COMPRESSIONACTIVE] DEFLATE active via TLS
+c NO [NOT-UTF-8] Mailbox does not support UTF-8 access
+c OK CONVERSIONS completed
+c OK INBOX selected
+* COMPARATOR i;basic
+* CONVERSION "image/gif" "image/jpeg" ("pix-y" "pix-x"
+* CONVERSION "image/gif" "image/png" ([...])
+* CONVERSION "image/png" "image/jpeg" (...)
+D0004 OK [MESSAGELIMIT 1000 1179] SEARCH completed with 1000
+D001 NO Diese Sprache ist nicht unterstuetzt
+D002 OK Sprachwechsel durch LANGUAGE-Befehl ausgefuehrt
+D003 OK Sprachwechsel durch LANGUAGE-Befehl ausgefuehrt
+D01 OK done
+D02 OK done
+D03 OK done
+d105 OK [MODIFIED 7,9] Conditional STORE failed
+D210 OK Noop completed
+D300 OK Noop completed
+D390 OK Noop completed
+d NO [EXPIRED] That password isn't valid any more
+d NO [PRIVACYREQUIRED] Connection offers no privacy
+d NO [UTF-8-ONLY] Mailbox requires UTF-8 client
+d OK DEFLATE active
+E001 OK Now speaking English
+e001 OK UID CONVERT COMPLETED
+e002 OK CONVERT COMPLETED
+E01 OK Sort completed
+E282 OK SEARCH completed
+E283 OK COPY completed, nothing copied
+efgh OK STARTLS completed
+efgh OK STARTTLS completed
+* ENABLED CONDSTORE
+* ENABLED CONDSTORE QRESYNC
+* ENABLED UIDONLY
+* ENABLED X-GOOD-IDEA
+e NO [CONTACTADMIN]
+e OK [CONTACTADMIN]
+e OK done
+* ESEARCH COUNT 18 ALL 1:17,21
+* ESEARCH COUNT 5 ALL 1:17,21
+* ESEARCH (TAG "a00") ADDTO (0 93)
+* ESEARCH (TAG "a00") (COUNT 17)
+* ESEARCH (TAG "A01") COUNT 23765
+* ESEARCH (TAG "A01") UID PARTIAL (-1:-100 ...)
+* ESEARCH (TAG "A02") UID PARTIAL (23500:24000 ...)
+* ESEARCH (TAG "A03") UID PARTIAL (1:500 ...)
+* ESEARCH (TAG "A04") UID PARTIAL (24000:24500 NIL)
+* ESEARCH (TAG "a1") MIN 2 MODSEQ 917162488
+* ESEARCH (TAG "A282") MIN 2 COUNT 3
+* ESEARCH (TAG "A283") ALL 2,10:11
+* ESEARCH (TAG "A284")
+* ESEARCH (TAG "A284") MIN 4
+* ESEARCH (TAG "A285") ALL 43
+* ESEARCH (TAG "A285") UID MIN 7 MAX 3800
+* ESEARCH (TAG "A286") COUNT 15
+* ESEARCH (TAG "a2") MAX 23 MODSEQ 907162321
+* ESEARCH (TAG "A301") UID ALL 17,900,901
+* ESEARCH (TAG "a3") MIN 2 MAX 23 MODSEQ 917162488
+* ESEARCH (TAG "a4") MIN 2 COUNT 10 MODSEQ 917162500
+* ESEARCH (TAG "a567") UID COUNT 17 ALL 4:18,21,28
+* ESEARCH (TAG "a567") UID COUNT 5 ALL 4:19,21,28
+* ESEARCH (TAG "a") ALL 1:3,5 MODSEQ 1236
+* ESEARCH (TAG "a") ALL 5,3,2,1 MODSEQ 1236
+* ESEARCH (TAG "B01") COUNT 74
+* ESEARCH (TAG "B01") UID ADDTO (0 32768:32769)
+* ESEARCH (TAG "B01") UID REMOVEFROM (0 32768)
+* ESEARCH (TAG "B02") COUNT 74
+* ESEARCH (TAG "B1") ALL 1,5,10 RELEVANCY (4 99 42)
+* ESEARCH (TAG "C01") UID ADDTO (1 2731:2733)
+* ESEARCH (TAG "C01") UID ADDTO (1 2733 1 2732 1 2731)
+* ESEARCH (TAG "C01") UID ADDTO (1 2733) ADDTO (1 2731:2732)
+* ESEARCH (TAG "C283") ALL 2,10:15,21
+* ESEARCH (TAG "C284") MIN 2
+* ESEARCH (TAG "C285") MIN 2 MAX 21
+* ESEARCH (TAG "C286") MIN 2 ALL 2,10:15,21
+* ESEARCH (TAG "C286") MIN 2 MAX 21 COUNT 8
+* ESEARCH (TAG "C2") ALL 5,10,1 RELEVANCY (99 42 4)
+* ESEARCH (TAG "C3") PARTIAL (1:10 42,9,34,13,15,4,2,7,23,82)
+* ESEARCH (TAG "E01") UID ALL 23765,23764,23763,23761,[...]
+* ESEARCH (TAG "G283") ALL 3:15,27,29:103
+* ESEARCH (TAG "h") ALL 1:3,5,8,13,21,42
+* ESEARCH (TAG "P283") ALL 882,1102,3003,3005:3006
+* ESEARCH (TAG "tag1" MAILBOX "folder1" UIDVALIDITY 1) UID ALL
+* ESEARCH (TAG "tag1" MAILBOX "folder2/banana" UIDVALIDITY 503)
+* ESEARCH (TAG "tag1" MAILBOX "folder2/peach" UIDVALIDITY 3) UID
+* ESEARCH (TAG "tag2" MAILBOX "folder1" UIDVALIDITY 1) UID ALL
+* ESEARCH (TAG "tag2" MAILBOX "folder2/salmon" UIDVALIDITY
+* ESEARCH UID COUNT 17 ALL 4:18,21,28
+* ESEARCH UID COUNT 5 ALL 4:19,21,28
+* EXISTS 93
+f001 OK CONVERT COMPLETED
+F282 OK SEARCH completed
+F283 OK COPY completed
+F284 OK STORE completed
+* FLAGS ($MDNSent \Flagged \Deleted \Draft \Seen)
+* FLAGS (\Answered \Flagged \Deleted \Draft \Seen)
+* FLAGS (\Answered \Flagged \Deleted \Seen \Draft)
+* FLAGS (Answered Flagged Deleted Seen Draft)
+* FLAGS (\Answered \Flagged \Draft \Deleted \Seen)
+* FLAGS (Deleted Seen)
+* FLAGS (\Deleted \Seen \Flagged)
+* FLAGS (\Flagged \Draft \Deleted \Seen)
+* FLAGS (\Flagged \Draft \Deleted \Seen $MDNSent)
+f NO [NOPERM] Access denied
+FXXZ OK CHECK Completed
+G0001 OK Getquota complete
+G0002 OK Getquotaroot complete
+g001 NO [MAXCONVERTMESSAGES 1]
+g001 NO [MAXCONVERTPARTS 1] You can only request 1 body part at
+G282 OK SEARCH completed
+G283 OK SEARCH completed
+* GENURLAUTH "imap://joe@example.com/INBOX/;uid=20/;section=1.2
+g NO [INUSE] Mailbox in use
+H282 OK SEARCH completed
+H283 OK SEARCH completed
+h OK [EXPUNGEISSUED] Search completed
+* ID ("name" "Cyrus" "version" "1.5" "os" "sunos"
+* ID NIL
+ijkl OK CAPABILITY completed
+i NO [CORRUPTION] Cannot open mailbox
+* JMAPACCESS "https://example.com/.well-known/jmap"
+j NO [SERVERBUG] This should not happen
+k1 OK [READ-ONLY] Done
+k2 OK [CLIENTBUG] Done
+* LANGUAGE (DE)
+* LANGUAGE (DE-IT)
+* LANGUAGE (EN)
+* LANGUAGE (EN DE IT i-default)
+* LIST () "\\" {12}
+* LIST () "\\" {17}
+* LIST () "\\" {27}
+* LIST () "/" ABC/DEF
+* LIST () "/" ABC//DEF     <=== must not do this
+* LIST () "/" ABC/DEF   <=== should do this
+* LIST (\Archive) "/" Archive/Default
+* LIST () "/" Banana
+* LIST () "/" Banana/Apple
+* LIST () "/" "baz2"
+* LIST () "/" "baz2/bar2"
+* LIST () "/" "baz2/bar22"
+* LIST () "/" "baz2/bar222"
+* LIST () "/" "baz2" ("CHILDINFO" ("SUBSCRIBED"))
+* LIST () "." blurdybloop
+* LIST () "/" blurdybloop
+* LIST () "/" "C"
+* LIST () "/" /DEF
+* LIST () "/" Drafts
+* LIST (\Drafts) "/" INBOX/Drafts
+* LIST (\Drafts) "/" MyDrafts
+* LIST (\Drafts) "/" SavedDrafts
+* LIST () "/" "eps2"
+* LIST () "/" "eps2/mamba"
+* LIST ...etc...
+* LIST () "." "foo"
+* LIST () "." foo
+* LIST () "/" foo
+* LIST () "/" "Foo"
+* LIST () "/" "foo2"
+* LIST () "/" "foo2/bar1"
+* LIST () "/" "foo2/bar2"
+* LIST () "/" "foo2" ("CHILDINFO" ("SUBSCRIBED"))
+* LIST () "." foo.bar
+* LIST () "/" foo/bar
+* LIST () "/" "Foo/Bar"
+* LIST () "/" "Foo/Baz"
+* LIST () "." "foo" (CHILDINFO ("SUBSCRIBED"))
+* LIST () "/" "Foo" ("CHILDINFO" ("SUBSCRIBED"))
+* LIST () "." "frop"
+* LIST () "/" "Fruit"
+* LIST () "/" "Fruit/Apple"
+* LIST () "/" "Fruit/Banana"
+* LIST () "." funny
+* LIST (\HasChildren) "/" "Foo"
+* LIST (\HasChildren) "/" "Fruit"
+* LIST (\HasChildren) "/" ITEM_1
+* LIST (\HasChildren) "/" ITEM_2
+* LIST (\HasChildren) "/" Projects
+* LIST (\HasChildren \Remote) "/" "Meat"
+* LIST (\HasChildren \Subscribed) "/" "Foo"
+* LIST (\HasChildren) "/" "Vegetable"
+* LIST (\HasNoChildren) "." bar
+* LIST (\HasNoChildren) "/" foo ("CHILDINFO" ("SUBSCRIBED"))
+* LIST (\HasNoChildren \Important) "/" "Important Messages"
+* LIST (\HasNoChildren) "/" "Imported Wine"
+* LIST (\HasNoChildren) "." INBOX
+* LIST (\HasNoChildren) "/" INBOX
+* LIST (\HasNoChildren) "/" ITEM_1/ITEM_1A
+* LIST (\HasNoChildren) "/" "Moo"
+* LIST (\HasNoChildren) "." renamed
+* LIST (\HasNoChildren \Subscribed) "/" "Moo"
+* LIST (\HasNoChildren) "/" ToDo
+* LIST (\HasNoChildren) "/" "Tofu"
+* LIST () "" INBOX
+* LIST () "."  "INBOX"
+* LIST () "." "INBOX"
+* LIST () "." INBOX
+* LIST () "/" "INBOX"
+* LIST () "/" INBOX
+* LIST () "." INBOX.bar
+* LIST () "/" ~/Mail/meetings
+* LIST (\Marked \Drafts \HasNoChildren) "/" MyDrafts
+* LIST (\Marked \Drafts) "/" MyDrafts
+* LIST (\Marked \HasNoChildren) "/" Inbox
+* LIST (\Marked) "/" Inbox
+* LIST (\Marked \NoInferiors) "/" "inbox"
+* LIST (\Marked \NoInferiors \Subscribed) "/" "inbox"
+* LIST (\Marked) "/" "Sent/December2003"
+* LIST (\Marked) ":" Tables (tablecloth (("edge" "lacy")
+* LIST () "/" "~mark/foo"
+* LIST () "/" "~mark/INBOX"
+* LIST () "/" "Moo"
+* LIST () "/" music/rock
+* LIST () "/" MyDrafts
+* LIST () "/" "NewMailbox"
+* LIST () "/" "NewMailbox" ("OLDNAME" ("OldMailbox"))
+* LIST (\NoInferiors) "/" "A/B"
+* LIST (\NoInferiors) "/" "C/D"
+* LIST (\NoInferiors) "/" "Drafts"
+* LIST (\NonExistent \Archive) "/" Archives
+* LIST (\NonExistent \Archive) "/" "#mh/Archives"
+* LIST (\NonExistent) "." "bar"
+* LIST (\NonExistent \Drafts) "/" Drafts
+* LIST (\NonExistent \Drafts) "/" "#mh/Drafts"
+* LIST (\NonExistent) "/" "Foo" ("CHILDINFO"
+* LIST (\NonExistent) "/" "Foo" ("CHILDINFO" ("SUBSCRIBED"))
+* LIST (\NonExistent \HasChildren) "/" also
+* LIST (\NonExistent \HasChildren) "/" music
+* LIST (\NonExistent) "." "INBOX.DeletedMailbox"
+* LIST (\NonExistent \Junk) "/" Junk
+* LIST (\NonExistent \Junk) "/" "#mh/Junk"
+* LIST (\NonExistent) "/" "qux2" ("CHILDINFO" ("SUBSCRIBED"))
+* LIST (\NonExistent \Sent) "/" "#mh/Sent Mail"
+* LIST (\NonExistent \Sent) "/" "Sent Mail"
+* LIST (\NonExistent \Trash) "/" "Deleted Items"
+* LIST (\NonExistent \Trash) "/" "#mh/Deleted Items"
+* LIST () "/" "Normalized" ("OLDNAME" ("NonNormalized"))
+* LIST (\Noselect) "/" ""
+* LIST (\Noselect) "/" /
+* LIST (\NoSelect) "." "bar"
+* LIST (\Noselect) "." foo
+* LIST (\Noselect) "/" foo
+* LIST (\Noselect) "/" ~/Mail/foo
+* LIST (\Noselect) "." #news.
+* LIST (\Noselect) "/" zowie
+* LIST () "." old-mail
+* LIST () "/" "Other Users/Karen"
+* LIST () "/" "Other Users/Matthew"
+* LIST () "/" "Other Users/Mike"
+* LIST () "/" "Other Users/Tesa"
+* LIST () "/" Projects
+* LIST () "/" "qux2/bar2"
+* LIST (\Remote) "/" also/jazz
+* LIST (\Remote) "/" "Bread"
+* LIST (\Remote \HasNoChildren) "/" "Bread"
+* LIST (\Remote) "/" "Meat"
+* LIST (\Remote \Subscribed) "/" "Bread"
+* LISTRIGHTS archive.imap anyone ""
+* LISTRIGHTS archive/imap anyone ""
+* LISTRIGHTS ~/Mail/saved smith la r swicdkxte
+* LIST () "/" sarasoop
+* LIST () "/" SavedDrafts
+* LIST () "/" "Sent/August2004"
+* LIST (\Sent \HasNoChildren) "/" SentMail
+* LIST (\Sent) "/" INBOX/Sent
+* LIST () "/" SentMail
+* LIST () "/" "Sent/March2004"
+* LIST (\Sent) "/" SentMail
+* LIST (\Subscribed) "/" "baz2/bar2"
+* LIST (\Subscribed) "/" "baz2/bar22"
+* LIST (\Subscribed) "/" "baz2/bar222"
+* LIST (\Subscribed) "/" "eps2"
+* LIST (\Subscribed) "/" "eps2" ("CHILDINFO" ("SUBSCRIBED"))
+* LIST (\Subscribed) "/" "eps2/mamba"
+* LIST (\Subscribed) "/" "foo2/bar1"
+* LIST (\Subscribed) "/" "foo2/bar2"
+* LIST (\Subscribed) "/" "Foo/Baz"
+* LIST (\Subscribed) "/" "Foo" ("CHILDINFO"
+* LIST (\Subscribed) "/" "Foo" ("CHILDINFO" ("SUBSCRIBED"))
+* LIST (\Subscribed) "/" "Fruit/Banana"
+* LIST (\Subscribed \HasChildren) "/" "Foo"
+* LIST (\Subscribed \HasChildren) "/" "Foo" ("CHILDINFO"
+* LIST (\Subscribed) "."  "INBOX"
+* LIST (\Subscribed) "." "INBOX"
+* LIST (\Subscribed \NonExistent) "/" foo/bar
+* LIST (\Subscribed \NonExistent) "/" "Fruit/Peach"
+* LIST (\Subscribed) "/" "qux2/bar2"
+* LIST (\Subscribed) "/" "SubscribedMailbox"
+* LIST (\Subscribed) "/" "Vegetable"
+* LIST (\Subscribed) "/" "Vegetable/Broccoli"
+* LIST () ":" Tables:new (tablecloth ("edge" "lacy")
+* LIST () "\\" TEST
+* LIST () "/" ToDo
+* LIST () "/" "Tofu"
+* LIST (\Trash \HasNoChildren) "/" Trash
+* LIST (\Trash) "/" INBOX/Trash
+* LIST (\Trash) "/" Trash
+* LIST () "/" "#Users/Mike/Foo"
+* LIST () "/" "#Users/Mike/INBOX"
+* LIST () "/" "Vegetable"
+* LIST () "/" "Vegetable/Broccoli"
+* LIST () "/" "Vegetable/Corn"
+* LIST () "/" zowie/bar
+l NO [CANNOT] Adjacent slashes are not supported
+* LSUB () "." #news.comp.mail.mime
+* LSUB () "." #news.comp.mail.misc
+* LSUB (\NoSelect) "." #news.comp.mail
+* MAILBOX blurdybloop
+* MAILBOX INBOX
+* METADATA "foo" ("/shared/vendor/cmu/cyrus-imapd/color" NIL)
+* METADATA "INBOX" (/private/comment "My comment"
+* METADATA "INBOX" (/private/comment "My comment")
+* METADATA "INBOX" (/private/comment "My own comment")
+* METADATA "INBOX" (/private/filters/values/small
+* METADATA "INBOX" /shared/comment
+* METADATA "INBOX" (/shared/comment "Its sunny outside!")
+* METADATA "INBOX" /shared/comment /private/comment
+* METADATA "INBOX" (/shared/comment "Shared comment"
+* METADATA INBOX ("/shared/vendor/cmu/cyrus-imapd/color" "#b71c1c")
+* METADATA "MyDrafts" (/private/specialuse "\\Drafts")
+* METADATA "MyDrafts" (/private/specialuse NIL)
+* METADATA "" /shared/comment
+* METADATA "" (/shared/comment "My comment")
+* METADATA "" (/shared/comment "Shared comment")
+m NO [LIMIT] At most 32 flags in one mailbox supported
+* MYRIGHTS Archive/Default lrwsip
+* MYRIGHTS "foo" lrs
+* MYRIGHTS "INBOX" lrswipkxtecda
+* MYRIGHTS INBOX lrwis
+* MYRIGHTS INBOX rwiptsldaex
+* MYRIGHTS TargetMailbox rsti
+* MYRIGHTS TargetMailbox rwis
+n1 NO [OVERQUOTA] Sorry
+n2 OK [OVERQUOTA] You are now over your soft quota
+* NAMESPACE (("INBOX/" "/")("Archive/" "/")) NIL (("Public/" "/"))
+* NAMESPACE (("INBOX." ".")) NIL  NIL
+* NAMESPACE (("" "/")("#mh/" "/" "X-PARAM"
+* NAMESPACE (("" "/")("#mh/" "/" "X-PARAM" ("FLAG1" "FLAG2")))
+* NAMESPACE (("" "/")) (("~" "/")) NIL
+* NAMESPACE (("" "/")) NIL NIL
+* NAMESPACE NIL NIL (("" "."))
+* NAMESPACE (("" "/")) NIL (("Public Folders/" "/"))
+* NAMESPACE (("" "/")) (("Other Users/" "/")) NIL
+* NAMESPACE (("" "/")) (("Other Users/" "/" "TRANSLATION"
+* NAMESPACE (("" "/"))(("Other Users/" "/" "TRANSLATION"
+* NAMESPACE (("" "/")) (("~" "/")) (("#shared/" "/")
+* NAMESPACE (("" "/")) (("#Users/" "/")) NIL
+* NO Disk is 98% full, please delete unnecessary data
+* NO Disk is 99% full, please delete unnecessary data
+* NO [MESSAGELIMIT 1000 23221] FETCH completed with 1000 partial
+* NO [NOUPDATE "B02"] Too many contexts
+* NO [OVERQUOTA] Soft quota has been exceeded
+* NO [UIDNOTSTICKY] Non-persistent UIDs
+o356 NO [ALREADYEXISTS] Mailbox "that" already exists
+o356 NO [HASCHILDREN] Mailbox "Notes" has children
+* OK [ALERT] System shutdown in 10 minutes
+* OK [ANNOTATIONS 20480 NOPRIVATE]
+* OK [APPENDUID 1 2000] Replacement Message ready
+* OK [APPENDUID 1 2001] Replacement Message ready
+* OK [APPENDUID 1 3003] Replacement Message ready
+* OK [CAPABILITY IMAP4rev1 AUTH=OAUTHBEARER SASL-IR] example1
+* OK [CAPABILITY IMAP4rev1 ENABLE CONDSTORE QRESYNC UIDONLY
+* OK [CAPABILITY IMAP4rev1 IMAP4rev2] example3
+* OK [CAPABILITY IMAP4REV1 LOGIN-REFERRALS STARTTLS
+* OK [CAPABILITY IMAP4REV1 NOTIFY]
+* OK [CAPABILITY IMAP4rev1 STARTTLS AUTH=ANONYMOUS] Welcome
+* OK [CAPABILITY IMAP4rev1 STARTTLS AUTH=CRAM-MD5] Welcome
+* OK [CAPABILITY IMAP4REV1 STARTTLS COMPRESS=DEFLATE]
+* OK [CAPABILITY IMAP4REV1 URLAUTH] example.com IMAP server
+* OK [CAPABILITY IMAP4rev2 AUTH=GSS] example4
+* OK [CAPABILITY IMAP4rev2] example2
+* OK [CAPABILITY IMAP4rev2 JMAPACCESS] done
+* OK [CAPABILITY IMAP4rev2 STARTTLS AUTH=GSSAPI
+* OK [CAPABILITY IMAP4rev2 STARTTLS AUTH=GSSAPI]
+* OK [CLOSED]
+* OK [CLOSED] Previous mailbox is now closed
+* OK [COPYUID 1397597919 20001:21000 22363:23362] Some
+* OK [COPYUID 1521475659 2 1] Completed
+* OK [COPYUID 1685977201 597 2] UID MOVE
+* OK [COPYUID 432432 42:69 1202:1229]
+* OK Greetings
+* OK [HIGHESTMODSEQ 12111230047]
+* OK [HIGHESTMODSEQ 20010715194045007]
+* OK [HIGHESTMODSEQ 20010715194045007] Highest
+. OK [HIGHESTMODSEQ 20010715194045319] Ok
+* OK [HIGHESTMODSEQ 3914] Highest
+* OK [HIGHESTMODSEQ 715194045007]
+* OK [HIGHESTMODSEQ 715194045007] Ok
+* OK [HIGHESTMODSEQ 90060115205545359]
+* OK [HIGHESTMODSEQ 90060115205545359] Highest
+* OK [HIGHESTMODSEQ 90060115205545359] Highest mailbox
+* OK [HIGHESTMODSEQ 90060115205545359] Highest mailbox mod-
+* OK [HIGHESTMODSEQ 90060128194045007]
+* OK [HIGHESTMODSEQ 90060128194045007] Highest mailbox
+* OK [HIGHESTMODSEQ 99] VANISHED reply with
+* OK [HIGHESTMODSEQ 99] VANISHED reply with MODSEQ 100 is delayed
+* OK Hi there
+* OK IMAP4rev1 server ready
+* OK IMAP4rev2 server ready
+* OK IMAP4 Server
+* OK IMAP4 server ready
+* OK [INPROGRESS ("A001" 454 1000)] Processed 45% of the items
+* OK [INPROGRESS ("A001" 999 1000)] Processed 99% of the items
+* OK [INPROGRESS ("A003" 1388 2001)] Still working on this...
+* OK [INPROGRESS ("A003" 175 2001)] Still working on this...
+* OK [INPROGRESS ("A003" 1876 2001)] Still working on this...
+* OK [INPROGRESS ("A003" 440 2001)] Still working on this...
+* OK [INPROGRESS ("A003" 987 2001)] Still working on this...
+* OK KerberosV4 IMAP4rev1 Server
+* OK KerberosV4 IMAP4 Server
+* OK [MAILBOXID (F2212ea87-6097-4256-9d51-71338625)] Ok
+* OK [NOMODSEQ] Sorry, this mailbox format doesn't support
+* OK [NOTIFICATIONOVERFLOW] ...A comment can go here...
+* OK [PERMANENTFLAGS ($MDNSent \Flagged \Deleted \Draft \Seen \*)]
+* OK [PERMANENTFLAGS (Answered Deleted Seen ]
+* OK [PERMANENTFLAGS (\Answered \Deleted \Seen \*)] Limited
+* OK [PERMANENTFLAGS (\Answered \Flagged \Draft
+* OK [PERMANENTFLAGS (\Deleted \Seen \Answered
+* OK [PERMANENTFLAGS (\Deleted \Seen \Flagged)] Limited
+* OK [PERMANENTFLAGS (\Deleted \Seen \*)] Limited
+* OK [PERMANENTFLAGS (\Deleted \Seen)] Limited
+* OK [PERMANENTFLAGS (\Flagged \Draft \Deleted \Seen \*)]
+* OK [PERMANENTFLAGS (\Flagged \Draft \Deleted \Seen $MDNSent)]
+* OK [PERMANENTFLAGS ()] No permanent flags permitted
+* OK [PERMANENTFLAGS (\Seen \Answered \Flagged \*)] L
+* OK rename foo renamed
+* OK Salvage successful, no data lost
+* OK [UIDNEXT 1]
+* OK [UIDNEXT 102] Predicted next UID
+* OK [UIDNEXT 201] Predicted next UID
+* OK [UIDNEXT 242344] Predicted next UID
+* OK [UIDNEXT 2] Predicted next UID
+* OK [UIDNEXT 30013] Predicted next UID
+* OK [UIDNEXT 34643]
+* OK [UIDNEXT 4392] Predicted next UID
+* OK [UIDNEXT 550] Predicted next UID
+* OK [UIDNEXT 567] Predicted next UID
+* OK [UIDNEXT 600] Predicted next UID
+* OK [UIDVALIDITY 1]
+* OK [UIDVALIDITY 123456789]
+* OK [UIDVALIDITY 12345] New UIDVALIDITY value!
+* OK [UIDVALIDITY 1364851417] UIDs valid
+* OK [UIDVALIDITY 3857529045] UIDs valid
+* OK [UIDVALIDITY 3857529045] UIDVALIDITY
+* OK [UIDVALIDITY 3857529045] Validity session-only
+* OK [UIDVALIDITY 67890007] UIDVALIDITY
+* OK [UIDVALIDITY 824708485] UID validity status
+* OK [UIDVALIDITY 890061587]
+* OK [UIDVALIDITY 894294713]
+* OK [UIDVALIDITY 9877410381] UIDs valid
+* OK [UNSEEN 10268]
+* OK [UNSEEN 10] Message 10 is first unseen
+* OK [UNSEEN 12] Message 12 is first unseen
+* OK [UNSEEN 1] Message 1 is first unseen
+* OK [UNSEEN 7] First unseen.
+* OK [UNSEEN 7] There are some unseen
+* OK [UNSEEN 7] There are some unseen messages in the mailbox
+* OK [UNSEEN 8] Message 8 is first unseen
+* OK [UNSEEN 9921] First unseen message
+* OK Welcome
+o NO [ALREADYEXISTS] Mailbox "that" already exists
+P282 OK SEARCH completed
+P283 OK completed
+p NO [NONEXISTENT] No such mailbox
+* PREAUTH IMAP4rev1 server logged in as Smith
+* PREAUTH IMAP4rev2 server logged in as Smith
+* PREAUTH IMAP4 server ready and logged in as Smith
+* QUOTA "!partition/sda4" (STORAGE 104 10923847)
+* QUOTAROOT comp.mail.mime
+* QUOTAROOT INBOX ""
+* QUOTAROOT INBOX "#user/alice" "!partition/sda4"
+* QUOTA "" (STORAGE 10 512)
+* QUOTA "#user/alice" (MESSAGE 42 1000)
+* QUOTA "#user/alice" (STORAGE 54 111 MESSAGE 42 1000)
+* QUOTA "#user/alice" (STORAGE 58 512)
+S0000 OK Getquota completed
+S0001 OK Rounded quota
+S0002 NO Cannot change system limit
+S0003 OK Status complete.
+s100 OK FETCH completed
+s101 OK search completed
+* SEARCH
+* SEARCH 1
+* SEARCH 1 2
+* SEARCH 1 2 3 5 8 13 21 34
+* SEARCH 1 2 3 5 8 13 21 42
+* SEARCH 1 4
+* SEARCH 1 5 10
+* SEARCH 17 900 901
+* SEARCH 2 3 5 7 11 13 17 19 23
+* SEARCH 2 3 6
+* SEARCH 2 4 5
+* SEARCH 25000 24998 (... UIDs ...) 23221
+* SEARCH 2 5 6 7 11 12 18 19 20 23 (MODSEQ 917162500)
+* SEARCH 27800 27798 (... 250 UIDs ...) 25001
+* SEARCH 2 84 882
+* SEARCH 34
+* SEARCH 404 406 407 408 410 412
+* SEARCH 43
+* SEARCH 447 735
+* SEARCH 65 34 27 7
+* SEARCH 6 9 ...
+* SEARCH 6 9 11 12 18 19 20 23 (MODSEQ 20010917162500)
+* SEARCH 7 10 12
+* SEARCH 8 10 13 14 15 16
+* SEARCH 882 1102 3003 3005 3006
+* SEARCH 993 994
+* SEARCH 993 994 995 996 997 998 999 1000 1001
+* SORT
+* SORT 2 3 4 5 1 11 10 6 7 9 8
+* SORT 2 3 6
+* SORT 2 84 882
+* SORT 5 10 1
+* SORT 5 3 4 1 2
+* STATUS bar (MAILBOXID (F6352ae03-b7f5-463c-896f-d8b48ee3))
+* STATUS blurdybloop (MESSAGES 231 UIDNEXT 44292
+* STATUS blurdybloop (MESSAGES 231 UIDNEXT 44292)
+* STATUS foo (MAILBOXID (F2212ea87-6097-4256-9d51-71338625))
+* STATUS "foo" (MESSAGES 30 UNSEEN 29)
+* STATUS "frop" (MESSAGES 8 SIZE 44421)
+* STATUS frop (MESSAGES 8 SIZE 44421 UIDNEXT 242344)
+* STATUS "INBOX" (APPENDLIMIT 257890)
+* STATUS INBOX (APPENDLIMIT 257890)
+* STATUS INBOX (MAILBOXID (Ff8e3ead4-9389-4aff-adb1-d8d89efd8cbf))
+* STATUS INBOX (MESSAGES 12 DELETED 4 DELETED-STORAGE 8)
+* STATUS "INBOX" (MESSAGES 17)
+* STATUS "INBOX" (MESSAGES 17 SIZE 16234)
+* STATUS "INBOX" (MESSAGES 17 UNSEEN 16)
+* STATUS Lists/Im2000 (UIDVALIDITY 901 UIDNEXT 1 MESSAGES 0)
+* STATUS Lists/Lemonade (HIGHESTMODSEQ 65666665 UIDVALIDITY
+* STATUS Lists/Lemonade (UIDNEXT 10002 MESSAGES 503)
+* STATUS Lists/Lemonade (UIDVALIDITY 4 UIDNEXT 10000
+* STATUS Lists/Lemonade (UIDVALIDITY 4 UIDNEXT 9999 MESSAGES
+* STATUS misc (UIDNEXT 999 MESSAGES 554)
+* STATUS misc (UIDVALIDITY 1 UIDNEXT 999)
+* STATUS renamed (MAILBOXID (F2212ea87-6097-4256-9d51-71338625))
+t1 NO [USEATTR] An \Important mailbox already exists
+t1 NO [USEATTR] Mailbox not created; unsupported use \Important
+t1 OK done
+t1 OK foo
+t1 OK List completed.
+t1 OK Mailbox created
+t1 OK STATUS completed
+t1 OK Success
+t2 OK done
+t2 OK foo
+t2 OK MySpecial created
+t3 NO [USEATTR] \All not supported
+t3 OK done
+t3 OK foo again
+t3 OK SETMETADATA complete
+t4 OK SETMETADATA complete
+t5 OK done
+tag1 OK done
+tag2 OK done
+* THREAD
+* THREAD (166)(167)(168)(169)(172)(170)(171)
+* THREAD (166)(167)(168)(169)(172)((170)(179))
+* THREAD (2)(3 6 (4 23)(44 7 96))
+* THREAD ((3)(5))
+t OK Search complete, nothing found
+* URLFETCH "imap://joe@example.com/INBOX/;uid=20/;
+* URLFETCH "imap://joe@example.com/INBOX/;uid=20/;section=1.2
+* VANISHED 1
+* VANISHED 3
+* VANISHED 405,407,410,425
+* VANISHED 5
+* VANISHED 504,508
+* VANISHED 505,507,510,625
+* VANISHED 5444
+* VANISHED 597
+* VANISHED 8
+* VANISHED (EARLIER) 1:2,4:5,7:8,10:11,13:14 [...]
+* VANISHED (EARLIER) 1:2,4:5,7:8,10:11,13:14,[...],
+* VANISHED (EARLIER) 1:5,7:8,10:15
+* VANISHED (EARLIER) 29998:29999,30001:30002,30004:30005,30007:
+* VANISHED (EARLIER) 300:310,405,411
+* VANISHED (EARLIER) 41,43:116,118,120:211,214:540
+* XPIG-LATIN ow-nay eaking-spay ig-pay atin-lay
+Z432 OK LIST completed
+Z433 OK RENAME completed
+Z434 OK LIST completed
+Z4S9 OK RENAME completed

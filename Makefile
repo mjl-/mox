@@ -79,6 +79,7 @@ fuzz:
 	go test -fullpath -fuzz . -fuzztime 5m ./dmarc
 	go test -fullpath -fuzz . -fuzztime 5m ./dmarcrpt
 	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./imapserver
+	go test -fullpath -fuzz . -fuzztime 5m ./imapclient
 	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./junk
 	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
 	go test -fullpath -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts

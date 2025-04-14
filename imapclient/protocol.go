@@ -2,48 +2,57 @@ package imapclient
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
 
-// Capability is a known string for with the ENABLED and CAPABILITY command.
+// Capability is a known string for with the ENABLED command and response and
+// CAPABILITY responses. Servers could send unknown values. Always in upper case.
 type Capability string
 
 const (
-	CapIMAP4rev1        Capability = "IMAP4rev1"
-	CapIMAP4rev2        Capability = "IMAP4rev2"
-	CapLoginDisabled    Capability = "LOGINDISABLED"
-	CapStarttls         Capability = "STARTTLS"
-	CapAuthPlain        Capability = "AUTH=PLAIN"
-	CapLiteralPlus      Capability = "LITERAL+"
-	CapLiteralMinus     Capability = "LITERAL-"
-	CapIdle             Capability = "IDLE"
-	CapNamespace        Capability = "NAMESPACE"
-	CapBinary           Capability = "BINARY"
-	CapUnselect         Capability = "UNSELECT"
-	CapUidplus          Capability = "UIDPLUS"
-	CapEsearch          Capability = "ESEARCH"
-	CapEnable           Capability = "ENABLE"
-	CapSave             Capability = "SAVE"
-	CapListExtended     Capability = "LIST-EXTENDED"
-	CapSpecialUse       Capability = "SPECIAL-USE"
-	CapMove             Capability = "MOVE"
-	CapUTF8Only         Capability = "UTF8=ONLY"
-	CapUTF8Accept       Capability = "UTF8=ACCEPT"
-	CapID               Capability = "ID"                 // ../rfc/2971:80
-	CapMetadata         Capability = "METADATA"           // ../rfc/5464:124
-	CapMetadataServer   Capability = "METADATA-SERVER"    // ../rfc/5464:124
-	CapSaveDate         Capability = "SAVEDATE"           // ../rfc/8514
-	CapCreateSpecialUse Capability = "CREATE-SPECIAL-USE" // ../rfc/6154:296
-	CapCompressDeflate  Capability = "COMPRESS=DEFLATE"   // ../rfc/4978:65
-	CapListMetadata     Capability = "LIST-METADTA"       // ../rfc/9590:73
-	CapMultiAppend      Capability = "MULTIAPPEND"        // ../rfc/3502:33
-	CapReplace          Capability = "REPLACE"            // ../rfc/8508:155
-	CapPreview          Capability = "PREVIEW"            // ../rfc/8970:114
-	CapMultiSearch      Capability = "MULTISEARCH"        // ../rfc/7377:187
-	CapNotify           Capability = "NOTIFY"             // ../rfc/5465:195
-	CapUIDOnly          Capability = "UIDONLY"            // ../rfc/9586:129
+	CapIMAP4rev1           Capability = "IMAP4REV1"               // ../rfc/3501:1310
+	CapIMAP4rev2           Capability = "IMAP4REV2"               // ../rfc/9051:1219
+	CapLoginDisabled       Capability = "LOGINDISABLED"           // ../rfc/3501:3792 ../rfc/9051:5436
+	CapStartTLS            Capability = "STARTTLS"                // ../rfc/3501:1327 ../rfc/9051:1238
+	CapAuthPlain           Capability = "AUTH=PLAIN"              // ../rfc/3501:1327 ../rfc/9051:1238
+	CapAuthExternal        Capability = "AUTH=EXTERNAL"           // ../rfc/4422:1575
+	CapAuthSCRAMSHA256Plus Capability = "AUTH=SCRAM-SHA-256-PLUS" // ../rfc/7677:80
+	CapAuthSCRAMSHA256     Capability = "AUTH=SCRAM-SHA-256"
+	CapAuthSCRAMSHA1Plus   Capability = "AUTH=SCRAM-SHA-1-PLUS" // ../rfc/5802:465
+	CapAuthSCRAMSHA1       Capability = "AUTH=SCRAM-SHA-1"
+	CapAuthCRAMMD5         Capability = "AUTH=CRAM-MD5" // ../rfc/2195:80
+	CapLiteralPlus         Capability = "LITERAL+"      // ../rfc/2088:45
+	CapLiteralMinus        Capability = "LITERAL-"      // ../rfc/7888:26 ../rfc/9051:847 Default since IMAP4rev2
+	CapIdle                Capability = "IDLE"          // ../rfc/2177:69 ../rfc/9051:3542 Default since IMAP4rev2
+	CapNamespace           Capability = "NAMESPACE"     // ../rfc/2342:130 ../rfc/9051:135 Default since IMAP4rev2
+	CapBinary              Capability = "BINARY"        // ../rfc/3516:100
+	CapUnselect            Capability = "UNSELECT"      // ../rfc/3691:78 ../rfc/9051:3667 Default since IMAP4rev2
+	CapUidplus             Capability = "UIDPLUS"       // ../rfc/4315:36 ../rfc/9051:8015 Default since IMAP4rev2
+	CapEsearch             Capability = "ESEARCH"       // ../rfc/4731:69 ../rfc/9051:8016 Default since IMAP4rev2
+	CapEnable              Capability = "ENABLE"        // ../rfc/5161:52 ../rfc/9051:8016 Default since IMAP4rev2
+	CapListExtended        Capability = "LIST-EXTENDED" // ../rfc/5258:150 ../rfc/9051:7987 Syntax except multiple mailboxes default since IMAP4rev2
+	CapSpecialUse          Capability = "SPECIAL-USE"   // ../rfc/6154:156 ../rfc/9051:8021 Special-use attributes in LIST responses by default since IMAP4rev2
+	CapMove                Capability = "MOVE"          // ../rfc/6851:87 ../rfc/9051:8018 Default since IMAP4rev2
+	CapUTF8Only            Capability = "UTF8=ONLY"
+	CapUTF8Accept          Capability = "UTF8=ACCEPT"
+	CapCondstore           Capability = "CONDSTORE"          // ../rfc/7162:411
+	CapQresync             Capability = "QRESYNC"            // ../rfc/7162:1376
+	CapID                  Capability = "ID"                 // ../rfc/2971:80
+	CapMetadata            Capability = "METADATA"           // ../rfc/5464:124
+	CapMetadataServer      Capability = "METADATA-SERVER"    // ../rfc/5464:124
+	CapSaveDate            Capability = "SAVEDATE"           // ../rfc/8514
+	CapCreateSpecialUse    Capability = "CREATE-SPECIAL-USE" // ../rfc/6154:296
+	CapCompressDeflate     Capability = "COMPRESS=DEFLATE"   // ../rfc/4978:65
+	CapListMetadata        Capability = "LIST-METADATA"      // ../rfc/9590:73
+	CapMultiAppend         Capability = "MULTIAPPEND"        // ../rfc/3502:33
+	CapReplace             Capability = "REPLACE"            // ../rfc/8508:155
+	CapPreview             Capability = "PREVIEW"            // ../rfc/8970:114
+	CapMultiSearch         Capability = "MULTISEARCH"        // ../rfc/7377:187
+	CapNotify              Capability = "NOTIFY"             // ../rfc/5465:195
+	CapUIDOnly             Capability = "UIDONLY"            // ../rfc/9586:129
 )
 
 // Status is the tagged final result of a command.
@@ -55,63 +64,134 @@ const (
 	OK  Status = "OK"  // Command succeeded.
 )
 
+// Response is a response to an IMAP command including any preceding untagged
+// responses. Response implements the error interface through result.
+//
+// See [UntaggedResponseGet] and [UntaggedResponseList] to retrieve specific types
+// of untagged responses.
+type Response struct {
+	Untagged []Untagged
+	Result
+}
+
+var (
+	ErrMissing  = errors.New("no response of type")        // Returned by UntaggedResponseGet.
+	ErrMultiple = errors.New("multiple responses of type") // Idem.
+)
+
+// UntaggedResponseGet returns the single untagged response of type T. Only
+// [ErrMissing] or [ErrMultiple] can be returned as error.
+func UntaggedResponseGet[T Untagged](resp Response) (T, error) {
+	var t T
+	var have bool
+	for _, e := range resp.Untagged {
+		if tt, ok := e.(T); ok {
+			if have {
+				return t, ErrMultiple
+			}
+			t = tt
+		}
+	}
+	if !have {
+		return t, ErrMissing
+	}
+	return t, nil
+}
+
+// UntaggedResponseList returns all untagged responses of type T.
+func UntaggedResponseList[T Untagged](resp Response) []T {
+	var l []T
+	for _, e := range resp.Untagged {
+		if tt, ok := e.(T); ok {
+			l = append(l, tt)
+		}
+	}
+	return l
+}
+
 // Result is the final response for a command, indicating success or failure.
 type Result struct {
 	Status Status
-	RespText
+	Code   Code   // Set if response code is present.
+	Text   string // Any remaining text.
 }
 
-// CodeArg represents a response code with arguments, i.e. the data between [] in the response line.
-type CodeArg interface {
-	CodeString() string
-}
-
-// CodeOther is a valid but unrecognized response code.
-type CodeOther struct {
-	Code string
-	Args []string
-}
-
-func (c CodeOther) CodeString() string {
-	return c.Code + " " + strings.Join(c.Args, " ")
-}
-
-// CodeWords is a code with space-separated string parameters. E.g. CAPABILITY.
-type CodeWords struct {
-	Code string
-	Args []string
-}
-
-func (c CodeWords) CodeString() string {
-	s := c.Code
-	for _, w := range c.Args {
-		s += " " + w
+func (r Result) Error() string {
+	s := fmt.Sprintf("IMAP result %s", r.Status)
+	if r.Code != nil {
+		s += "[" + r.Code.CodeString() + "]"
+	}
+	if r.Text != "" {
+		s += " " + r.Text
 	}
 	return s
 }
 
-// CodeList is a code with a list with space-separated strings as parameters. E.g. BADCHARSET, PERMANENTFLAGS.
-type CodeList struct {
-	Code string
-	Args []string // If nil, no list was present. List can also be empty.
+// Code represents a response code with optional arguments, i.e. the data between [] in the response line.
+type Code interface {
+	CodeString() string
 }
 
-func (c CodeList) CodeString() string {
-	s := c.Code
-	if c.Args == nil {
+// CodeWord is a response code without parameters, always in upper case.
+type CodeWord string
+
+func (c CodeWord) CodeString() string {
+	return string(c)
+}
+
+// CodeOther is an unrecognized response code with parameters.
+type CodeParams struct {
+	Code string // Always in upper case.
+	Args []string
+}
+
+func (c CodeParams) CodeString() string {
+	return c.Code + " " + strings.Join(c.Args, " ")
+}
+
+// CodeCapability is a CAPABILITY response code with the capabilities supported by the server.
+type CodeCapability []Capability
+
+func (c CodeCapability) CodeString() string {
+	var s string
+	for _, c := range c {
+		s += " " + string(c)
+	}
+	return "CAPABILITY" + s
+}
+
+type CodeBadCharset []string
+
+func (c CodeBadCharset) CodeString() string {
+	s := "BADCHARSET"
+	if len(c) == 0 {
 		return s
 	}
-	return s + "(" + strings.Join(c.Args, " ") + ")"
+	return s + " (" + strings.Join([]string(c), " ") + ")"
 }
 
-// CodeUint is a code with a uint32 parameter, e.g. UIDNEXT and UIDVALIDITY.
-type CodeUint struct {
-	Code string
-	Num  uint32
+type CodePermanentFlags []string
+
+func (c CodePermanentFlags) CodeString() string {
+	return "PERMANENTFLAGS (" + strings.Join([]string(c), " ") + ")"
 }
 
-func (c CodeUint) CodeString() string {
-	return fmt.Sprintf("%s %d", c.Code, c.Num)
+type CodeUIDNext uint32
+
+func (c CodeUIDNext) CodeString() string {
+	return fmt.Sprintf("UIDNEXT %d", c)
+}
+
+type CodeUIDValidity uint32
+
+func (c CodeUIDValidity) CodeString() string {
+	return fmt.Sprintf("UIDVALIDITY %d", c)
+}
+
+type CodeUnseen uint32
+
+func (c CodeUnseen) CodeString() string {
+	return fmt.Sprintf("UNSEEN %d", c)
 }
 
 // "APPENDUID" response code.
@@ -196,11 +276,32 @@ func (c CodeBadEvent) CodeString() string {
 	return fmt.Sprintf("BADEVENT (%s)", strings.Join([]string(c), " "))
 }
 
-// RespText represents a response line minus the leading tag.
-type RespText struct {
-	Code    string  // The first word between [] after the status.
-	CodeArg CodeArg // Set if code has a parameter.
-	More    string  // Any remaining text.
+// "METADATA LONGENTRIES number" response for GETMETADATA command.
+type CodeMetadataLongEntries uint32
+
+func (c CodeMetadataLongEntries) CodeString() string {
+	return fmt.Sprintf("METADATA LONGENTRIES %d", c)
+}
+
+// "METADATA (MAXSIZE number)" response for SETMETADATA command.
+type CodeMetadataMaxSize uint32
+
+func (c CodeMetadataMaxSize) CodeString() string {
+	return fmt.Sprintf("METADATA (MAXSIZE %d)", c)
+}
+
+// "METADATA (TOOMANY)" response for SETMETADATA command.
+type CodeMetadataTooMany struct{}
+
+func (c CodeMetadataTooMany) CodeString() string {
+	return "METADATA (TOOMANY)"
+}
+
+// "METADATA (NOPRIVATE)" response for SETMETADATA command.
+type CodeMetadataNoPrivate struct{}
+
+func (c CodeMetadataNoPrivate) CodeString() string {
+	return "METADATA (NOPRIVATE)"
 }
 
 // atom or string.
@@ -241,17 +342,30 @@ func syncliteral(s string) string {
 // todo: make an interface that the untagged responses implement?
 type Untagged any
 
-type UntaggedBye RespText
-type UntaggedPreauth RespText
+type UntaggedBye struct {
+	Code Code   // Set if response code is present.
+	Text string // Any remaining text.
+}
+type UntaggedPreauth struct {
+	Code Code   // Set if response code is present.
+	Text string // Any remaining text.
+}
 type UntaggedExpunge uint32
 type UntaggedExists uint32
 type UntaggedRecent uint32
-type UntaggedCapability []string
-type UntaggedEnabled []string
+
+// UntaggedCapability lists all capabilities the server implements.
+type UntaggedCapability []Capability
+
+// UntaggedEnabled indicates the capabilities that were enabled on the connection
+// by the server, typically in response to an ENABLE command.
+type UntaggedEnabled []Capability
+
 type UntaggedResult Result
 type UntaggedFlags []string
 type UntaggedList struct {
 	// ../rfc/9051:6690
+
 	Flags     []string
 	Separator byte // 0 for NIL
 	Mailbox   string
@@ -272,8 +386,9 @@ type UntaggedUIDFetch struct {
 }
 type UntaggedSearch []uint32
 
-// ../rfc/7162:1101
 type UntaggedSearchModSeq struct {
+	// ../rfc/7162:1101
+
 	Nums   []uint32
 	ModSeq int64
 }
@@ -282,8 +397,10 @@ type UntaggedStatus struct {
 	Attrs   map[StatusAttr]int64 // Upper case status attributes.
 }
 
-// ../rfc/5464:716 Unsolicited response, indicating an annotation has changed.
+// Unsolicited response, indicating an annotation has changed.
 type UntaggedMetadataKeys struct {
+	// ../rfc/5464:716
+
 	Mailbox string // Empty means not specific to mailbox.
 
 	// Keys that have changed. To get values (or determine absence), the server must be
@@ -299,14 +416,16 @@ type Annotation struct {
 	Value    []byte
 }
 
-// ../rfc/5464:683
 type UntaggedMetadataAnnotations struct {
+	// ../rfc/5464:683
+
 	Mailbox     string // Empty means not specific to mailbox.
 	Annotations []Annotation
 }
 
-// ../rfc/9051:7059 ../9208:712
 type StatusAttr string
+
+// ../rfc/9051:7059 ../9208:712
 
 const (
 	StatusMessages       StatusAttr = "MESSAGES"
@@ -326,6 +445,7 @@ type UntaggedNamespace struct {
 }
 type UntaggedLsub struct {
 	// ../rfc/3501:4833
+
 	Flags     []string
 	Separator byte
 	Mailbox   string
@@ -395,6 +515,7 @@ type EsearchDataExt struct {
 
 type NamespaceDescr struct {
 	// ../rfc/9051:6769
+
 	Prefix    string
 	Separator byte // If 0 then separator was absent.
 	Exts      []NamespaceExtension
@@ -402,13 +523,14 @@ type NamespaceDescr struct {
 
 type NamespaceExtension struct {
 	// ../rfc/9051:6773
+
 	Key    string
 	Values []string
 }
 
 // FetchAttr represents a FETCH response attribute.
 type FetchAttr interface {
-	Attr() string // Name of attribute.
+	Attr() string // Name of attribute in upper case, e.g. "UID".
 }
 
 type NumSet struct {
@@ -435,14 +557,14 @@ func (ns NumSet) String() string {
 }
 
 func ParseNumSet(s string) (ns NumSet, rerr error) {
-	c := Conn{br: bufio.NewReader(strings.NewReader(s))}
+	c := Proto{br: bufio.NewReader(strings.NewReader(s))}
 	defer c.recover(&rerr)
 	ns = c.xsequenceSet()
 	return
 }
 
 func ParseUIDRange(s string) (nr NumRange, rerr error) {
-	c := Conn{br: bufio.NewReader(strings.NewReader(s))}
+	c := Proto{br: bufio.NewReader(strings.NewReader(s))}
 	defer c.recover(&rerr)
 	nr = c.xuidrange()
 	return
@@ -481,6 +603,7 @@ type TaggedExtComp struct {
 
 type TaggedExtVal struct {
 	// ../rfc/9051:7111
+
 	Number *int64
 	SeqSet *NumSet
 	Comp   *TaggedExtComp // If SimpleNumber and SimpleSeqSet is nil, this is a Comp. But Comp is optional and can also be nil. Not great.
@@ -488,6 +611,7 @@ type TaggedExtVal struct {
 
 type MboxListExtendedItem struct {
 	// ../rfc/9051:6699
+
 	Tag string
 	Val TaggedExtVal
 }
@@ -522,8 +646,10 @@ type FetchInternalDate struct {
 
 func (f FetchInternalDate) Attr() string { return "INTERNALDATE" }
 
-// "SAVEDATE" fetch response. ../rfc/8514:265
+// "SAVEDATE" fetch response.
 type FetchSaveDate struct {
+	// ../rfc/8514:265
+
 	SaveDate *time.Time // nil means absent for message.
 }
 
@@ -552,6 +678,7 @@ func (f FetchRFC822Text) Attr() string { return "RFC822.TEXT" }
 // "BODYSTRUCTURE" fetch response.
 type FetchBodystructure struct {
 	// ../rfc/9051:6355
+
 	RespAttr string
 	Body     any // BodyType*
 }
@@ -561,6 +688,7 @@ func (f FetchBodystructure) Attr() string { return f.RespAttr }
 // "BODY" fetch response.
 type FetchBody struct {
 	// ../rfc/9051:6756 ../rfc/9051:6985
+
 	RespAttr string
 	Section  string // todo: parse more ../rfc/9051:6985
 	Offset   int32
@@ -580,6 +708,7 @@ type BodyFields struct {
 // subparts and the multipart media subtype. Used in a FETCH response.
 type BodyTypeMpart struct {
 	// ../rfc/9051:6411
+
 	Bodies       []any // BodyTypeBasic, BodyTypeMsg, BodyTypeText
 	MediaSubtype string
 	Ext          *BodyExtensionMpart
@@ -589,6 +718,7 @@ type BodyTypeMpart struct {
 // response.
 type BodyTypeBasic struct {
 	// ../rfc/9051:6407
+
 	MediaType, MediaSubtype string
 	BodyFields              BodyFields
 	Ext                     *BodyExtension1Part
@@ -598,6 +728,7 @@ type BodyTypeBasic struct {
 // response.
 type BodyTypeMsg struct {
 	// ../rfc/9051:6415
+
 	MediaType, MediaSubtype string
 	BodyFields              BodyFields
 	Envelope                Envelope
@@ -610,6 +741,7 @@ type BodyTypeMsg struct {
 // response.
 type BodyTypeText struct {
 	// ../rfc/9051:6418
+
 	MediaType, MediaSubtype string
 	BodyFields              BodyFields
 	Lines                   int64
@@ -618,26 +750,42 @@ type BodyTypeText struct {
 
 // BodyExtension1Part has the extensible form fields of a BODYSTRUCTURE for
 // multiparts.
+//
+// Fields in this struct are optional in IMAP4, and can be NIL or contain a value.
+// The first field is always present, otherwise the "parent" struct would have a
+// nil *BodyExtensionMpart. The second and later fields are nil when absent. For
+// non-reference types (e.g. strings), an IMAP4 NIL is represented as a pointer to
+// (*T)(nil). For reference types (e.g. slices), an IMAP4 NIL is represented by a
+// pointer to nil.
 type BodyExtensionMpart struct {
 	// ../rfc/9051:5986 ../rfc/3501:4161 ../rfc/9051:6371 ../rfc/3501:4599
+
 	Params            [][2]string
-	Disposition       string
-	DispositionParams [][2]string
-	Language          []string
-	Location          string
-	More              []BodyExtension
+	Disposition       **string
+	DispositionParams *[][2]string
+	Language          *[]string
+	Location          **string
+	More              []BodyExtension // Nil if absent.
 }
 
 // BodyExtension1Part has the extensible form fields of a BODYSTRUCTURE for
 // non-multiparts.
+//
+// Fields in this struct are optional in IMAP4, and can be NIL or contain a value.
+// The first field is always present, otherwise the "parent" struct would have a
+// nil *BodyExtensionMpart. The second and later fields are nil when absent. For
+// non-reference types (e.g. strings), an IMAP4 NIL is represented as a pointer to
+// (*T)(nil). For reference types (e.g. slices), an IMAP4 NIL is represented by a
+// pointer to nil.
 type BodyExtension1Part struct {
 	// ../rfc/9051:6023 ../rfc/3501:4191 ../rfc/9051:6366 ../rfc/3501:4584
-	MD5               string
-	Disposition       string
-	DispositionParams [][2]string
-	Language          []string
-	Location          string
-	More              []BodyExtension
+
+	MD5               *string
+	Disposition       **string
+	DispositionParams *[][2]string
+	Language          *[]string
+	Location          **string
+	More              []BodyExtension // Nil means absent.
 }
 
 // BodyExtension has the additional extension fields for future expansion of

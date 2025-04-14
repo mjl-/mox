@@ -56,10 +56,10 @@ func testMove(t *testing.T, uidonly bool) {
 		tc.client.Select("inbox")
 
 		tc.transactf("no", "move 1 nonexistent")
-		tc.xcode("TRYCREATE")
+		tc.xcodeWord("TRYCREATE")
 
 		tc.transactf("no", "move 1 expungebox")
-		tc.xcode("TRYCREATE")
+		tc.xcodeWord("TRYCREATE")
 
 		tc.transactf("no", "move 1 inbox") // Cannot move to same mailbox.
 
@@ -68,7 +68,7 @@ func testMove(t *testing.T, uidonly bool) {
 
 		tc.transactf("ok", "move 1:* Trash")
 		tc.xuntagged(
-			imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "COPYUID", CodeArg: imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}, To: []imapclient.NumRange{{First: 1, Last: uint32ptr(2)}}}, More: "moved"}},
+			imapclient.UntaggedResult{Status: "OK", Code: imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}, To: []imapclient.NumRange{{First: 1, Last: uint32ptr(2)}}}, Text: "moved"},
 			imapclient.UntaggedExpunge(1),
 			imapclient.UntaggedExpunge(1),
 		)
@@ -92,12 +92,12 @@ func testMove(t *testing.T, uidonly bool) {
 	tc.transactf("ok", "uid move 6:5 Trash")
 	if uidonly {
 		tc.xuntagged(
-			imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "COPYUID", CodeArg: imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 5, Last: uint32ptr(6)}}, To: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}}, More: "moved"}},
+			imapclient.UntaggedResult{Status: "OK", Code: imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 5, Last: uint32ptr(6)}}, To: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}}, Text: "moved"},
 			imapclient.UntaggedVanished{UIDs: xparseNumSet("5:6")},
 		)
 	} else {
 		tc.xuntagged(
-			imapclient.UntaggedResult{Status: "OK", RespText: imapclient.RespText{Code: "COPYUID", CodeArg: imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 5, Last: uint32ptr(6)}}, To: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}}, More: "moved"}},
+			imapclient.UntaggedResult{Status: "OK", Code: imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 5, Last: uint32ptr(6)}}, To: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}}, Text: "moved"},
 			imapclient.UntaggedExpunge(1),
 			imapclient.UntaggedExpunge(1),
 		)

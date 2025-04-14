@@ -17,32 +17,34 @@ import (
 	"github.com/mjl-/mox/scram"
 )
 
-// Capability requests a list of capabilities from the server. They are returned in
-// an UntaggedCapability response. The server also sends capabilities in initial
-// server greeting, in the response code.
-func (c *Conn) Capability() (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("capability")
+// Capability writes the IMAP4 "CAPABILITY" command, requesting a list of
+// capabilities from the server. They are returned in an UntaggedCapability
+// response. The server also sends capabilities in initial server greeting, in the
+// response code.
+func (c *Conn) Capability() (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("capability")
 }
 
-// Noop does nothing on its own, but a server will return any pending untagged
-// responses for new message delivery and changes to mailboxes.
-func (c *Conn) Noop() (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("noop")
+// Noop writes the IMAP4 "NOOP" command, which does nothing on its own, but a
+// server will return any pending untagged responses for new message delivery and
+// changes to mailboxes.
+func (c *Conn) Noop() (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("noop")
 }
 
-// Logout ends the IMAP session by writing a LOGOUT command. Close must still be
-// called on this client to close the socket.
-func (c *Conn) Logout() (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("logout")
+// Logout ends the IMAP4 session by writing an IMAP "LOGOUT" command. [Conn.Close]
+// must still be called on this client to close the socket.
+func (c *Conn) Logout() (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("logout")
 }
 
-// Starttls enables TLS on the connection with the STARTTLS command.
-func (c *Conn) Starttls(config *tls.Config) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	untagged, result, rerr = c.Transactf("starttls")
+// StartTLS enables TLS on the connection with the IMAP4 "STARTTLS" command.
+func (c *Conn) StartTLS(config *tls.Config) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	resp, rerr = c.transactf("starttls")
 	c.xcheckf(rerr, "starttls command")
 
 	conn := c.xprefixConn()
@@ -50,32 +52,43 @@ func (c *Conn) Starttls(config *tls.Config) (untagged []Untagged, result Result,
 	err := tlsConn.Handshake()
 	c.xcheckf(err, "tls handshake")
 	c.conn = tlsConn
-	return untagged, result, nil
+	return
 }
 
-// Login authenticates with username and password
-func (c *Conn) Login(username, password string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// Login authenticates using the IMAP4 "LOGIN" command, sending the plain text
+// password to the server.
+//
+// Authentication is not allowed while the "LOGINDISABLED" capability is announced.
+// Call [Conn.StartTLS] first.
+//
+// See [Conn.AuthenticateSCRAM] for a better authentication mechanism.
+func (c *Conn) Login(username, password string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
-	c.LastTag = c.nextTag()
-	fmt.Fprintf(c.xbw, "%s login %s ", c.LastTag, astring(username))
+	fmt.Fprintf(c.xbw, "%s login %s ", c.nextTag(), astring(username))
 	defer c.xtracewrite(mlog.LevelTraceauth)()
 	fmt.Fprintf(c.xbw, "%s\r\n", astring(password))
 	c.xtracewrite(mlog.LevelTrace) // Restore.
-	return c.Response()
+	return c.responseOK()
 }
 
-// Authenticate with plaintext password using AUTHENTICATE PLAIN.
-func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// AuthenticatePlain executes the AUTHENTICATE command with SASL mechanism "PLAIN",
+// sending the password in plain text password to the server.
+//
+// Required capability: "AUTH=PLAIN"
+//
+// Authentication is not allowed while the "LOGINDISABLED" capability is announced.
+// Call [Conn.StartTLS] first.
+//
+// See [Conn.AuthenticateSCRAM] for a better authentication mechanism.
+func (c *Conn) AuthenticatePlain(username, password string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
-	err := c.Commandf("", "authenticate plain")
+	err := c.WriteCommandf("", "authenticate plain")
 	c.xcheckf(err, "writing authenticate command")
-	_, untagged, result, rerr = c.ReadContinuation()
-	c.xcheckf(rerr, "reading continuation")
-	if result.Status != "" {
-		c.xerrorf("got result status %q, expected continuation", result.Status)
-	}
+	_, rerr = c.readContinuation()
+	c.xresponse(rerr, &resp)
+
 	defer c.xtracewrite(mlog.LevelTraceauth)()
 	xw := base64.NewEncoder(base64.StdEncoding, c.xbw)
 	fmt.Fprintf(xw, "\u0000%s\u0000%s", username, password)
@@ -83,23 +96,31 @@ func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged
 	c.xtracewrite(mlog.LevelTrace) // Restore.
 	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()
-	return c.Response()
+	return c.responseOK()
 }
 
 // todo: implement cram-md5, write its credentials as traceauth.
 
-// Authenticate with SCRAM-SHA-256(-PLUS) or SCRAM-SHA-1(-PLUS). With SCRAM, the
-// password is not exchanged in plaintext form, but only derived hashes are
-// exchanged by both parties as proof of knowledge of password.
+// AuthenticateSCRAM executes the IMAP4 "AUTHENTICATE" command with one of the
+// following SASL mechanisms: SCRAM-SHA-256(-PLUS) or SCRAM-SHA-1(-PLUS).//
+//
+// With SCRAM, the password is not sent to the server in plain text, but only
+// derived hashes are exchanged by both parties as proof of knowledge of password.
+//
+// Authentication is not allowed while the "LOGINDISABLED" capability is announced.
+// Call [Conn.StartTLS] first.
+//
+// Required capability: SCRAM-SHA-256-PLUS, SCRAM-SHA-256, SCRAM-SHA-1-PLUS,
+// SCRAM-SHA-1.
 //
 // The PLUS variants bind the authentication exchange to the TLS connection,
 // detecting MitM attacks.
-func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, password string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+func (c *Conn) AuthenticateSCRAM(mechanism string, h func() hash.Hash, username, password string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
 	var cs *tls.ConnectionState
-	lmethod := strings.ToLower(method)
-	if strings.HasSuffix(lmethod, "-plus") {
+	lmech := strings.ToLower(mechanism)
+	if strings.HasSuffix(lmech, "-plus") {
 		tlsConn, ok := c.conn.(*tls.Conn)
 		if !ok {
 			c.xerrorf("cannot use scram plus without tls")
@@ -110,17 +131,14 @@ func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, pa
 	sc := scram.NewClient(h, username, "", false, cs)
 	clientFirst, err := sc.ClientFirst()
 	c.xcheckf(err, "scram clientFirst")
-	c.LastTag = c.nextTag()
-	err = c.Writelinef("%s authenticate %s %s", c.LastTag, method, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
+	// todo: only send clientFirst if server has announced SASL-IR
+	err = c.Writelinef("%s authenticate %s %s", c.nextTag(), mechanism, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
 	c.xcheckf(err, "writing command line")
 
 	xreadContinuation := func() []byte {
 		var line string
-		line, untagged, result, rerr = c.ReadContinuation()
-		c.xcheckf(err, "read continuation")
-		if result.Status != "" {
-			c.xerrorf("got result status %q, expected continuation", result.Status)
-		}
+		line, rerr = c.readContinuation()
+		c.xresponse(rerr, &resp)
 		buf, err := base64.StdEncoding.DecodeString(line)
 		c.xcheckf(err, "parsing base64 from remote")
 		return buf
@@ -140,18 +158,19 @@ func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, pa
 	err = c.Writelinef("%s", base64.StdEncoding.EncodeToString(nil))
 	c.xcheckf(err, "scram client end")
 
-	return c.ResponseOK()
+	return c.responseOK()
 }
 
-// CompressDeflate enables compression with deflate on the connection.
+// CompressDeflate enables compression with deflate on the connection by executing
+// the IMAP4 "COMPRESS=DEFAULT" command.
 //
-// Only possible when server has announced the COMPRESS=DEFLATE capability.
+// Required capability: "COMPRESS=DEFLATE".
 //
 // State: Authenticated or selected.
-func (c *Conn) CompressDeflate() (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+func (c *Conn) CompressDeflate() (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
-	untagged, result, rerr = c.Transactf("compress deflate")
+	resp, rerr = c.transactf("compress deflate")
 	c.xcheck(rerr)
 
 	c.xflateBW = bufio.NewWriter(c)
@@ -172,89 +191,98 @@ func (c *Conn) CompressDeflate() (untagged []Untagged, result Result, rerr error
 	return
 }
 
-// Enable enables capabilities for use with the connection, verifying the server has indeed enabled them.
-func (c *Conn) Enable(capabilities ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// Enable enables capabilities for use with the connection by executing the IMAP4 "ENABLE" command.
+//
+// Required capability: "ENABLE" or "IMAP4rev2"
+func (c *Conn) Enable(capabilities ...Capability) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
-	untagged, result, rerr = c.Transactf("enable %s", strings.Join(capabilities, " "))
-	c.xcheck(rerr)
-	var enabled UntaggedEnabled
-	c.xgetUntagged(untagged, &enabled)
-	got := map[string]struct{}{}
-	for _, cap := range enabled {
-		got[cap] = struct{}{}
+	var caps strings.Builder
+	for _, c := range capabilities {
+		caps.WriteString(" " + string(c))
 	}
-	for _, cap := range capabilities {
-		if _, ok := got[cap]; !ok {
-			c.xerrorf("capability %q not enabled by server", cap)
-		}
-	}
-	return
+	return c.transactf("enable%s", caps.String())
 }
 
-// Select opens mailbox as active mailbox.
-func (c *Conn) Select(mailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("select %s", astring(mailbox))
+// Select opens the mailbox with the IMAP4 "SELECT" command.
+//
+// If a mailbox is selected/active, it is automatically deselected before
+// selecting the mailbox, without permanently removing ("expunging") messages
+// marked \Deleted.
+//
+// If the mailbox cannot be opened, the connection is left in Authenticated state,
+// not Selected.
+func (c *Conn) Select(mailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("select %s", astring(mailbox))
 }
 
-// Examine opens mailbox as active mailbox read-only.
-func (c *Conn) Examine(mailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("examine %s", astring(mailbox))
+// Examine opens the mailbox like [Conn.Select], but read-only, with the IMAP4
+// "EXAMINE" command.
+func (c *Conn) Examine(mailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("examine %s", astring(mailbox))
 }
 
-// Create makes a new mailbox on the server.
-// SpecialUse can only be used on servers that announced the CREATE-SPECIAL-USE
+// Create makes a new mailbox on the server using the IMAP4 "CREATE" command.
+//
+// SpecialUse can only be used on servers that announced the "CREATE-SPECIAL-USE"
 // capability. Specify flags like \Archive, \Drafts, \Junk, \Sent, \Trash, \All.
-func (c *Conn) Create(mailbox string, specialUse []string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	if _, ok := c.CapAvailable[CapCreateSpecialUse]; !ok && len(specialUse) > 0 {
-		c.xerrorf("server does not implement create-special-use extension")
-	}
+func (c *Conn) Create(mailbox string, specialUse []string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	var useStr string
 	if len(specialUse) > 0 {
 		useStr = fmt.Sprintf(" USE (%s)", strings.Join(specialUse, " "))
 	}
-	return c.Transactf("create %s%s", astring(mailbox), useStr)
+	return c.transactf("create %s%s", astring(mailbox), useStr)
 }
 
-// Delete removes an entire mailbox and its messages.
-func (c *Conn) Delete(mailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("delete %s", astring(mailbox))
+// Delete removes an entire mailbox and its messages using the IMAP4 "DELETE"
+// command.
+func (c *Conn) Delete(mailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("delete %s", astring(mailbox))
 }
 
-// Rename changes the name of a mailbox and all its child mailboxes.
-func (c *Conn) Rename(omailbox, nmailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("rename %s %s", astring(omailbox), astring(nmailbox))
+// Rename changes the name of a mailbox and all its child mailboxes
+// using the IMAP4 "RENAME" command.
+func (c *Conn) Rename(omailbox, nmailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("rename %s %s", astring(omailbox), astring(nmailbox))
 }
 
-// Subscribe marks a mailbox as subscribed. The mailbox does not have to exist. It
-// is not an error if the mailbox is already subscribed.
-func (c *Conn) Subscribe(mailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("subscribe %s", astring(mailbox))
+// Subscribe marks a mailbox as subscribed using the IMAP4 "SUBSCRIBE" command.
+//
+// The mailbox does not have to exist. It is not an error if the mailbox is already
+// subscribed.
+func (c *Conn) Subscribe(mailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("subscribe %s", astring(mailbox))
 }
 
-// Unsubscribe marks a mailbox as unsubscribed.
-func (c *Conn) Unsubscribe(mailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("unsubscribe %s", astring(mailbox))
+// Unsubscribe marks a mailbox as unsubscribed using the IMAP4 "UNSUBSCRIBE"
+// command.
+func (c *Conn) Unsubscribe(mailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("unsubscribe %s", astring(mailbox))
 }
 
-// List lists mailboxes with the basic LIST syntax.
+// List lists mailboxes using the IMAP4 "LIST" command with the basic LIST syntax.
 // Pattern can contain * (match any) or % (match any except hierarchy delimiter).
-func (c *Conn) List(pattern string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf(`list "" %s`, astring(pattern))
+func (c *Conn) List(pattern string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf(`list "" %s`, astring(pattern))
 }
 
-// ListFull lists mailboxes with the extended LIST syntax requesting all supported data.
+// ListFull lists mailboxes using the LIST command with the extended LIST
+// syntax requesting all supported data.
+//
+// Required capability: "LIST-EXTENDED". If "IMAP4rev2" is announced, the command
+// is also available but only with a single pattern.
+//
 // Pattern can contain * (match any) or % (match any except hierarchy delimiter).
-func (c *Conn) ListFull(subscribedOnly bool, patterns ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+func (c *Conn) ListFull(subscribedOnly bool, patterns ...string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	var subscribedStr string
 	if subscribedOnly {
 		subscribedStr = "subscribed recursivematch"
@@ -262,49 +290,54 @@ func (c *Conn) ListFull(subscribedOnly bool, patterns ...string) (untagged []Unt
 	for i, s := range patterns {
 		patterns[i] = astring(s)
 	}
-	return c.Transactf(`list (%s) "" (%s) return (subscribed children special-use status (messages uidnext uidvalidity unseen deleted size recent appendlimit))`, subscribedStr, strings.Join(patterns, " "))
+	return c.transactf(`list (%s) "" (%s) return (subscribed children special-use status (messages uidnext uidvalidity unseen deleted size recent appendlimit))`, subscribedStr, strings.Join(patterns, " "))
 }
 
-// Namespace returns the hiearchy separator in an UntaggedNamespace response with personal/shared/other namespaces if present.
-func (c *Conn) Namespace() (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("namespace")
+// Namespace requests the hiearchy separator using the IMAP4 "NAMESPACE" command.
+//
+// Required capability: "NAMESPACE" or "IMAP4rev2".
+//
+// Server will return an UntaggedNamespace response with personal/shared/other
+// namespaces if present.
+func (c *Conn) Namespace() (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("namespace")
 }
 
-// Status requests information about a mailbox, such as number of messages, size,
-// etc. At least one attribute required.
-func (c *Conn) Status(mailbox string, attrs ...StatusAttr) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// Status requests information about a mailbox using the IMAP4 "STATUS" command. For
+// example, number of messages, size, etc. At least one attribute required.
+func (c *Conn) Status(mailbox string, attrs ...StatusAttr) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	l := make([]string, len(attrs))
 	for i, a := range attrs {
 		l[i] = string(a)
 	}
-	return c.Transactf("status %s (%s)", astring(mailbox), strings.Join(l, " "))
+	return c.transactf("status %s (%s)", astring(mailbox), strings.Join(l, " "))
 }
 
-// Append represents a parameter to the APPEND or REPLACE commands.
+// Append represents a parameter to the IMAP4 "APPEND" or "REPLACE" commands, for
+// adding a message to mailbox, or replacing a message with a new version in a
+// mailbox.
 type Append struct {
-	Flags    []string
-	Received *time.Time
+	Flags    []string   // Optional, flags for the new message.
+	Received *time.Time // Optional, the INTERNALDATE field, typically time at which a message was received.
 	Size     int64
-	Data     io.Reader // Must return Size bytes.
+	Data     io.Reader // Required, must return Size bytes.
 }
 
-// Append adds message to mailbox with flags and optional receive time.
+// Append adds message to mailbox with flags and optional receive time using the
+// IMAP4 "APPEND" command.
+func (c *Conn) Append(mailbox string, message Append) (resp Response, rerr error) {
+	return c.MultiAppend(mailbox, message)
+}
+
+// MultiAppend atomatically adds multiple messages to the mailbox.
 //
-// Multiple messages are only possible when the server has announced the
-// MULTIAPPEND capability.
-func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// Required capability: "MULTIAPPEND"
+func (c *Conn) MultiAppend(mailbox string, message Append, more ...Append) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
-	if _, ok := c.CapAvailable[CapMultiAppend]; !ok && len(more) > 0 {
-		c.xerrorf("can only append multiple messages when server has announced MULTIAPPEND capability")
-	}
-
-	tag := c.nextTag()
-	c.LastTag = tag
-
-	fmt.Fprintf(c.xbw, "%s append %s", tag, astring(mailbox))
+	fmt.Fprintf(c.xbw, "%s append %s", c.nextTag(), astring(mailbox))
 
 	msgs := append([]Append{message}, more...)
 	for _, m := range msgs {
@@ -325,150 +358,226 @@ func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged 
 
 	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()
-	return c.Response()
+	return c.responseOK()
 }
 
 // note: No Idle or Notify command. Idle/Notify is better implemented by
 // writing the request and reading and handling the responses as they come in.
 
-// CloseMailbox closes the currently selected/active mailbox, permanently removing
-// any messages marked with \Deleted.
-func (c *Conn) CloseMailbox() (untagged []Untagged, result Result, rerr error) {
-	return c.Transactf("close")
+// CloseMailbox closes the selected/active mailbox using the IMAP4 "CLOSE" command,
+// permanently removing ("expunging") any messages marked with \Deleted.
+//
+// See [Conn.Unselect] for closing a mailbox without permanently removing messages.
+func (c *Conn) CloseMailbox() (resp Response, rerr error) {
+	return c.transactf("close")
 }
 
-// Unselect closes the currently selected/active mailbox, but unlike CloseMailbox
-// does not permanently remove any messages marked with \Deleted.
-func (c *Conn) Unselect() (untagged []Untagged, result Result, rerr error) {
-	return c.Transactf("unselect")
+// Unselect closes the selected/active mailbox using the IMAP4 "UNSELECT" command,
+// but unlike MailboxClose does not permanently remove ("expunge") any messages
+// marked with \Deleted.
+//
+// Required capability: "UNSELECT" or "IMAP4rev2".
+//
+// If Unselect is not available, call [Conn.Select] with a non-existent mailbox for
+// the same effect: Deselecting a mailbox without permanently removing messages
+// marked \Deleted.
+func (c *Conn) Unselect() (resp Response, rerr error) {
+	return c.transactf("unselect")
 }
 
-// Expunge removes messages marked as deleted for the selected mailbox.
-func (c *Conn) Expunge() (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("expunge")
+// Expunge removes all messages marked as deleted for the selected mailbox using
+// the IMAP4 "EXPUNGE" command. If other sessions marked messages as deleted, even
+// if they aren't visible in the session, they are removed as well.
+//
+// UIDExpunge gives more control over which the messages that are removed.
+func (c *Conn) Expunge() (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("expunge")
 }
 
-// UIDExpunge is like expunge, but only removes messages matching uidSet.
-func (c *Conn) UIDExpunge(uidSet NumSet) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("uid expunge %s", uidSet.String())
+// UIDExpunge is like expunge, but only removes messages matching UID set, using
+// the IMAP4 "UID EXPUNGE" command.
+//
+// Required capability: "UIDPLUS" or "IMAP4rev2".
+func (c *Conn) UIDExpunge(uidSet NumSet) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("uid expunge %s", uidSet.String())
 }
 
 // Note: No search, fetch command yet due to its large syntax.
 
-// StoreFlagsSet stores a new set of flags for messages from seqset with the STORE command.
-// If silent, no untagged responses with the updated flags will be sent by the server.
-func (c *Conn) StoreFlagsSet(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// MSNStoreFlagsSet stores a new set of flags for messages matching message
+// sequence numbers (MSNs) from sequence set with the IMAP4 "STORE" command.
+//
+// If silent, no untagged responses with the updated flags will be sent by the
+// server.
+//
+// Method [Conn.UIDStoreFlagsSet], which operates on a uid set, should be
+// preferred.
+func (c *Conn) MSNStoreFlagsSet(seqset string, silent bool, flags ...string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	item := "flags"
 	if silent {
 		item += ".silent"
 	}
-	return c.Transactf("store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+	return c.transactf("store %s %s (%s)", seqset, item, strings.Join(flags, " "))
 }
 
-// StoreFlagsAdd is like StoreFlagsSet, but only adds flags, leaving current flags on the message intact.
-func (c *Conn) StoreFlagsAdd(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// MSNStoreFlagsAdd is like [Conn.MSNStoreFlagsSet], but only adds flags, leaving
+// current flags on the message intact.
+//
+// Method [Conn.UIDStoreFlagsAdd], which operates on a uid set, should be
+// preferred.
+func (c *Conn) MSNStoreFlagsAdd(seqset string, silent bool, flags ...string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	item := "+flags"
 	if silent {
 		item += ".silent"
 	}
-	return c.Transactf("store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+	return c.transactf("store %s %s (%s)", seqset, item, strings.Join(flags, " "))
 }
 
-// StoreFlagsClear is like StoreFlagsSet, but only removes flags, leaving other flags on the message intact.
-func (c *Conn) StoreFlagsClear(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+// MSNStoreFlagsClear is like [Conn.MSNStoreFlagsSet], but only removes flags,
+// leaving other flags on the message intact.
+//
+// Method [Conn.UIDStoreFlagsClear], which operates on a uid set, should be
+// preferred.
+func (c *Conn) MSNStoreFlagsClear(seqset string, silent bool, flags ...string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	item := "-flags"
 	if silent {
 		item += ".silent"
 	}
-	return c.Transactf("store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+	return c.transactf("store %s %s (%s)", seqset, item, strings.Join(flags, " "))
 }
 
-// UIDStoreFlagsSet stores a new set of flags for messages from uid set with
-// the UID STORE command.
+// UIDStoreFlagsSet stores a new set of flags for messages matching UIDs from
+// uidSet with the IMAP4 "UID STORE" command.
 //
 // If silent, no untagged responses with the updated flags will be sent by the
 // server.
-func (c *Conn) UIDStoreFlagsSet(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+//
+// Required capability: "UIDPLUS" or "IMAP4rev2".
+func (c *Conn) UIDStoreFlagsSet(uidSet string, silent bool, flags ...string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	item := "flags"
 	if silent {
 		item += ".silent"
 	}
-	return c.Transactf("uid store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+	return c.transactf("uid store %s %s (%s)", uidSet, item, strings.Join(flags, " "))
 }
 
 // UIDStoreFlagsAdd is like UIDStoreFlagsSet, but only adds flags, leaving
 // current flags on the message intact.
-func (c *Conn) UIDStoreFlagsAdd(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+//
+// Required capability: "UIDPLUS" or "IMAP4rev2".
+func (c *Conn) UIDStoreFlagsAdd(uidSet string, silent bool, flags ...string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	item := "+flags"
 	if silent {
 		item += ".silent"
 	}
-	return c.Transactf("uid store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+	return c.transactf("uid store %s %s (%s)", uidSet, item, strings.Join(flags, " "))
 }
 
 // UIDStoreFlagsClear is like UIDStoreFlagsSet, but only removes flags, leaving
 // other flags on the message intact.
-func (c *Conn) UIDStoreFlagsClear(seqset string, silent bool, flags ...string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+//
+// Required capability: "UIDPLUS" or "IMAP4rev2".
+func (c *Conn) UIDStoreFlagsClear(uidSet string, silent bool, flags ...string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 	item := "-flags"
 	if silent {
 		item += ".silent"
 	}
-	return c.Transactf("uid store %s %s (%s)", seqset, item, strings.Join(flags, " "))
+	return c.transactf("uid store %s %s (%s)", uidSet, item, strings.Join(flags, " "))
 }
 
-// Copy adds messages from the sequences in seqSet in the currently selected/active mailbox to dstMailbox.
-func (c *Conn) Copy(seqSet NumSet, dstMailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("copy %s %s", seqSet.String(), astring(dstMailbox))
-}
-
-// UIDCopy is like copy, but operates on UIDs.
-func (c *Conn) UIDCopy(uidSet NumSet, dstMailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("uid copy %s %s", uidSet.String(), astring(dstMailbox))
-}
-
-// Move moves messages from the sequences in seqSet in the currently selected/active mailbox to dstMailbox.
-func (c *Conn) Move(seqSet NumSet, dstMailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("move %s %s", seqSet.String(), astring(dstMailbox))
-}
-
-// UIDMove is like move, but operates on UIDs.
-func (c *Conn) UIDMove(uidSet NumSet, dstMailbox string) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-	return c.Transactf("uid move %s %s", uidSet.String(), astring(dstMailbox))
-}
-
-// Replace replaces a message from the currently selected mailbox with a
-// new/different version of the message in the named mailbox, which may be the
-// same or different than the currently selected mailbox.
+// MSNCopy adds messages from the sequences in the sequence set in the
+// selected/active mailbox to destMailbox using the IMAP4 "COPY" command.
 //
-// Num is a message sequence number. "*" references the last message.
+// Method [Conn.UIDCopy], operating on UIDs instead of sequence numbers, should be
+// preferred.
+func (c *Conn) MSNCopy(seqSet string, destMailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("copy %s %s", seqSet, astring(destMailbox))
+}
+
+// UIDCopy is like copy, but operates on UIDs, using the IMAP4 "UID COPY" command.
 //
-// Servers must have announced the REPLACE capability.
-func (c *Conn) Replace(msgseq string, mailbox string, msg Append) (untagged []Untagged, result Result, rerr error) {
+// Required capability: "UIDPLUS" or "IMAP4rev2".
+func (c *Conn) UIDCopy(uidSet string, destMailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("uid copy %s %s", uidSet, astring(destMailbox))
+}
+
+// MSNSearch returns messages from the sequence set in the selected/active mailbox
+// that match the search critera using the IMAP4 "SEARCH" command.
+//
+// Method [Conn.UIDSearch], operating on UIDs instead of sequence numbers, should be
+// preferred.
+func (c *Conn) MSNSearch(seqSet string, criteria string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("seach %s %s", seqSet, criteria)
+}
+
+// UIDSearch returns messages from the uid set in the selected/active mailbox that
+// match the search critera using the IMAP4 "SEARCH" command.
+//
+// Criteria is a search program, see RFC 9051 and RFC 3501 for details.
+//
+// Required capability: "UIDPLUS" or "IMAP4rev2".
+func (c *Conn) UIDSearch(seqSet string, criteria string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("seach %s %s", seqSet, criteria)
+}
+
+// MSNMove moves messages from the sequence set in the selected/active mailbox to
+// destMailbox using the IMAP4 "MOVE" command.
+//
+// Required capability: "MOVE" or "IMAP4rev2".
+//
+// Method [Conn.UIDMove], operating on UIDs instead of sequence numbers, should be
+// preferred.
+func (c *Conn) MSNMove(seqSet string, destMailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("move %s %s", seqSet, astring(destMailbox))
+}
+
+// UIDMove is like move, but operates on UIDs, using the IMAP4 "UID MOVE" command.
+//
+// Required capability: "MOVE" or "IMAP4rev2".
+func (c *Conn) UIDMove(uidSet string, destMailbox string) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
+	return c.transactf("uid move %s %s", uidSet, astring(destMailbox))
+}
+
+// MSNReplace is like the preferred [Conn.UIDReplace], but operates on a message
+// sequence number (MSN) instead of a UID.
+//
+// Required capability: "REPLACE".
+//
+// Method [Conn.UIDReplace], operating on UIDs instead of sequence numbers, should be
+// preferred.
+func (c *Conn) MSNReplace(msgseq string, mailbox string, msg Append) (resp Response, rerr error) {
 	// todo: parse msgseq, must be nznumber, with a known msgseq. or "*" with at least one message.
 	return c.replace("replace", msgseq, mailbox, msg)
 }
 
-// UIDReplace is like Replace, but operates on a UID instead of message
-// sequence number.
-func (c *Conn) UIDReplace(uid string, mailbox string, msg Append) (untagged []Untagged, result Result, rerr error) {
+// UIDReplace uses the IMAP4 "UID REPLACE" command to replace a message from the
+// selected/active mailbox with a new/different version of the message in the named
+// mailbox, which may be the same or different than the selected mailbox.
+//
+// The replaced message is indicated by uid.
+//
+// Required capability: "REPLACE".
+func (c *Conn) UIDReplace(uid string, mailbox string, msg Append) (resp Response, rerr error) {
 	// todo: parse uid, must be nznumber, with a known uid. or "*" with at least one message.
 	return c.replace("uid replace", uid, mailbox, msg)
 }
 
-func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
 	// todo: use synchronizing literal for larger messages.
 
@@ -478,7 +587,7 @@ func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (unta
 	}
 	// todo: only use literal8 if needed, possibly with "UTF8()"
 	// todo: encode mailbox
-	err := c.Commandf("", "%s %s %s (%s)%s ~{%d+}", cmd, num, astring(mailbox), strings.Join(msg.Flags, " "), date, msg.Size)
+	err := c.WriteCommandf("", "%s %s %s (%s)%s ~{%d+}", cmd, num, astring(mailbox), strings.Join(msg.Flags, " "), date, msg.Size)
 	c.xcheckf(err, "writing replace command")
 
 	defer c.xtracewrite(mlog.LevelTracedata)()
@@ -489,5 +598,5 @@ func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (unta
 	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()
 
-	return c.Response()
+	return c.responseOK()
 }

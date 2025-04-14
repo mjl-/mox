@@ -57,7 +57,7 @@ func testCreate(t *testing.T, uidonly bool) {
 	tc.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox"})
 
 	// OldName is only set for IMAP4rev2 or NOTIFY.
-	tc.client.Enable("imap4rev2")
+	tc.client.Enable(imapclient.CapIMAP4rev2)
 	tc.transactf("ok", "create mailbox2/")
 	tc.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox2", OldName: "mailbox2/"})
 

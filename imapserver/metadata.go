@@ -303,13 +303,13 @@ func (c *conn) xcheckMetadataSize(tx *bstore.Tx) {
 		n++
 		if n > metadataMaxKeys {
 			// ../rfc/5464:590
-			xusercodeErrorf("METADATA TOOMANY", "too many metadata entries, 1000 allowed in total")
+			xusercodeErrorf("METADATA (TOOMANY)", "too many metadata entries, 1000 allowed in total")
 		}
 		size += len(a.Key) + len(a.Value)
 		if size > metadataMaxSize {
 			// ../rfc/5464:585 We only have a max total size limit, not per entry. We'll
 			// mention the max total size.
-			xusercodeErrorf(fmt.Sprintf("METADATA MAXSIZE %d", metadataMaxSize), "metadata entry values too large, total maximum size is 1MB")
+			xusercodeErrorf(fmt.Sprintf("METADATA (MAXSIZE %d)", metadataMaxSize), "metadata entry values too large, total maximum size is 1MB")
 		}
 		return nil
 	})

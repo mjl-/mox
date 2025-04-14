@@ -21,7 +21,7 @@ func TestCompress(t *testing.T) {
 
 	tc.client.CompressDeflate()
 	tc.transactf("no", "compress deflate") // Cannot have multiple.
-	tc.xcode("COMPRESSIONACTIVE")
+	tc.xcodeWord("COMPRESSIONACTIVE")
 
 	tc.client.Select("inbox")
 	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(exampleMsg), exampleMsg)
@@ -33,7 +33,7 @@ func TestCompressStartTLS(t *testing.T) {
 	tc := start(t, false)
 	defer tc.close()
 
-	tc.client.Starttls(&tls.Config{InsecureSkipVerify: true})
+	tc.client.StartTLS(&tls.Config{InsecureSkipVerify: true})
 	tc.login("mjl@mox.example", password0)
 	tc.client.CompressDeflate()
 	tc.client.Select("inbox")

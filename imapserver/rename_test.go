@@ -30,11 +30,11 @@ func testRename(t *testing.T, uidonly bool) {
 	tc.transactf("bad", "rename x y ") // Leftover data.
 
 	tc.transactf("no", "rename doesnotexist newbox") // Does not exist.
-	tc.xcode("NONEXISTENT")                          // ../rfc/9051:5140
+	tc.xcodeWord("NONEXISTENT")                      // ../rfc/9051:5140
 	tc.transactf("no", "rename expungebox newbox")   // No longer exists.
-	tc.xcode("NONEXISTENT")
+	tc.xcodeWord("NONEXISTENT")
 	tc.transactf("no", `rename "Sent" "Trash"`) // Already exists.
-	tc.xcode("ALREADYEXISTS")
+	tc.xcodeWord("ALREADYEXISTS")
 
 	tc.client.Create("x", nil)
 	tc.client.Subscribe("sub")
@@ -47,7 +47,7 @@ func testRename(t *testing.T, uidonly bool) {
 	tc2.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "z"})
 
 	// OldName is only set for IMAP4rev2 or NOTIFY.
-	tc2.client.Enable("IMAP4rev2")
+	tc2.client.Enable(imapclient.CapIMAP4rev2)
 	tc.transactf("ok", "rename z y")
 	tc2.transactf("ok", "noop")
 	tc2.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "y", OldName: "z"})
@@ -59,9 +59,9 @@ func testRename(t *testing.T, uidonly bool) {
 
 	// Cannot rename a child to a parent. It already exists.
 	tc.transactf("no", "rename a/b/c a/b")
-	tc.xcode("ALREADYEXISTS")
+	tc.xcodeWord("ALREADYEXISTS")
 	tc.transactf("no", "rename a/b a")
-	tc.xcode("ALREADYEXISTS")
+	tc.xcodeWord("ALREADYEXISTS")
 
 	tc2.transactf("ok", "noop")          // Drain.
 	tc.transactf("ok", "rename a/b x/y") // This will cause new parent "x" to be created, and a/b and a/b/c to be renamed.

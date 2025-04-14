@@ -1,34 +1,80 @@
 /*
-Package imapclient provides an IMAP4 client, primarily for testing the IMAP4 server.
+Package imapclient provides an IMAP4 client implementing IMAP4rev1 (RFC 3501),
+IMAP4rev2 (RFC 9051) and various extensions.
 
-Commands can be sent to the server free-form, but responses are parsed strictly.
-Behaviour that may not be required by the IMAP4 specification may be expected by
-this client.
+Warning: Currently primarily for testing the mox IMAP4 server. Behaviour that
+may not be required by the IMAP4 specification may be expected by this client.
+
+See [Conn] for a high-level client for executing IMAP commands. Use its embedded
+[Proto] for lower-level writing of commands and reading of responses.
 */
 package imapclient
-
-/*
-- Try to keep the parsing method names and the types similar to the ABNF names in the RFCs.
-
-- todo: have mode for imap4rev1 vs imap4rev2, refusing what is not allowed. we are accepting too much now.
-- todo: stricter parsing. xnonspace() and xword() should be replaced by proper parsers.
-*/
 
 import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
-	"reflect"
 	"strings"
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
 )
 
-// Conn is an IMAP connection to a server.
+// Conn is an connection to an IMAP server.
+//
+// Method names on Conn are the names of IMAP commands. CloseMailbox, which
+// executes the IMAP CLOSE command, is an exception. The Close method closes the
+// connection.
+//
+// The methods starting with MSN are the original (old) IMAP commands. The variants
+// starting with UID should almost always be used instead, if available.
+//
+// The methods on Conn typically return errors of type Error or Response. Error
+// represents protocol and i/o level errors, including io.ErrDeadlineExceeded and
+// various errors for closed connections. Response is returned as error if the IMAP
+// result is NO or BAD instead of OK. The responses returned by the IMAP command
+// methods can also be non-zero on errors. Callers may wish to process any untagged
+// responses.
+//
+// The IMAP command methods defined on Conn don't interpret the untagged responses
+// except for  untagged CAPABILITY and untagged ENABLED responses, and the
+// CAPABILITY response code. Fields CapAvailable and CapEnabled are updated when
+// those untagged responses are received.
+//
+// Capabilities indicate which optional IMAP functionality is supported by a
+// server. Capabilities are typically implicitly enabled when the client sends a
+// command using syntax of an optional extension. Extensions without new syntax
+// from client to server, but with new behaviour or syntax from server to client,
+// the client needs to explicitly enable the capability with the ENABLE command,
+// see the Enable method.
 type Conn struct {
+	// If true, server sent a PREAUTH tag and the connection is already authenticated,
+	// e.g. based on TLS certificate authentication.
+	Preauth bool
+
+	// Capabilities available at server, from CAPABILITY command or response code.
+	CapAvailable []Capability
+	// Capabilities marked as enabled by the server, typically after an ENABLE command.
+	CapEnabled []Capability
+
+	// Proto provides lower-level functions for interacting with the IMAP connection,
+	// such as reading and writing individual lines/commands/responses.
+	Proto
+}
+
+// Proto provides low-level operations for writing requests and reading responses
+// on an IMAP connection.
+//
+// To implement the IDLE command, write "IDLE" using [Proto.WriteCommandf], then
+// read a line with [Proto.Readline]. If it starts with "+ ", the connection is in
+// idle mode and untagged responses can be read using [Proto.ReadUntagged]. If the
+// line doesn't start with "+ ", use [ParseResult] to interpret it as a response to
+// IDLE, which should be a NO or BAD. To abort idle mode, write "DONE" using
+// [Proto.Writelinef] and wait until a result line has been read.
+type Proto struct {
 	// Connection, may be original TCP or TLS connection. Reads go through c.br, and
 	// writes through c.xbw. The "x" for the writes indicate that failed writes cause
 	// an i/o panic, which is either turned into a returned error, or passed on (see
@@ -50,10 +96,7 @@ type Conn struct {
 	record    bool // If true, bytes read are added to recordBuf. recorded() resets.
 	recordBuf []byte
 
-	Preauth      bool
-	LastTag      string
-	CapAvailable map[Capability]struct{} // Capabilities available at server, from CAPABILITY command or response code. All uppercase.
-	CapEnabled   map[Capability]struct{} // Capabilities enabled through ENABLE command. All uppercase.
+	lastTag string
 }
 
 // Error is a parse or other protocol error.
@@ -71,26 +114,29 @@ func (e Error) Unwrap() error {
 type Opts struct {
 	Logger *slog.Logger
 
-	// Error is called for both IMAP-level and connection-level errors. Is allowed to
+	// Error is called for IMAP-level and connection-level errors during the IMAP
+	// command methods on Conn, not for errors in calls on Proto. Error is allowed to
 	// call panic.
 	Error func(err error)
 }
 
-// New creates a new client on conn.
+// New initializes a new IMAP client on conn.
+//
+// Conn should normally be a TLS connection, typically connected to port 993 of an
+// IMAP server. Alternatively, conn can be a plain TCP connection to port 143. TLS
+// should be enabled on plain TCP connections with the [Conn.StartTLS] method.
 //
 // The initial untagged greeting response is read and must be "OK" or
 // "PREAUTH". If preauth, the connection is already in authenticated state,
 // typically through TLS client certificate. This is indicated in Conn.Preauth.
 //
-// Logging is written to log, in particular IMAP protocol traces are written with
-// prefixes "CR: " and "CW: " (client read/write) as quoted strings at levels
-// Debug-4, with authentication messages at Debug-6 and (user) data at level
+// Logging is written to opts.Logger. In particular, IMAP protocol traces are
+// written with prefixes "CR: " and "CW: " (client read/write) as quoted strings at
+// levels Debug-4, with authentication messages at Debug-6 and (user) data at level
 // Debug-8.
 func New(conn net.Conn, opts *Opts) (client *Conn, rerr error) {
 	c := Conn{
-		conn:         conn,
-		CapAvailable: map[Capability]struct{}{},
-		CapEnabled:   map[Capability]struct{}{},
+		Proto: Proto{conn: conn},
 	}
 
 	var clog *slog.Logger
@@ -109,7 +155,7 @@ func New(conn net.Conn, opts *Opts) (client *Conn, rerr error) {
 	c.xtw = moxio.NewTraceWriter(c.log, "CW: ", &c)
 	c.xbw = bufio.NewWriter(c.xtw)
 
-	defer c.recover(&rerr)
+	defer c.recoverErr(&rerr)
 	tag := c.xnonspace()
 	if tag != "*" {
 		c.xerrorf("expected untagged *, got %q", tag)
@@ -120,6 +166,11 @@ func New(conn net.Conn, opts *Opts) (client *Conn, rerr error) {
 	case UntaggedResult:
 		if x.Status != OK {
 			c.xerrorf("greeting, got status %q, expected OK", x.Status)
+		}
+		if x.Code != nil {
+			if caps, ok := x.Code.(CodeCapability); ok {
+				c.CapAvailable = caps
+			}
 		}
 		return &c, nil
 	case UntaggedPreauth:
@@ -133,13 +184,33 @@ func New(conn net.Conn, opts *Opts) (client *Conn, rerr error) {
 	panic("not reached")
 }
 
-func (c *Conn) recover(rerr *error) {
+func (c *Conn) recoverErr(rerr *error) {
+	c.recover(rerr, nil)
+}
+
+func (c *Conn) recover(rerr *error, resp *Response) {
+	if *rerr != nil {
+		if r, ok := (*rerr).(Response); ok && resp != nil {
+			*resp = r
+		}
+		c.errHandle(*rerr)
+		return
+	}
+
 	x := recover()
 	if x == nil {
 		return
 	}
-	err, ok := x.(Error)
-	if !ok {
+	var err error
+	switch e := x.(type) {
+	case Error:
+		err = e
+	case Response:
+		err = e
+		if resp != nil {
+			*resp = e
+		}
+	default:
 		panic(x)
 	}
 	if c.errHandle != nil {
@@ -148,73 +219,110 @@ func (c *Conn) recover(rerr *error) {
 	*rerr = err
 }
 
-func (c *Conn) xerrorf(format string, args ...any) {
-	panic(Error{fmt.Errorf(format, args...)})
-}
+func (p *Proto) recover(rerr *error) {
+	if *rerr != nil {
+		return
+	}
 
-func (c *Conn) xcheckf(err error, format string, args ...any) {
-	if err != nil {
-		c.xerrorf("%s: %w", fmt.Sprintf(format, args...), err)
+	x := recover()
+	if x == nil {
+		return
+	}
+	switch e := x.(type) {
+	case Error:
+		*rerr = e
+	default:
+		panic(x)
 	}
 }
 
-func (c *Conn) xcheck(err error) {
+func (p *Proto) xerrorf(format string, args ...any) {
+	panic(Error{fmt.Errorf(format, args...)})
+}
+
+func (p *Proto) xcheckf(err error, format string, args ...any) {
+	if err != nil {
+		p.xerrorf("%s: %w", fmt.Sprintf(format, args...), err)
+	}
+}
+
+func (p *Proto) xcheck(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
+// xresponse sets resp if err is a Response and resp is not nil.
+func (p *Proto) xresponse(err error, resp *Response) {
+	if err == nil {
+		return
+	}
+	if r, ok := err.(Response); ok && resp != nil {
+		*resp = r
+	}
+	panic(err)
+}
+
 // Write writes directly to underlying connection (TCP, TLS). For internal use
 // only, to implement io.Writer. Write errors do take the connection's panic mode
 // into account, i.e. Write can panic.
-func (c *Conn) Write(buf []byte) (n int, rerr error) {
-	defer c.recover(&rerr)
+func (p *Proto) Write(buf []byte) (n int, rerr error) {
+	defer p.recover(&rerr)
 
-	n, rerr = c.conn.Write(buf)
+	n, rerr = p.conn.Write(buf)
 	if rerr != nil {
-		c.connBroken = true
+		p.connBroken = true
 	}
-	c.xcheckf(rerr, "write")
+	p.xcheckf(rerr, "write")
 	return n, nil
 }
 
 // Read reads directly from the underlying connection (TCP, TLS). For internal use
 // only, to implement io.Reader.
-func (c *Conn) Read(buf []byte) (n int, err error) {
-	return c.conn.Read(buf)
+func (p *Proto) Read(buf []byte) (n int, err error) {
+	return p.conn.Read(buf)
 }
 
-func (c *Conn) xflush() {
+func (p *Proto) xflush() {
 	// Not writing any more when connection is broken.
-	if c.connBroken {
+	if p.connBroken {
 		return
 	}
 
-	err := c.xbw.Flush()
-	c.xcheckf(err, "flush")
+	err := p.xbw.Flush()
+	p.xcheckf(err, "flush")
 
 	// If compression is active, we need to flush the deflate stream.
-	if c.compress {
-		err := c.xflateWriter.Flush()
-		c.xcheckf(err, "flush deflate")
-		err = c.xflateBW.Flush()
-		c.xcheckf(err, "flush deflate buffer")
+	if p.compress {
+		err := p.xflateWriter.Flush()
+		p.xcheckf(err, "flush deflate")
+		err = p.xflateBW.Flush()
+		p.xcheckf(err, "flush deflate buffer")
 	}
 }
 
-func (c *Conn) xtraceread(level slog.Level) func() {
-	c.tr.SetTrace(level)
+func (p *Proto) xtraceread(level slog.Level) func() {
+	if p.tr == nil {
+		// For ParseUntagged and other parse functions.
+		return func() {}
+	}
+	p.tr.SetTrace(level)
 	return func() {
-		c.tr.SetTrace(mlog.LevelTrace)
+		p.tr.SetTrace(mlog.LevelTrace)
 	}
 }
 
-func (c *Conn) xtracewrite(level slog.Level) func() {
-	c.xflush()
-	c.xtw.SetTrace(level)
+func (p *Proto) xtracewrite(level slog.Level) func() {
+	if p.xtw == nil {
+		// For ParseUntagged and other parse functions.
+		return func() {}
+	}
+
+	p.xflush()
+	p.xtw.SetTrace(level)
 	return func() {
-		c.xflush()
-		c.xtw.SetTrace(mlog.LevelTrace)
+		p.xflush()
+		p.xtw.SetTrace(mlog.LevelTrace)
 	}
 }
 
@@ -228,7 +336,7 @@ func (c *Conn) xtracewrite(level slog.Level) func() {
 // because the server may immediate close the underlying connection when it sees
 // the connection is being closed.
 func (c *Conn) Close() (rerr error) {
-	defer c.recover(&rerr)
+	defer c.recoverErr(&rerr)
 
 	if c.conn == nil {
 		return nil
@@ -247,7 +355,9 @@ func (c *Conn) Close() (rerr error) {
 	return
 }
 
-// TLSConnectionState returns the TLS connection state if the connection uses TLS.
+// TLSConnectionState returns the TLS connection state if the connection uses TLS,
+// either because the conn passed to [New] was a TLS connection, or because
+// [Conn.StartTLS] was called.
 func (c *Conn) TLSConnectionState() *tls.ConnectionState {
 	if conn, ok := c.conn.(*tls.Conn); ok {
 		cs := conn.ConnectionState()
@@ -256,170 +366,266 @@ func (c *Conn) TLSConnectionState() *tls.ConnectionState {
 	return nil
 }
 
-// Commandf writes a free-form IMAP command to the server. An ending \r\n is
+// WriteCommandf writes a free-form IMAP command to the server. An ending \r\n is
 // written too.
+//
 // If tag is empty, a next unique tag is assigned.
-func (c *Conn) Commandf(tag string, format string, args ...any) (rerr error) {
-	defer c.recover(&rerr)
+func (p *Proto) WriteCommandf(tag string, format string, args ...any) (rerr error) {
+	defer p.recover(&rerr)
 
 	if tag == "" {
-		tag = c.nextTag()
+		p.nextTag()
+	} else {
+		p.lastTag = tag
 	}
-	c.LastTag = tag
 
-	fmt.Fprintf(c.xbw, "%s %s\r\n", tag, fmt.Sprintf(format, args...))
-	c.xflush()
+	fmt.Fprintf(p.xbw, "%s %s\r\n", p.lastTag, fmt.Sprintf(format, args...))
+	p.xflush()
 	return
 }
 
-func (c *Conn) nextTag() string {
-	c.tagGen++
-	return fmt.Sprintf("x%03d", c.tagGen)
+func (p *Proto) nextTag() string {
+	p.tagGen++
+	p.lastTag = fmt.Sprintf("x%03d", p.tagGen)
+	return p.lastTag
 }
 
-// Response reads from the IMAP server until a tagged response line is found.
+// LastTag returns the tag last used for a command. For checking against a command
+// completion result.
+func (p *Proto) LastTag() string {
+	return p.lastTag
+}
+
+// LastTagSet sets a new last tag, as used for checking against a command completion result.
+func (p *Proto) LastTagSet(tag string) {
+	p.lastTag = tag
+}
+
+// ReadResponse reads from the IMAP server until a tagged response line is found.
 // The tag must be the same as the tag for the last written command.
-// Result holds the status of the command. The caller must check if this the status is OK.
-func (c *Conn) Response() (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+//
+// If an error is returned, resp can still be non-empty, and a caller may wish to
+// process resp.Untagged.
+//
+// Caller should check resp.Status for the result of the command too.
+//
+// Common types for the return error:
+// - Error, for protocol errors
+// - Various I/O errors from the underlying connection, including os.ErrDeadlineExceeded
+func (p *Proto) ReadResponse() (resp Response, rerr error) {
+	defer p.recover(&rerr)
 
 	for {
-		tag := c.xnonspace()
-		c.xspace()
+		tag := p.xnonspace()
+		p.xspace()
 		if tag == "*" {
-			untagged = append(untagged, c.xuntagged())
+			resp.Untagged = append(resp.Untagged, p.xuntagged())
 			continue
 		}
 
-		if tag != c.LastTag {
-			c.xerrorf("got tag %q, expected %q", tag, c.LastTag)
+		if tag != p.lastTag {
+			p.xerrorf("got tag %q, expected %q", tag, p.lastTag)
 		}
 
-		status := c.xstatus()
-		c.xspace()
-		result = c.xresult(status)
-		c.xcrlf()
+		status := p.xstatus()
+		p.xspace()
+		resp.Result = p.xresult(status)
+		p.xcrlf()
 		return
 	}
 }
 
-// ReadUntagged reads a single untagged response line.
-// Useful for reading lines from IDLE.
-func (c *Conn) ReadUntagged() (untagged Untagged, rerr error) {
-	defer c.recover(&rerr)
-
-	tag := c.xnonspace()
-	if tag != "*" {
-		c.xerrorf("got tag %q, expected untagged", tag)
+// ParseCode parses a response code. The string must not have enclosing brackets.
+//
+// Example:
+//
+//	"APPENDUID 123 10"
+func ParseCode(s string) (code Code, rerr error) {
+	p := Proto{br: bufio.NewReader(strings.NewReader(s + "]"))}
+	defer p.recover(&rerr)
+	code = p.xrespCode()
+	p.xtake("]")
+	buf, err := io.ReadAll(p.br)
+	p.xcheckf(err, "read")
+	if len(buf) != 0 {
+		p.xerrorf("leftover data %q", buf)
 	}
-	c.xspace()
-	ut := c.xuntagged()
+	return code, nil
+}
+
+// ParseResult parses a line, including required crlf, as a command result line.
+//
+// Example:
+//
+//	"tag1 OK [APPENDUID 123 10] message added\r\n"
+func ParseResult(s string) (tag string, result Result, rerr error) {
+	p := Proto{br: bufio.NewReader(strings.NewReader(s))}
+	defer p.recover(&rerr)
+	tag = p.xnonspace()
+	p.xspace()
+	status := p.xstatus()
+	p.xspace()
+	result = p.xresult(status)
+	p.xcrlf()
+	return
+}
+
+// ReadUntagged reads a single untagged response line.
+func (p *Proto) ReadUntagged() (untagged Untagged, rerr error) {
+	defer p.recover(&rerr)
+	return p.readUntagged()
+}
+
+// ParseUntagged parses a line, including required crlf, as untagged response.
+//
+// Example:
+//
+//	"* BYE shutting down connection\r\n"
+func ParseUntagged(s string) (untagged Untagged, rerr error) {
+	p := Proto{br: bufio.NewReader(strings.NewReader(s))}
+	defer p.recover(&rerr)
+	untagged, rerr = p.readUntagged()
+	return
+}
+
+func (p *Proto) readUntagged() (untagged Untagged, rerr error) {
+	defer p.recover(&rerr)
+	tag := p.xnonspace()
+	if tag != "*" {
+		p.xerrorf("got tag %q, expected untagged", tag)
+	}
+	p.xspace()
+	ut := p.xuntagged()
 	return ut, nil
 }
 
 // Readline reads a line, including CRLF.
 // Used with IDLE and synchronous literals.
-func (c *Conn) Readline() (line string, rerr error) {
-	defer c.recover(&rerr)
+func (p *Proto) Readline() (line string, rerr error) {
+	defer p.recover(&rerr)
 
-	line, err := c.br.ReadString('\n')
-	c.xcheckf(err, "read line")
+	line, err := p.br.ReadString('\n')
+	p.xcheckf(err, "read line")
 	return line, nil
 }
 
-// ReadContinuation reads a line. If it is a continuation, i.e. starts with a +, it
-// is returned without leading "+ " and without trailing crlf. Otherwise, a command
-// response is returned. A successfully read continuation can return an empty line.
-// Callers should check rerr and result.Status being empty to check if a
-// continuation was read.
-func (c *Conn) ReadContinuation() (line string, untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
-
-	if !c.peek('+') {
-		untagged, result, rerr = c.Response()
-		if result.Status == OK {
-			c.xerrorf("unexpected OK instead of continuation")
+func (c *Conn) readContinuation() (line string, rerr error) {
+	defer c.recover(&rerr, nil)
+	line, rerr = c.ReadContinuation()
+	if rerr != nil {
+		if resp, ok := rerr.(Response); ok {
+			c.processUntagged(resp.Untagged)
+			c.processResult(resp.Result)
 		}
-		return
 	}
-	c.xtake("+ ")
-	line, err := c.Readline()
-	c.xcheckf(err, "read line")
+	return
+}
+
+// ReadContinuation reads a line. If it is a continuation, i.e. starts with "+", it
+// is returned without leading "+ " and without trailing crlf. Otherwise, an error
+// is returned, which can be a Response with Untagged that a caller may wish to
+// process. A successfully read continuation can return an empty line.
+func (p *Proto) ReadContinuation() (line string, rerr error) {
+	defer p.recover(&rerr)
+
+	if !p.peek('+') {
+		var resp Response
+		resp, rerr = p.ReadResponse()
+		if rerr == nil {
+			rerr = resp
+		}
+		return "", rerr
+	}
+	p.xtake("+ ")
+	line, err := p.Readline()
+	p.xcheckf(err, "read line")
 	line = strings.TrimSuffix(line, "\r\n")
 	return
 }
 
 // Writelinef writes the formatted format and args as a single line, adding CRLF.
 // Used with IDLE and synchronous literals.
-func (c *Conn) Writelinef(format string, args ...any) (rerr error) {
-	defer c.recover(&rerr)
+func (p *Proto) Writelinef(format string, args ...any) (rerr error) {
+	defer p.recover(&rerr)
 
 	s := fmt.Sprintf(format, args...)
-	fmt.Fprintf(c.xbw, "%s\r\n", s)
-	c.xflush()
+	fmt.Fprintf(p.xbw, "%s\r\n", s)
+	p.xflush()
 	return nil
 }
 
 // WriteSyncLiteral first writes the synchronous literal size, then reads the
-// continuation "+" and finally writes the data.
-func (c *Conn) WriteSyncLiteral(s string) (untagged []Untagged, rerr error) {
-	defer c.recover(&rerr)
+// continuation "+" and finally writes the data. If the literal is not accepted, an
+// error is returned, which may be a Response.
+func (p *Proto) WriteSyncLiteral(s string) (rerr error) {
+	defer p.recover(&rerr)
 
-	fmt.Fprintf(c.xbw, "{%d}\r\n", len(s))
-	c.xflush()
+	fmt.Fprintf(p.xbw, "{%d}\r\n", len(s))
+	p.xflush()
 
-	plus, err := c.br.Peek(1)
-	c.xcheckf(err, "read continuation")
+	plus, err := p.br.Peek(1)
+	p.xcheckf(err, "read continuation")
 	if plus[0] == '+' {
-		_, err = c.Readline()
-		c.xcheckf(err, "read continuation line")
+		_, err = p.Readline()
+		p.xcheckf(err, "read continuation line")
 
-		defer c.xtracewrite(mlog.LevelTracedata)()
-		_, err = c.xbw.Write([]byte(s))
-		c.xcheckf(err, "write literal data")
-		c.xtracewrite(mlog.LevelTrace)
-		return nil, nil
+		defer p.xtracewrite(mlog.LevelTracedata)()
+		_, err = p.xbw.Write([]byte(s))
+		p.xcheckf(err, "write literal data")
+		p.xtracewrite(mlog.LevelTrace)
+		return nil
 	}
-	untagged, result, err := c.Response()
-	if err == nil && result.Status == OK {
-		c.xerrorf("no continuation, but invalid ok response (%q)", result.More)
+	var resp Response
+	resp, rerr = p.ReadResponse()
+	if rerr == nil {
+		rerr = resp
 	}
-	return untagged, fmt.Errorf("no continuation (%s)", result.Status)
+	return
 }
 
-// Transactf writes format and args as an IMAP command, using Commandf with an
+func (c *Conn) processUntagged(l []Untagged) {
+	for _, ut := range l {
+		switch e := ut.(type) {
+		case UntaggedCapability:
+			c.CapAvailable = []Capability(e)
+		case UntaggedEnabled:
+			c.CapEnabled = append(c.CapEnabled, e...)
+		}
+	}
+}
+
+func (c *Conn) processResult(r Result) {
+	if r.Code == nil {
+		return
+	}
+	switch e := r.Code.(type) {
+	case CodeCapability:
+		c.CapAvailable = []Capability(e)
+	}
+}
+
+// transactf writes format and args as an IMAP command, using Commandf with an
 // empty tag. I.e. format must not contain a tag. Transactf then reads a response
 // using ReadResponse and checks the result status is OK.
-func (c *Conn) Transactf(format string, args ...any) (untagged []Untagged, result Result, rerr error) {
-	defer c.recover(&rerr)
+func (c *Conn) transactf(format string, args ...any) (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
-	err := c.Commandf("", format, args...)
+	err := c.WriteCommandf("", format, args...)
 	if err != nil {
-		return nil, Result{}, err
+		return Response{}, err
 	}
-	return c.ResponseOK()
+
+	return c.responseOK()
 }
 
-func (c *Conn) ResponseOK() (untagged []Untagged, result Result, rerr error) {
-	untagged, result, rerr = c.Response()
-	if rerr != nil {
-		return nil, Result{}, rerr
-	}
-	if result.Status != OK {
-		c.xerrorf("response status %q, expected OK", result.Status)
-	}
-	return untagged, result, rerr
-}
+func (c *Conn) responseOK() (resp Response, rerr error) {
+	defer c.recover(&rerr, &resp)
 
-func (c *Conn) xgetUntagged(l []Untagged, dst any) {
-	if len(l) != 1 {
-		c.xerrorf("got %d untagged, expected 1: %v", len(l), l)
+	resp, rerr = c.ReadResponse()
+	c.processUntagged(resp.Untagged)
+	c.processResult(resp.Result)
+	if rerr == nil && resp.Status != OK {
+		rerr = resp
 	}
-	got := l[0]
-	gotv := reflect.ValueOf(got)
-	dstv := reflect.ValueOf(dst)
-	if gotv.Type() != dstv.Type().Elem() {
-		c.xerrorf("got %v, expected %v", gotv.Type(), dstv.Type().Elem())
-	}
-	dstv.Elem().Set(gotv)
+	return
 }

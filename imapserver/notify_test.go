@@ -42,9 +42,9 @@ func testNotify(t *testing.T, uidonly bool) {
 	tc.transactf("bad", "Notify Set Status (Selected (flagChange))")                                   // flagChange must come with MessageNew and MessageExpunge.
 	tc.transactf("bad", "Notify Set Status (Selected (mailboxName)) (Selected-Delayed (mailboxName))") // Duplicate selected.
 	tc.transactf("no", "Notify Set Status (Selected (annotationChange))")                              // We don't implement annotation change.
-	tc.xcode("BADEVENT")
+	tc.xcode(imapclient.CodeBadEvent{"MessageNew", "MessageExpunge", "FlagChange", "MailboxName", "SubscriptionChange", "MailboxMetadataChange", "ServerMetadataChange"})
 	tc.transactf("no", "Notify Set Status (Personal (unknownEvent))")
-	tc.xcode("BADEVENT")
+	tc.xcode(imapclient.CodeBadEvent{"MessageNew", "MessageExpunge", "FlagChange", "MailboxName", "SubscriptionChange", "MailboxMetadataChange", "ServerMetadataChange"})
 
 	tc2 := startNoSwitchboard(t, uidonly)
 	defer tc2.closeNoWait()
@@ -76,7 +76,7 @@ func testNotify(t *testing.T, uidonly bool) {
 	// Enable notify, will first result in a the pending changes, then status.
 	tc.transactf("ok", "Notify Set Status (Selected (messageNew (Uid Modseq Bodystructure Preview) messageExpunge flagChange)) (personal (messageNew messageExpunge flagChange mailboxName subscriptionChange mailboxMetadataChange serverMetadataChange))")
 	tc.xuntagged(
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "HIGHESTMODSEQ", CodeArg: imapclient.CodeHighestModSeq(modseq), More: "after condstore-enabling command"}},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeHighestModSeq(modseq), Text: "after condstore-enabling command"},
 		// note: no status for Inbox since it is selected.
 		imapclient.UntaggedStatus{Mailbox: "Drafts", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 0, imapclient.StatusUIDNext: 1, imapclient.StatusUIDValidity: 1, imapclient.StatusUnseen: 0, imapclient.StatusHighestModSeq: 2}},
 		imapclient.UntaggedStatus{Mailbox: "Sent", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 0, imapclient.StatusUIDNext: 1, imapclient.StatusUIDValidity: 1, imapclient.StatusUnseen: 0, imapclient.StatusHighestModSeq: 2}},
@@ -108,7 +108,12 @@ func testNotify(t *testing.T, uidonly bool) {
 								Octets: 21,
 							},
 							Lines: 1,
-							Ext:   &imapclient.BodyExtension1Part{},
+							Ext: &imapclient.BodyExtension1Part{
+								Disposition:       ptr((*string)(nil)),
+								DispositionParams: ptr([][2]string(nil)),
+								Language:          ptr([]string(nil)),
+								Location:          ptr((*string)(nil)),
+							},
 						},
 						imapclient.BodyTypeText{
 							MediaType:    "TEXT",
@@ -118,12 +123,21 @@ func testNotify(t *testing.T, uidonly bool) {
 								Octets: 15,
 							},
 							Lines: 1,
-							Ext:   &imapclient.BodyExtension1Part{},
+							Ext: &imapclient.BodyExtension1Part{
+								Disposition:       ptr((*string)(nil)),
+								DispositionParams: ptr([][2]string(nil)),
+								Language:          ptr([]string(nil)),
+								Location:          ptr((*string)(nil)),
+							},
 						},
 					},
 					MediaSubtype: "ALTERNATIVE",
 					Ext: &imapclient.BodyExtensionMpart{
-						Params: [][2]string{{"BOUNDARY", "x"}},
+						Params:            [][2]string{{"BOUNDARY", "x"}},
+						Disposition:       ptr((*string)(nil)), // Present but nil.
+						DispositionParams: ptr([][2]string(nil)),
+						Language:          ptr([]string(nil)),
+						Location:          ptr((*string)(nil)),
 					},
 				},
 			},
@@ -413,12 +427,7 @@ func testNotify(t *testing.T, uidonly bool) {
 	// modseq++
 	tc.readuntagged(
 		imapclient.UntaggedExists(3),
-		imapclient.UntaggedResult{
-			Status: "NO",
-			RespText: imapclient.RespText{
-				More: "generating notify fetch response: requested part does not exist",
-			},
-		},
+		imapclient.UntaggedResult{Status: "NO", Text: "generating notify fetch response: requested part does not exist"},
 		tc.untaggedFetchUID(3, 4),
 	)
 
@@ -457,15 +466,7 @@ func testNotifyOverflow(t *testing.T, uidonly bool) {
 	tc2.client.Append("inbox", makeAppend(searchMsg))
 
 	tc.transactf("ok", "noop")
-	tc.xuntagged(
-		imapclient.UntaggedResult{
-			Status: "OK",
-			RespText: imapclient.RespText{
-				Code: "NOTIFICATIONOVERFLOW",
-				More: "out of sync after too many pending changes",
-			},
-		},
-	)
+	tc.xuntagged(imapclient.UntaggedResult{Status: "OK", Code: imapclient.CodeWord("NOTIFICATIONOVERFLOW"), Text: "out of sync after too many pending changes"})
 
 	// Won't be getting any more notifications until we enable them again with NOTIFY.
 	tc2.client.Append("inbox", makeAppend(searchMsg))
@@ -500,15 +501,7 @@ func testNotifyOverflow(t *testing.T, uidonly bool) {
 	tc2.client.UIDStoreFlagsAdd("1", true, `\Seen`)
 	tc2.client.UIDStoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "noop")
-	tc.xuntagged(
-		imapclient.UntaggedResult{
-			Status: "OK",
-			RespText: imapclient.RespText{
-				Code: "NOTIFICATIONOVERFLOW",
-				More: "out of sync after too many pending changes for selected mailbox",
-			},
-		},
-	)
+	tc.xuntagged(imapclient.UntaggedResult{Status: "OK", Code: imapclient.CodeWord("NOTIFICATIONOVERFLOW"), Text: "out of sync after too many pending changes for selected mailbox"})
 
 	// Again, no new notifications until we select and enable again.
 	tc2.client.UIDStoreFlagsAdd("1", true, `\Seen`)

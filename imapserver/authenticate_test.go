@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/text/secure/precis"
 
+	"github.com/mjl-/mox/imapclient"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/store"
@@ -38,19 +39,19 @@ func TestAuthenticatePlain(t *testing.T) {
 	tc.transactf("no", "authenticate bogus ")
 	tc.transactf("bad", "authenticate plain not base64...")
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000baduser\u0000badpass")))
-	tc.xcode("AUTHENTICATIONFAILED")
+	tc.xcodeWord("AUTHENTICATIONFAILED")
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000badpass")))
-	tc.xcode("AUTHENTICATIONFAILED")
+	tc.xcodeWord("AUTHENTICATIONFAILED")
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl\u0000badpass"))) // Need email, not account.
-	tc.xcode("AUTHENTICATIONFAILED")
+	tc.xcodeWord("AUTHENTICATIONFAILED")
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000test")))
-	tc.xcode("AUTHENTICATIONFAILED")
+	tc.xcodeWord("AUTHENTICATIONFAILED")
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000test"+password0)))
-	tc.xcode("AUTHENTICATIONFAILED")
+	tc.xcodeWord("AUTHENTICATIONFAILED")
 	tc.transactf("bad", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000")))
-	tc.xcode("")
+	tc.xcode(nil)
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("other\u0000mjl@mox.example\u0000"+password0)))
-	tc.xcode("AUTHORIZATIONFAILED")
+	tc.xcodeWord("AUTHORIZATIONFAILED")
 	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000"+password0)))
 	tc.close()
 
@@ -93,14 +94,14 @@ func TestLoginDisabled(t *testing.T) {
 	tcheck(t, err, "close account")
 
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000disabled@mox.example\u0000test1234")))
-	tc.xcode("")
+	tc.xcode(nil)
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000disabled@mox.example\u0000bogus")))
-	tc.xcode("AUTHENTICATIONFAILED")
+	tc.xcodeWord("AUTHENTICATIONFAILED")
 
 	tc.transactf("no", "login disabled@mox.example test1234")
-	tc.xcode("")
+	tc.xcode(nil)
 	tc.transactf("no", "login disabled@mox.example bogus")
-	tc.xcode("AUTHENTICATIONFAILED")
+	tc.xcodeWord("AUTHENTICATIONFAILED")
 }
 
 func TestAuthenticateSCRAMSHA1(t *testing.T) {
@@ -131,14 +132,11 @@ func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.
 		sc := scram.NewClient(h, username, "", noServerPlus, tc.client.TLSConnectionState())
 		clientFirst, err := sc.ClientFirst()
 		tc.check(err, "scram clientFirst")
-		tc.client.LastTag = "x001"
-		tc.writelinef("%s authenticate %s %s", tc.client.LastTag, method, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
+		tc.client.WriteCommandf("", "authenticate %s %s", method, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
 
 		xreadContinuation := func() []byte {
-			line, _, result, _ := tc.client.ReadContinuation()
-			if result.Status != "" {
-				tc.t.Fatalf("expected continuation")
-			}
+			line, err := tc.client.ReadContinuation()
+			tcheck(t, err, "read continuation")
 			buf, err := base64.StdEncoding.DecodeString(line)
 			tc.check(err, "parsing base64 from remote")
 			return buf
@@ -161,10 +159,10 @@ func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.
 		} else {
 			tc.writelinef("")
 		}
-		_, result, err := tc.client.Response()
+		resp, err := tc.client.ReadResponse()
 		tc.check(err, "read response")
-		if string(result.Status) != strings.ToUpper(status) {
-			tc.t.Fatalf("got status %q, expected %q", result.Status, strings.ToUpper(status))
+		if string(resp.Status) != strings.ToUpper(status) {
+			tc.t.Fatalf("got status %q, expected %q", resp.Status, strings.ToUpper(status))
 		}
 	}
 
@@ -195,14 +193,11 @@ func TestAuthenticateCRAMMD5(t *testing.T) {
 	auth := func(status string, username, password string) {
 		t.Helper()
 
-		tc.client.LastTag = "x001"
-		tc.writelinef("%s authenticate CRAM-MD5", tc.client.LastTag)
+		tc.client.WriteCommandf("", "authenticate CRAM-MD5")
 
 		xreadContinuation := func() []byte {
-			line, _, result, _ := tc.client.ReadContinuation()
-			if result.Status != "" {
-				tc.t.Fatalf("expected continuation")
-			}
+			line, err := tc.client.ReadContinuation()
+			tcheck(t, err, "read continuation")
 			buf, err := base64.StdEncoding.DecodeString(line)
 			tc.check(err, "parsing base64 from remote")
 			return buf
@@ -215,13 +210,13 @@ func TestAuthenticateCRAMMD5(t *testing.T) {
 		}
 		h := hmac.New(md5.New, []byte(password))
 		h.Write([]byte(chal))
-		resp := fmt.Sprintf("%s %x", username, h.Sum(nil))
-		tc.writelinef("%s", base64.StdEncoding.EncodeToString([]byte(resp)))
+		data := fmt.Sprintf("%s %x", username, h.Sum(nil))
+		tc.writelinef("%s", base64.StdEncoding.EncodeToString([]byte(data)))
 
-		_, result, err := tc.client.Response()
+		resp, err := tc.client.ReadResponse()
 		tc.check(err, "read response")
-		if string(result.Status) != strings.ToUpper(status) {
-			tc.t.Fatalf("got status %q, expected %q", result.Status, strings.ToUpper(status))
+		if string(resp.Status) != strings.ToUpper(status) {
+			tc.t.Fatalf("got status %q, expected %q", resp.Status, strings.ToUpper(status))
 		}
 	}
 
@@ -301,7 +296,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 
 	// Starttls and external auth.
 	tc = startArgsMore(t, false, true, false, nil, &clientConfig, false, true, "mjl", addClientCert)
-	tc.client.Starttls(&clientConfig)
+	tc.client.StartTLS(&clientConfig)
 	tc.transactf("ok", "authenticate external =")
 	tc.close()
 
@@ -339,7 +334,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 		t.Fatalf("tls connection was not resumed")
 	}
 	// Check that operations that require an account work.
-	tc.client.Enable("imap4rev2")
+	tc.client.Enable(imapclient.CapIMAP4rev2)
 	received, err := time.Parse(time.RFC3339, "2022-11-16T10:01:00+01:00")
 	tc.check(err, "parse time")
 	tc.client.Append("inbox", makeAppendTime(exampleMsg, received))

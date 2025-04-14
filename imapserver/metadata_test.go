@@ -38,7 +38,7 @@ func testMetadata(t *testing.T, uidonly bool) {
 	tc.transactf("ok", `delete metabox`)                            // Delete mailbox with live and expunged metadata.
 
 	tc.transactf("no", `setmetadata expungebox (/private/comment "mailbox value")`)
-	tc.xcode("TRYCREATE")
+	tc.xcodeWord("TRYCREATE")
 
 	tc.transactf("ok", `getmetadata "" ("/private/comment")`)
 	tc.xuntagged(imapclient.UntaggedMetadataAnnotations{
@@ -114,7 +114,7 @@ func testMetadata(t *testing.T, uidonly bool) {
 	// Request with a maximum size, we don't get anything larger.
 	tc.transactf("ok", `setmetadata inbox (/private/another "longer")`)
 	tc.transactf("ok", `getmetadata (maxsize 4) inbox (/private/comment /private/another)`)
-	tc.xcodeArg(imapclient.CodeOther{Code: "METADATA", Args: []string{"LONGENTRIES", "6"}})
+	tc.xcode(imapclient.CodeMetadataLongEntries(6))
 	tc.xuntagged(imapclient.UntaggedMetadataAnnotations{
 		Mailbox: "Inbox",
 		Annotations: []imapclient.Annotation{
@@ -230,7 +230,7 @@ func testMetadata(t *testing.T, uidonly bool) {
 	}
 
 	// Broadcast should happen when metadata capability is enabled.
-	tc2.client.Enable(string(imapclient.CapMetadata))
+	tc2.client.Enable(imapclient.CapMetadata)
 	tc2.cmdf("", "idle")
 	tc2.readprefixline("+ ")
 	done = make(chan error)
@@ -285,12 +285,12 @@ func TestMetadataLimit(t *testing.T) {
 	tc.client.Write(buf)
 	tc.client.Writelinef(")")
 	tc.response("no")
-	tc.xcodeArg(imapclient.CodeOther{Code: "METADATA", Args: []string{"MAXSIZE", fmt.Sprintf("%d", metadataMaxSize)}})
+	tc.xcode(imapclient.CodeMetadataMaxSize(metadataMaxSize))
 
 	// Reach limit for max number.
 	for i := 1; i <= metadataMaxKeys; i++ {
 		tc.transactf("ok", `setmetadata inbox (/private/key%d "test")`, i)
 	}
 	tc.transactf("no", `setmetadata inbox (/private/toomany "test")`)
-	tc.xcodeArg(imapclient.CodeOther{Code: "METADATA", Args: []string{"TOOMANY"}})
+	tc.xcode(imapclient.CodeMetadataTooMany{})
 }

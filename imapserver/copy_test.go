@@ -44,16 +44,16 @@ func testCopy(t *testing.T, uidonly bool) {
 		tc.transactf("ok", "uid copy 3:* Trash")
 	} else {
 		tc.transactf("no", "copy 1 nonexistent")
-		tc.xcode("TRYCREATE")
+		tc.xcodeWord("TRYCREATE")
 		tc.transactf("no", "copy 1 expungebox")
-		tc.xcode("TRYCREATE")
+		tc.xcodeWord("TRYCREATE")
 
 		tc.transactf("no", "copy 1 inbox") // Cannot copy to same mailbox.
 
 		tc2.transactf("ok", "noop") // Drain.
 
 		tc.transactf("ok", "copy 1:* Trash")
-		tc.xcodeArg(imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}, To: []imapclient.NumRange{{First: 1, Last: uint32ptr(2)}}})
+		tc.xcode(mustParseCode("COPYUID 1 3:4 1:2"))
 	}
 	tc2.transactf("ok", "noop")
 	tc2.xuntagged(
@@ -64,7 +64,7 @@ func testCopy(t *testing.T, uidonly bool) {
 
 	tc.transactf("no", "uid copy 1,2 Trash") // No match.
 	tc.transactf("ok", "uid copy 4,3 Trash")
-	tc.xcodeArg(imapclient.CodeCopyUID{DestUIDValidity: 1, From: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}, To: []imapclient.NumRange{{First: 3, Last: uint32ptr(4)}}})
+	tc.xcode(mustParseCode("COPYUID 1 3:4 3:4"))
 	tc2.transactf("ok", "noop")
 	tc2.xuntagged(
 		imapclient.UntaggedExists(4),
@@ -81,5 +81,5 @@ func testCopy(t *testing.T, uidonly bool) {
 	tclimit.xuntagged(imapclient.UntaggedExists(1))
 	// Second message would take account past limit.
 	tclimit.transactf("no", "uid copy 1:* Trash")
-	tclimit.xcode("OVERQUOTA")
+	tclimit.xcodeWord("OVERQUOTA")
 }

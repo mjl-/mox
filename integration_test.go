@@ -70,16 +70,16 @@ func TestDeliver(t *testing.T) {
 		imapc, err := imapclient.New(imapconn, &opts)
 		tcheck(t, err, "new imapclient")
 
-		_, _, err = imapc.Login(imapuser, imappassword)
+		_, err = imapc.Login(imapuser, imappassword)
 		tcheck(t, err, "imap login")
 
-		_, _, err = imapc.Select("Inbox")
+		_, err = imapc.Select("Inbox")
 		tcheck(t, err, "imap select inbox")
 
-		err = imapc.Commandf("", "idle")
+		err = imapc.WriteCommandf("", "idle")
 		tcheck(t, err, "write imap idle command")
 
-		_, _, _, err = imapc.ReadContinuation()
+		_, err = imapc.ReadContinuation()
 		tcheck(t, err, "read imap continuation")
 
 		idle := make(chan idleResponse)

@@ -20,7 +20,7 @@ func testStore(t *testing.T, uidonly bool) {
 	defer tc.close()
 
 	tc.login("mjl@mox.example", password0)
-	tc.client.Enable("imap4rev2")
+	tc.client.Enable(imapclient.CapIMAP4rev2)
 
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.client.Select("inbox")

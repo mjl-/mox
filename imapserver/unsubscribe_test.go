@@ -10,10 +10,10 @@ func TestUnsubscribe(t *testing.T) {
 	tc := start(t, false)
 	defer tc.close()
 
-	tc.login("mjl@mox.example", password0)
-
 	tc2 := startNoSwitchboard(t, false)
 	defer tc2.closeNoWait()
+
+	tc.login("mjl@mox.example", password0)
 	tc2.login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "unsubscribe")       // Missing param.

@@ -38,15 +38,15 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 
 	// Check basic requirements of CONDSTORE.
 
-	capability := "Condstore"
+	capability := imapclient.CapCondstore
 	if qresync {
-		capability = "Qresync"
+		capability = imapclient.CapQresync
 	}
 
 	tc.login("mjl@mox.example", password0)
 	tc.client.Enable(capability)
 	tc.transactf("ok", "Select inbox")
-	tc.xuntaggedOpt(false, imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "HIGHESTMODSEQ", CodeArg: imapclient.CodeHighestModSeq(2), More: "x"}})
+	tc.xuntaggedOpt(false, imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeHighestModSeq(2), Text: "x"})
 
 	// First some tests without any messages.
 
@@ -133,19 +133,19 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 	// The ones we insert below will start with modseq 3. So we'll have messages with modseq 1 and 3-6.
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged(imapclient.UntaggedExists(4))
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4")})
+	tc.xcode(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4")})
 
 	tc.transactf("ok", "Append otherbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged()
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 3, UIDs: xparseUIDRange("1")})
+	tc.xcode(imapclient.CodeAppendUID{UIDValidity: 3, UIDs: xparseUIDRange("1")})
 
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged(imapclient.UntaggedExists(5))
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("5")})
+	tc.xcode(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("5")})
 
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged(imapclient.UntaggedExists(6))
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("6")})
+	tc.xcode(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("6")})
 
 	tc2.transactf("ok", "Noop")
 	noflags := imapclient.FetchFlags(nil)
@@ -181,10 +181,10 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 
 	// Check highestmodseq when we select.
 	tc.transactf("ok", "Examine otherbox")
-	tc.xuntaggedOpt(false, imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "HIGHESTMODSEQ", CodeArg: imapclient.CodeHighestModSeq(clientModseq + 2), More: "x"}})
+	tc.xuntaggedOpt(false, imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeHighestModSeq(clientModseq + 2), Text: "x"})
 
 	tc.transactf("ok", "Select inbox")
-	tc.xuntaggedOpt(false, imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "HIGHESTMODSEQ", CodeArg: imapclient.CodeHighestModSeq(clientModseq + 4), More: "x"}})
+	tc.xuntaggedOpt(false, imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeHighestModSeq(clientModseq + 4), Text: "x"})
 
 	clientModseq += 4
 
@@ -225,13 +225,13 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 	if !uidonly {
 		// unchangedsince 0 never passes the check. ../rfc/7162:640
 		tc.transactf("ok", `Store 1 (Unchangedsince 0) +Flags ()`)
-		tc.xcodeArg(imapclient.CodeModified(xparseNumSet("1")))
+		tc.xcode(imapclient.CodeModified(xparseNumSet("1")))
 		tc.xuntagged(tc.untaggedFetch(1, 1, noflags, imapclient.FetchModSeq(1)))
 	}
 
 	// Modseq is 2 for first condstore-aware-appended message, so also no match.
 	tc.transactf("ok", `Uid Store 4 (Unchangedsince 1) +Flags ()`)
-	tc.xcodeArg(imapclient.CodeModified(xparseNumSet("4")))
+	tc.xcode(imapclient.CodeModified(xparseNumSet("4")))
 
 	if uidonly {
 		tc.transactf("ok", `Uid Store 1 (Unchangedsince 1) +Flags (label1)`)
@@ -239,7 +239,7 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 		// Modseq is 1 for original message.
 		tc.transactf("ok", `Store 1 (Unchangedsince 1) +Flags (label1)`)
 	}
-	tc.xcode("") // No MODIFIED.
+	tc.xcode(nil) // No MODIFIED.
 	clientModseq++
 	tc.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchFlags{"label1"}, imapclient.FetchModSeq(clientModseq)))
 	tc2.transactf("ok", "Noop")
@@ -255,7 +255,7 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 	// modseq change made in the first application. ../rfc/7162:823
 	tc.transactf("ok", `Uid Store 1,1 (Unchangedsince %d) -Flags (label1)`, clientModseq)
 	clientModseq++
-	tc.xcode("") // No MODIFIED.
+	tc.xcode(nil) // No MODIFIED.
 	tc.xuntagged(
 		tc.untaggedFetch(1, 1, imapclient.FetchFlags(nil), imapclient.FetchModSeq(clientModseq)),
 	)
@@ -273,7 +273,7 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 		// Modify without actually changing flags, there will be no new modseq and no broadcast.
 		tc.transactf("ok", `Store 1 (Unchangedsince %d) -Flags (label1)`, clientModseq)
 		tc.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchFlags(nil), imapclient.FetchModSeq(clientModseq)))
-		tc.xcode("") // No MODIFIED.
+		tc.xcode(nil) // No MODIFIED.
 		tc2.transactf("ok", "Noop")
 		tc2.xuntagged()
 		tc3.transactf("ok", "Noop")
@@ -318,7 +318,7 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 	} else {
 		tc.xuntagged(imapclient.UntaggedExpunge(3), imapclient.UntaggedExpunge(3))
 	}
-	tc.xcodeArg(imapclient.CodeHighestModSeq(clientModseq))
+	tc.xcode(imapclient.CodeHighestModSeq(clientModseq))
 	tc2.transactf("ok", "Noop")
 	if uidonly {
 		tc2.xuntagged(imapclient.UntaggedVanished{UIDs: xparseNumSet("3:4")})
@@ -340,7 +340,7 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 	tc.transactf("ok", "Select inbox")
 	tc.xuntaggedOpt(false,
 		imapclient.UntaggedExists(4),
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "HIGHESTMODSEQ", CodeArg: imapclient.CodeHighestModSeq(clientModseq), More: "x"}},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeHighestModSeq(clientModseq), Text: "x"},
 	)
 
 	if !uidonly {
@@ -367,16 +367,16 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 		tc.transactf("ok", "Search Return (Min Max All) 1:* Modseq 8")
 		tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 1, All: esearchall0("1"), ModSeq: 8})
 		tc.transactf("ok", "Search Return (Min Max All) 1:* Modseq 9")
-		tc.xuntagged(imapclient.UntaggedEsearch{Tag: tc.client.LastTag})
+		tc.xuntagged(imapclient.UntaggedEsearch{Tag: tc.client.LastTag()})
 	}
 
 	// store, cannot modify expunged messages.
 	tc.transactf("ok", `Uid Store 3,4 (Unchangedsince %d) +Flags (label2)`, clientModseq)
 	tc.xuntagged()
-	tc.xcode("") // Not MODIFIED.
+	tc.xcode(nil) // Not MODIFIED.
 	tc.transactf("ok", `Uid Store 3,4 +Flags (label2)`)
 	tc.xuntagged()
-	tc.xcode("") // Not MODIFIED.
+	tc.xcode(nil) // Not MODIFIED.
 
 	// Check all condstore-enabling commands (and their syntax), ../rfc/7162:368
 
@@ -497,13 +497,13 @@ func testCondstoreQresync(t *testing.T, qresync, uidonly bool) {
 	clientModseq++
 	if qresync {
 		tc.xuntaggedOpt(false, imapclient.UntaggedVanished{UIDs: xparseNumSet("2")})
-		tc.xcodeArg(imapclient.CodeHighestModSeq(clientModseq))
+		tc.xcode(imapclient.CodeHighestModSeq(clientModseq))
 	} else if uidonly {
 		tc.xuntaggedOpt(false, imapclient.UntaggedVanished{UIDs: xparseNumSet("2")})
-		tc.xcode("")
+		tc.xcode(nil)
 	} else {
 		tc.xuntaggedOpt(false, imapclient.UntaggedExpunge(2))
-		tc.xcode("")
+		tc.xcode(nil)
 	}
 	tc2.transactf("ok", "Noop")
 	if uidonly {
@@ -615,21 +615,21 @@ func testQresync(t *testing.T, tc *testconn, uidonly bool, clientModseq int64) {
 	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent l1 l2 l3 l4 l5 l6 l7 l8 label1`, " ")
 	permflags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent \*`, " ")
 	uflags := imapclient.UntaggedFlags(flags)
-	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "PERMANENTFLAGS", CodeArg: imapclient.CodeList{Code: "PERMANENTFLAGS", Args: permflags}, More: "x"}}
+	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodePermanentFlags(permflags), Text: "x"}
 
 	baseUntagged := []imapclient.Untagged{
 		uflags,
 		upermflags,
 		imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"},
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDNEXT", CodeArg: imapclient.CodeUint{Code: "UIDNEXT", Num: 7}, More: "x"}},
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDVALIDITY", CodeArg: imapclient.CodeUint{Code: "UIDVALIDITY", Num: 1}, More: "x"}},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUIDNext(7), Text: "x"},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUIDValidity(1), Text: "x"},
 		imapclient.UntaggedRecent(0),
 		imapclient.UntaggedExists(4),
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "HIGHESTMODSEQ", CodeArg: imapclient.CodeHighestModSeq(clientModseq), More: "x"}},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeHighestModSeq(clientModseq), Text: "x"},
 	}
 	if !uidonly {
 		baseUntagged = append(baseUntagged,
-			imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UNSEEN", CodeArg: imapclient.CodeUint{Code: "UNSEEN", Num: 1}, More: "x"}},
+			imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUnseen(1), Text: "x"},
 		)
 	}
 
@@ -752,7 +752,7 @@ func testQresync(t *testing.T, tc *testconn, uidonly bool, clientModseq int64) {
 	tc.transactf("ok", "Select inbox (Qresync (1 10 (1,3,6 1,3,6)))")
 	tc.xuntagged(
 		makeUntagged(
-			imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "ALERT", More: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended."}},
+			imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeWord("ALERT"), Text: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended."},
 			imapclient.UntaggedVanished{Earlier: true, UIDs: xparseNumSet("3:4")},
 			tc.untaggedFetch(4, 6, noflags, imapclient.FetchModSeq(clientModseq)),
 		)...,
@@ -765,7 +765,7 @@ func testQresync(t *testing.T, tc *testconn, uidonly bool, clientModseq int64) {
 	tc.transactf("ok", "Select inbox (Qresync (1 18 (1,3,6 1,3,6)))")
 	tc.xuntagged(
 		makeUntagged(
-			imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "ALERT", More: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended."}},
+			imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeWord("ALERT"), Text: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended."},
 			imapclient.UntaggedVanished{Earlier: true, UIDs: xparseNumSet("3:4")},
 			tc.untaggedFetch(4, 6, noflags, imapclient.FetchModSeq(clientModseq)),
 		)...,
@@ -786,7 +786,7 @@ func testQresyncHistory(t *testing.T, uidonly bool) {
 	defer tc.close()
 
 	tc.login("mjl@mox.example", password0)
-	tc.client.Enable("Qresync")
+	tc.client.Enable(imapclient.CapQresync)
 	tc.transactf("ok", "Append inbox {1+}\r\nx")
 	tc.transactf("ok", "Append inbox {1+}\r\nx") // modseq 6
 	tc.transactf("ok", "Append inbox {1+}\r\nx")
@@ -799,16 +799,16 @@ func testQresyncHistory(t *testing.T, uidonly bool) {
 	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent`, " ")
 	permflags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent \*`, " ")
 	uflags := imapclient.UntaggedFlags(flags)
-	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "PERMANENTFLAGS", CodeArg: imapclient.CodeList{Code: "PERMANENTFLAGS", Args: permflags}, More: "x"}}
+	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodePermanentFlags(permflags), Text: "x"}
 	baseUntagged := []imapclient.Untagged{
 		uflags,
 		upermflags,
 		imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"},
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDNEXT", CodeArg: imapclient.CodeUint{Code: "UIDNEXT", Num: 4}, More: "x"}},
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDVALIDITY", CodeArg: imapclient.CodeUint{Code: "UIDVALIDITY", Num: 1}, More: "x"}},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUIDNext(4), Text: "x"},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUIDValidity(1), Text: "x"},
 		imapclient.UntaggedRecent(0),
 		imapclient.UntaggedExists(1),
-		imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "HIGHESTMODSEQ", CodeArg: imapclient.CodeHighestModSeq(10), More: "x"}},
+		imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeHighestModSeq(10), Text: "x"},
 	}
 
 	makeUntagged := func(l ...imapclient.Untagged) []imapclient.Untagged {

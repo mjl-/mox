@@ -38,19 +38,19 @@ func testSelectExamine(t *testing.T, examine, uidonly bool) {
 		okcode = "READ-ONLY"
 	}
 
-	uclosed := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "CLOSED", More: "x"}}
+	uclosed := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeWord("CLOSED"), Text: "x"}
 	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent`, " ")
 	permflags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent \*`, " ")
 	uflags := imapclient.UntaggedFlags(flags)
-	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "PERMANENTFLAGS", CodeArg: imapclient.CodeList{Code: "PERMANENTFLAGS", Args: permflags}, More: "x"}}
+	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodePermanentFlags(permflags), Text: "x"}
 	urecent := imapclient.UntaggedRecent(0)
 	uexists0 := imapclient.UntaggedExists(0)
 	uexists1 := imapclient.UntaggedExists(1)
-	uuidval1 := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDVALIDITY", CodeArg: imapclient.CodeUint{Code: "UIDVALIDITY", Num: 1}, More: "x"}}
-	uuidnext1 := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDNEXT", CodeArg: imapclient.CodeUint{Code: "UIDNEXT", Num: 1}, More: "x"}}
+	uuidval1 := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUIDValidity(1), Text: "x"}
+	uuidnext1 := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUIDNext(1), Text: "x"}
 	ulist := imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"}
-	uunseen := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UNSEEN", CodeArg: imapclient.CodeUint{Code: "UNSEEN", Num: 1}, More: "x"}}
-	uuidnext2 := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDNEXT", CodeArg: imapclient.CodeUint{Code: "UIDNEXT", Num: 2}, More: "x"}}
+	uunseen := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUnseen(1), Text: "x"}
+	uuidnext2 := imapclient.UntaggedResult{Status: imapclient.OK, Code: imapclient.CodeUIDNext(2), Text: "x"}
 
 	// Parameter required.
 	tc.transactf("bad", "%s", cmd)
@@ -61,11 +61,11 @@ func testSelectExamine(t *testing.T, examine, uidonly bool) {
 
 	tc.transactf("ok", "%s inbox", cmd)
 	tc.xuntagged(uflags, upermflags, urecent, uexists0, uuidval1, uuidnext1, ulist)
-	tc.xcode(okcode)
+	tc.xcodeWord(okcode)
 
 	tc.transactf("ok", `%s "inbox"`, cmd)
 	tc.xuntagged(uclosed, uflags, upermflags, urecent, uexists0, uuidval1, uuidnext1, ulist)
-	tc.xcode(okcode)
+	tc.xcodeWord(okcode)
 
 	// Append a message. It will be reported as UNSEEN.
 	tc.client.Append("inbox", makeAppend(exampleMsg))
@@ -75,11 +75,11 @@ func testSelectExamine(t *testing.T, examine, uidonly bool) {
 	} else {
 		tc.xuntagged(uclosed, uflags, upermflags, urecent, uunseen, uexists1, uuidval1, uuidnext2, ulist)
 	}
-	tc.xcode(okcode)
+	tc.xcodeWord(okcode)
 
 	// With imap4rev2, we no longer get untagged RECENT or untagged UNSEEN.
-	tc.client.Enable("imap4rev2")
+	tc.client.Enable(imapclient.CapIMAP4rev2)
 	tc.transactf("ok", "%s inbox", cmd)
 	tc.xuntagged(uclosed, uflags, upermflags, uexists1, uuidval1, uuidnext2, ulist)
-	tc.xcode(okcode)
+	tc.xcodeWord(okcode)
 }

@@ -57,7 +57,7 @@ func (tc *testconn) xsearchmodseq(modseq int64, nums ...uint32) {
 func (tc *testconn) xesearch(exp imapclient.UntaggedEsearch) {
 	tc.t.Helper()
 
-	exp.Tag = tc.client.LastTag
+	exp.Tag = tc.client.LastTag()
 	tc.xuntagged(exp)
 }
 
@@ -298,11 +298,8 @@ func testSearch(t *testing.T, uidonly bool) {
 		inprogress := func(cur, goal uint32) imapclient.UntaggedResult {
 			return imapclient.UntaggedResult{
 				Status: "OK",
-				RespText: imapclient.RespText{
-					Code:    "INPROGRESS",
-					CodeArg: imapclient.CodeInProgress{Tag: "tag1", Current: &cur, Goal: &goal},
-					More:    "still searching",
-				},
+				Code:   imapclient.CodeInProgress{Tag: "tag1", Current: &cur, Goal: &goal},
+				Text:   "still searching",
 			}
 		}
 		tc.xuntagged(
@@ -408,7 +405,7 @@ func testSearch(t *testing.T, uidonly bool) {
 	}
 
 	// Do a seemingly old-style search command with IMAP4rev2 enabled. We'll still get ESEARCH responses.
-	tc.client.Enable("IMAP4rev2")
+	tc.client.Enable(imapclient.CapIMAP4rev2)
 
 	if !uidonly {
 		tc.transactf("ok", `search undraft`)
@@ -566,11 +563,8 @@ func testSearchMulti(t *testing.T, selected, uidonly bool) {
 	inprogress := func(cur, goal uint32) imapclient.UntaggedResult {
 		return imapclient.UntaggedResult{
 			Status: "OK",
-			RespText: imapclient.RespText{
-				Code:    "INPROGRESS",
-				CodeArg: imapclient.CodeInProgress{Tag: "Tag1", Current: &cur, Goal: &goal},
-				More:    "still searching",
-			},
+			Code:   imapclient.CodeInProgress{Tag: "Tag1", Current: &cur, Goal: &goal},
+			Text:   "still searching",
 		}
 	}
 	tc.cmdf("Tag1", `Esearch In (Personal) Return () All`)

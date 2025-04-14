@@ -24,7 +24,7 @@ func testFetch(t *testing.T, uidonly bool) {
 	defer tc.close()
 
 	tc.login("mjl@mox.example", password0)
-	tc.client.Enable("imap4rev2")
+	tc.client.Enable(imapclient.CapIMAP4rev2)
 	received, err := time.Parse(time.RFC3339, "2022-11-16T10:01:00+01:00")
 	tc.check(err, "parse time")
 	tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
@@ -58,7 +58,13 @@ func testFetch(t *testing.T, uidonly bool) {
 	}
 	bodystructure1 := bodyxstructure1
 	bodystructure1.RespAttr = "BODYSTRUCTURE"
-	bodystructbody1.Ext = &imapclient.BodyExtension1Part{}
+	bodyext1 := imapclient.BodyExtension1Part{
+		Disposition:       ptr((*string)(nil)),
+		DispositionParams: ptr([][2]string(nil)),
+		Language:          ptr([]string(nil)),
+		Location:          ptr((*string)(nil)),
+	}
+	bodystructbody1.Ext = &bodyext1
 	bodystructure1.Body = bodystructbody1
 
 	split := strings.SplitN(exampleMsg, "\r\n\r\n", 2)
@@ -115,26 +121,26 @@ func testFetch(t *testing.T, uidonly bool) {
 		tc.transactf("ok", "fetch 1 binary[1]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, binarypart1)) // Seen flag not changed.
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "uid fetch 1 binary[]<1.1>")
 		tc.xuntagged(
 			tc.untaggedFetch(1, 1, binarypartial1, noflags),
 			tc.untaggedFetch(1, 1, flagsSeen), // For UID FETCH, we get the flags during the command.
 		)
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 binary[1]<1.1>")
 		tc.xuntagged(tc.untaggedFetch(1, 1, binarypartpartial1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 binary[]<10000.10001>")
 		tc.xuntagged(tc.untaggedFetch(1, 1, binaryend1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 binary[1]<10000.10001>")
 		tc.xuntagged(tc.untaggedFetch(1, 1, binarypartend1, noflags))
 		tc.transactf("ok", "noop")
@@ -146,7 +152,7 @@ func testFetch(t *testing.T, uidonly bool) {
 		tc.transactf("ok", "fetch 1 binary.size[1]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, binarysizepart1))
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 body[]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, body1, noflags))
 		tc.transactf("ok", "noop")
@@ -156,31 +162,31 @@ func testFetch(t *testing.T, uidonly bool) {
 		tc.transactf("ok", "noop")
 		tc.xuntagged() // Already seen.
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 body[1]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, bodypart1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 body[1]<1.2>")
 		tc.xuntagged(tc.untaggedFetch(1, 1, body1off1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 body[1]<100000.100000>")
 		tc.xuntagged(tc.untaggedFetch(1, 1, bodyend1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 body[header]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, bodyheader1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 body[text]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, bodytext1, noflags))
 		tc.transactf("ok", "noop")
@@ -191,21 +197,21 @@ func testFetch(t *testing.T, uidonly bool) {
 		tc.xuntagged(tc.untaggedFetch(1, 1, rfcheader1))
 
 		// equivalent to body[text], ../rfc/3501:3199
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 rfc822.text")
 		tc.xuntagged(tc.untaggedFetch(1, 1, rfctext1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
 		// equivalent to body[], ../rfc/3501:3179
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 rfc822")
 		tc.xuntagged(tc.untaggedFetch(1, 1, rfc1, noflags))
 		tc.transactf("ok", "noop")
 		tc.xuntagged(tc.untaggedFetch(1, 1, flagsSeen))
 
 		// With PEEK, we should not get the \Seen flag.
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1 body.peek[]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, body1))
 
@@ -229,7 +235,7 @@ func testFetch(t *testing.T, uidonly bool) {
 		// Missing sequence number. ../rfc/9051:7018
 		tc.transactf("bad", "fetch 2 body[]")
 
-		tc.client.StoreFlagsClear("1", true, `\Seen`)
+		tc.client.MSNStoreFlagsClear("1", true, `\Seen`)
 		tc.transactf("ok", "fetch 1:1 body[]")
 		tc.xuntagged(tc.untaggedFetch(1, 1, body1, noflags))
 		tc.transactf("ok", "noop")
@@ -300,17 +306,28 @@ func testFetch(t *testing.T, uidonly bool) {
 		RespAttr: "BODYSTRUCTURE",
 		Body: imapclient.BodyTypeMpart{
 			Bodies: []any{
-				imapclient.BodyTypeBasic{BodyFields: imapclient.BodyFields{Octets: 275}, Ext: &imapclient.BodyExtension1Part{}},
-				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "US-ASCII"}}, Octets: 114}, Lines: 3, Ext: &imapclient.BodyExtension1Part{}},
+				imapclient.BodyTypeBasic{BodyFields: imapclient.BodyFields{Octets: 275}, Ext: &bodyext1},
+				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "US-ASCII"}}, Octets: 114}, Lines: 3, Ext: &bodyext1},
 				imapclient.BodyTypeMpart{
 					Bodies: []any{
-						imapclient.BodyTypeBasic{MediaType: "AUDIO", MediaSubtype: "BASIC", BodyFields: imapclient.BodyFields{CTE: "BASE64", Octets: 22}, Ext: &imapclient.BodyExtension1Part{}},
-						imapclient.BodyTypeBasic{MediaType: "IMAGE", MediaSubtype: "JPEG", BodyFields: imapclient.BodyFields{CTE: "BASE64"}, Ext: &imapclient.BodyExtension1Part{Disposition: "inline", DispositionParams: [][2]string{{"filename", "image.jpg"}}}},
+						imapclient.BodyTypeBasic{MediaType: "AUDIO", MediaSubtype: "BASIC", BodyFields: imapclient.BodyFields{CTE: "BASE64", Octets: 22}, Ext: &bodyext1},
+						imapclient.BodyTypeBasic{MediaType: "IMAGE", MediaSubtype: "JPEG", BodyFields: imapclient.BodyFields{CTE: "BASE64"}, Ext: &imapclient.BodyExtension1Part{
+							Disposition:       ptr(ptr("inline")),
+							DispositionParams: ptr([][2]string{{"filename", "image.jpg"}}),
+							Language:          ptr([]string(nil)),
+							Location:          ptr((*string)(nil)),
+						}},
 					},
 					MediaSubtype: "PARALLEL",
-					Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"BOUNDARY", "unique-boundary-2"}}},
+					Ext: &imapclient.BodyExtensionMpart{
+						Params:            [][2]string{{"BOUNDARY", "unique-boundary-2"}},
+						Disposition:       ptr((*string)(nil)), // Present but nil.
+						DispositionParams: ptr([][2]string(nil)),
+						Language:          ptr([]string(nil)),
+						Location:          ptr((*string)(nil)),
+					},
 				},
-				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "ENRICHED", BodyFields: imapclient.BodyFields{Octets: 145}, Lines: 5, Ext: &imapclient.BodyExtension1Part{}},
+				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "ENRICHED", BodyFields: imapclient.BodyFields{Octets: 145}, Lines: 5, Ext: &bodyext1},
 				imapclient.BodyTypeMsg{
 					MediaType:    "MESSAGE",
 					MediaSubtype: "RFC822",
@@ -323,17 +340,25 @@ func testFetch(t *testing.T, uidonly bool) {
 						To:      []imapclient.Address{{Name: "mox", Adl: "", Mailbox: "info", Host: "mox.example"}},
 					},
 					Bodystructure: imapclient.BodyTypeText{
-						MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "ISO-8859-1"}}, CTE: "QUOTED-PRINTABLE", Octets: 51}, Lines: 1, Ext: &imapclient.BodyExtension1Part{}},
+						MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "ISO-8859-1"}}, CTE: "QUOTED-PRINTABLE", Octets: 51}, Lines: 1, Ext: &bodyext1},
 					Lines: 7,
 					Ext: &imapclient.BodyExtension1Part{
-						MD5:      "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
-						Language: []string{"en", "de"},
-						Location: "http://localhost",
+						MD5:               ptr("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="),
+						Disposition:       ptr((*string)(nil)),
+						DispositionParams: ptr([][2]string(nil)),
+						Language:          ptr([]string{"en", "de"}),
+						Location:          ptr(ptr("http://localhost")),
 					},
 				},
 			},
 			MediaSubtype: "MIXED",
-			Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"BOUNDARY", "unique-boundary-1"}}},
+			Ext: &imapclient.BodyExtensionMpart{
+				Params:            [][2]string{{"BOUNDARY", "unique-boundary-1"}},
+				Disposition:       ptr((*string)(nil)), // Present but nil.
+				DispositionParams: ptr([][2]string(nil)),
+				Language:          ptr([]string(nil)),
+				Location:          ptr((*string)(nil)),
+			},
 		},
 	}
 	tc.client.Append("inbox", makeAppendTime(nestedMessage, received))

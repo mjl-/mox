@@ -43,9 +43,9 @@ func testDelete(t *testing.T, uidonly bool) {
 
 	// ../rfc/9051:2000
 	tc.transactf("no", "delete a") // Still has child.
-	tc.xcode("HASCHILDREN")
+	tc.xcodeWord("HASCHILDREN")
 
-	tc3.client.Enable("IMAP4rev2") // For \NonExistent support.
+	tc3.client.Enable(imapclient.CapIMAP4rev2) // For \NonExistent support.
 	tc.transactf("ok", "delete a/b")
 	tc2.transactf("ok", "noop")
 	tc2.xuntagged() // No IMAP4rev2, no \NonExistent.

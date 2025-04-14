@@ -161,6 +161,22 @@ func tcheck(t *testing.T, err error, msg string) {
 	}
 }
 
+func mustParseUntagged(s string) imapclient.Untagged {
+	r, err := imapclient.ParseUntagged(s + "\r\n")
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func mustParseCode(s string) imapclient.Code {
+	r, err := imapclient.ParseCode(s)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
 func mockUIDValidity() func() {
 	orig := store.InitialUIDValidity
 	store.InitialUIDValidity = func() uint32 {
@@ -182,8 +198,7 @@ type testconn struct {
 	switchStop func()
 
 	// Result of last command.
-	lastUntagged []imapclient.Untagged
-	lastResult   imapclient.Result
+	lastResponse imapclient.Response
 	lastErr      error
 }
 
@@ -194,24 +209,21 @@ func (tc *testconn) check(err error, msg string) {
 	}
 }
 
-func (tc *testconn) last(l []imapclient.Untagged, r imapclient.Result, err error) {
-	tc.lastUntagged = l
-	tc.lastResult = r
+func (tc *testconn) last(resp imapclient.Response, err error) {
+	tc.lastResponse = resp
 	tc.lastErr = err
 }
 
-func (tc *testconn) xcode(s string) {
+func (tc *testconn) xcode(c imapclient.Code) {
 	tc.t.Helper()
-	if tc.lastResult.Code != s {
-		tc.t.Fatalf("got last code %q, expected %q", tc.lastResult.Code, s)
+	if !reflect.DeepEqual(tc.lastResponse.Code, c) {
+		tc.t.Fatalf("got last code %#v, expected %#v", tc.lastResponse.Code, c)
 	}
 }
 
-func (tc *testconn) xcodeArg(v any) {
+func (tc *testconn) xcodeWord(s string) {
 	tc.t.Helper()
-	if !reflect.DeepEqual(tc.lastResult.CodeArg, v) {
-		tc.t.Fatalf("got last code argument %v, expected %v", tc.lastResult.CodeArg, v)
-	}
+	tc.xcode(imapclient.CodeWord(s))
 }
 
 func (tc *testconn) xuntagged(exps ...imapclient.Untagged) {
@@ -221,7 +233,7 @@ func (tc *testconn) xuntagged(exps ...imapclient.Untagged) {
 
 func (tc *testconn) xuntaggedOpt(all bool, exps ...imapclient.Untagged) {
 	tc.t.Helper()
-	last := slices.Clone(tc.lastUntagged)
+	last := slices.Clone(tc.lastResponse.Untagged)
 	var mismatch any
 next:
 	for ei, exp := range exps {
@@ -241,10 +253,10 @@ next:
 			tc.t.Fatalf("untagged data mismatch, got:\n\t%T %#v\nexpected:\n\t%T %#v", mismatch, mismatch, exp, exp)
 		}
 		var next string
-		if len(tc.lastUntagged) > 0 {
-			next = fmt.Sprintf(", next:\n%#v", tc.lastUntagged[0])
+		if len(tc.lastResponse.Untagged) > 0 {
+			next = fmt.Sprintf(", next:\n%#v", tc.lastResponse.Untagged[0])
 		}
-		tc.t.Fatalf("did not find untagged response:\n%#v %T (%d)\nin %v%s", exp, exp, ei, tc.lastUntagged, next)
+		tc.t.Fatalf("did not find untagged response:\n%#v %T (%d)\nin %v%s", exp, exp, ei, tc.lastResponse.Untagged, next)
 	}
 	if len(last) > 0 && all {
 		tc.t.Fatalf("leftover untagged responses %v", last)
@@ -263,8 +275,8 @@ func tuntagged(t *testing.T, got imapclient.Untagged, dst any) {
 
 func (tc *testconn) xnountagged() {
 	tc.t.Helper()
-	if len(tc.lastUntagged) != 0 {
-		tc.t.Fatalf("got %v untagged, expected 0", tc.lastUntagged)
+	if len(tc.lastResponse.Untagged) != 0 {
+		tc.t.Fatalf("got %v untagged, expected 0", tc.lastResponse.Untagged)
 	}
 }
 
@@ -288,16 +300,24 @@ func (tc *testconn) transactf(status, format string, args ...any) {
 
 func (tc *testconn) response(status string) {
 	tc.t.Helper()
-	tc.lastUntagged, tc.lastResult, tc.lastErr = tc.client.Response()
-	tcheck(tc.t, tc.lastErr, "read imap response")
-	if strings.ToUpper(status) != string(tc.lastResult.Status) {
-		tc.t.Fatalf("got status %q, expected %q", tc.lastResult.Status, status)
+	tc.lastResponse, tc.lastErr = tc.client.ReadResponse()
+	if tc.lastErr != nil {
+		if resp, ok := tc.lastErr.(imapclient.Response); ok {
+			if !reflect.DeepEqual(resp, tc.lastResponse) {
+				tc.t.Fatalf("response error %#v != returned response %#v", tc.lastErr, tc.lastResponse)
+			}
+		} else {
+			tcheck(tc.t, tc.lastErr, "read imap response")
+		}
+	}
+	if strings.ToUpper(status) != string(tc.lastResponse.Status) {
+		tc.t.Fatalf("got status %q, expected %q", tc.lastResponse.Status, status)
 	}
 }
 
 func (tc *testconn) cmdf(tag, format string, args ...any) {
 	tc.t.Helper()
-	err := tc.client.Commandf(tag, format, args...)
+	err := tc.client.WriteCommandf(tag, format, args...)
 	tcheck(tc.t, err, "writing imap command")
 }
 
@@ -658,15 +678,15 @@ func TestLiterals(t *testing.T) {
 
 	from := "ntmpbox"
 	to := "tmpbox"
+	tc.client.LastTagSet("xtag")
 	fmt.Fprint(tc.client, "xtag rename ")
 	tc.client.WriteSyncLiteral(from)
 	fmt.Fprint(tc.client, " ")
 	tc.client.WriteSyncLiteral(to)
 	fmt.Fprint(tc.client, "\r\n")
-	tc.client.LastTag = "xtag"
-	tc.last(tc.client.Response())
-	if tc.lastResult.Status != "OK" {
-		tc.t.Fatalf(`got %q, expected "OK"`, tc.lastResult.Status)
+	tc.lastResponse, tc.lastErr = tc.client.ReadResponse()
+	if tc.lastResponse.Status != "OK" {
+		tc.t.Fatalf(`got %q, expected "OK"`, tc.lastResponse.Status)
 	}
 }
 
@@ -937,7 +957,7 @@ func TestReference(t *testing.T) {
 	tc2.login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
-	tc.client.StoreFlagsSet("1", true, `\Deleted`)
+	tc.client.MSNStoreFlagsSet("1", true, `\Deleted`)
 	tc.client.Expunge()
 
 	tc3 := startNoSwitchboard(t, false)
@@ -945,7 +965,7 @@ func TestReference(t *testing.T) {
 	tc3.login("mjl@mox.example", password0)
 	tc3.transactf("ok", `list "" "inbox" return (status (messages))`)
 	tc3.xuntagged(
-		imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"},
+		mustParseUntagged(`* LIST () "/" Inbox`),
 		imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 0}},
 	)
 
