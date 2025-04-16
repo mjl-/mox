@@ -1,3 +1,5 @@
+//go:generate sh -c "curl https://publicsuffix.org/list/public_suffix_list.dat >public_suffix_list.txt"
+
 // Package publicsuffix implements a public suffix list to look up the
 // organizational domain for a given host name. Organizational domains can be
 // registered, one level below a top-level domain.
