@@ -898,7 +898,7 @@ func inlineSanitizeHTML(log mlog.Log, setHeaders func(), w io.Writer, p *message
 func findCID(p *message.Part, parents []*message.Part, cid string) *message.Part {
 	for i := len(parents) - 1; i >= 0; i-- {
 		for j, pp := range parents[i].Parts {
-			if strings.EqualFold(pp.ContentID, cid) {
+			if pp.ContentID != nil && strings.EqualFold(*pp.ContentID, cid) {
 				return &parents[i].Parts[j]
 			}
 		}
@@ -911,7 +911,7 @@ func findCID(p *message.Part, parents []*message.Part, cid string) *message.Part
 }
 
 func findCIDAll(p *message.Part, cid string) *message.Part {
-	if strings.EqualFold(p.ContentID, cid) {
+	if p.ContentID != nil && strings.EqualFold(*p.ContentID, cid) {
 		return p
 	}
 	for i := range p.Parts {

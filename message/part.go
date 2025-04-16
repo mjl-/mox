@@ -65,14 +65,14 @@ type Part struct {
 	MediaType               string            // From Content-Type, upper case. E.g. "TEXT". Can be empty because content-type may be absent. In this case, the part may be treated as TEXT/PLAIN.
 	MediaSubType            string            // From Content-Type, upper case. E.g. "PLAIN".
 	ContentTypeParams       map[string]string // E.g. holds "boundary" for multipart messages. Has lower-case keys, and original case values.
-	ContentID               string
-	ContentDescription      string
-	ContentTransferEncoding string // In upper case.
-	ContentDisposition      string
-	ContentMD5              string
-	ContentLanguage         string
-	ContentLocation         string
-	Envelope                *Envelope // Email message headers. Not for non-message parts.
+	ContentID               *string           `json:",omitempty"`
+	ContentDescription      *string           `json:",omitempty"`
+	ContentTransferEncoding *string           `json:",omitempty"` // In upper case.
+	ContentDisposition      *string           `json:",omitempty"`
+	ContentMD5              *string           `json:",omitempty"`
+	ContentLanguage         *string           `json:",omitempty"`
+	ContentLocation         *string           `json:",omitempty"`
+	Envelope                *Envelope         `json:",omitempty"` // Email message headers. Not for non-message parts.
 
 	Parts []Part // Parts if this is a multipart.
 
@@ -362,13 +362,18 @@ func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Par
 		}
 	}
 
-	p.ContentID = p.header.Get("Content-Id")
-	p.ContentDescription = p.header.Get("Content-Description")
-	p.ContentTransferEncoding = strings.ToUpper(p.header.Get("Content-Transfer-Encoding"))
-	p.ContentDisposition = p.header.Get("Content-Disposition")
-	p.ContentMD5 = p.header.Get("Content-Md5")
-	p.ContentLanguage = p.header.Get("Content-Language")
-	p.ContentLocation = p.header.Get("Content-Location")
+	p.ContentID = p.headerGet("Content-Id")
+	p.ContentDescription = p.headerGet("Content-Description")
+	cte := p.headerGet("Content-Transfer-Encoding")
+	if cte != nil {
+		s := strings.ToUpper(*cte)
+		cte = &s
+	}
+	p.ContentTransferEncoding = cte
+	p.ContentDisposition = p.headerGet("Content-Disposition")
+	p.ContentMD5 = p.headerGet("Content-Md5")
+	p.ContentLanguage = p.headerGet("Content-Language")
+	p.ContentLocation = p.headerGet("Content-Location")
 
 	if parent == nil {
 		p.Envelope, err = parseEnvelope(log, mail.Header(p.header))
@@ -422,6 +427,15 @@ func (p *Part) Header() (textproto.MIMEHeader, error) {
 	h, err := parseHeader(p.HeaderReader())
 	p.header = h
 	return h, err
+}
+
+func (p *Part) headerGet(k string) *string {
+	l := p.header.Values(k)
+	if len(l) == 0 {
+		return nil
+	}
+	s := l[0]
+	return &s
 }
 
 // HeaderReader returns a reader for the header section of this part, including ending bare CRLF.
@@ -657,17 +671,10 @@ var ErrParamEncoding = errors.New("bad header parameter encoding")
 // and a filename may still be returned.
 func (p *Part) DispositionFilename() (disposition string, filename string, err error) {
 	cd := p.ContentDisposition
-	if cd == "" {
-		h, err := p.Header()
-		if err != nil {
-			return "", "", fmt.Errorf("parsing header: %w", err)
-		}
-		cd = h.Get("Content-Disposition")
-	}
 	var disp string
 	var params map[string]string
-	if cd != "" {
-		disp, params, err = mime.ParseMediaType(cd)
+	if cd != nil && *cd != "" {
+		disp, params, err = mime.ParseMediaType(*cd)
 	}
 	if err != nil {
 		return "", "", fmt.Errorf("%w: parsing disposition header: %v", ErrParamEncoding, err)
@@ -786,9 +793,13 @@ func (tr *textReader) Read(buf []byte) (int, error) {
 	return o, nil
 }
 
-func newDecoder(cte string, r io.Reader) io.Reader {
+func newDecoder(cte *string, r io.Reader) io.Reader {
+	var s string
+	if cte != nil {
+		s = *cte
+	}
 	// ../rfc/2045:775
-	switch cte {
+	switch s {
 	case "BASE64":
 		return base64.NewDecoder(base64.StdEncoding, r)
 	case "QUOTED-PRINTABLE":

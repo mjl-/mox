@@ -929,10 +929,14 @@ func PartStructure(log mlog.Log, p *message.Part) (webhook.Structure, error) {
 	} else if err != nil {
 		return webhook.Structure{}, err
 	}
+	var cid string
+	if p.ContentID != nil {
+		cid = *p.ContentID
+	}
 	s := webhook.Structure{
 		ContentType:        strings.ToLower(p.MediaType + "/" + p.MediaSubType),
 		ContentTypeParams:  p.ContentTypeParams,
-		ContentID:          p.ContentID,
+		ContentID:          cid,
 		ContentDisposition: strings.ToLower(disp),
 		Filename:           filename,
 		DecodedSize:        p.DecodedSize,

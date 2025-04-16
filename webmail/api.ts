@@ -84,13 +84,13 @@ export interface Part {
 	MediaType: string  // From Content-Type, upper case. E.g. "TEXT". Can be empty because content-type may be absent. In this case, the part may be treated as TEXT/PLAIN.
 	MediaSubType: string  // From Content-Type, upper case. E.g. "PLAIN".
 	ContentTypeParams?: { [key: string]: string }  // E.g. holds "boundary" for multipart messages. Has lower-case keys, and original case values.
-	ContentID: string
-	ContentDescription: string
-	ContentTransferEncoding: string  // In upper case.
-	ContentDisposition: string
-	ContentMD5: string
-	ContentLanguage: string
-	ContentLocation: string
+	ContentID?: string | null
+	ContentDescription?: string | null
+	ContentTransferEncoding?: string | null  // In upper case.
+	ContentDisposition?: string | null
+	ContentMD5?: string | null
+	ContentLanguage?: string | null
+	ContentLocation?: string | null
 	Envelope?: Envelope | null  // Email message headers. Not for non-message parts.
 	Parts?: Part[] | null  // Parts if this is a multipart.
 	Message?: Part | null  // Only for message/rfc822 and message/global. This part may have a buffer as backing io.ReaderAt, because a message/global can have a non-identity content-transfer-encoding. This part has a nil parent.
@@ -617,7 +617,7 @@ export const types: TypenameMap = {
 	"NotFilter": {"Name":"NotFilter","Docs":"","Fields":[{"Name":"Words","Docs":"","Typewords":["[]","string"]},{"Name":"From","Docs":"","Typewords":["[]","string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["[]","string"]},{"Name":"Attachments","Docs":"","Typewords":["AttachmentType"]},{"Name":"Labels","Docs":"","Typewords":["[]","string"]}]},
 	"Page": {"Name":"Page","Docs":"","Fields":[{"Name":"AnchorMessageID","Docs":"","Typewords":["int64"]},{"Name":"Count","Docs":"","Typewords":["int32"]},{"Name":"DestMessageID","Docs":"","Typewords":["int64"]}]},
 	"ParsedMessage": {"Name":"ParsedMessage","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Part","Docs":"","Typewords":["Part"]},{"Name":"Headers","Docs":"","Typewords":["{}","[]","string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]},{"Name":"Texts","Docs":"","Typewords":["[]","string"]},{"Name":"HasHTML","Docs":"","Typewords":["bool"]},{"Name":"ListReplyAddress","Docs":"","Typewords":["nullable","MessageAddress"]},{"Name":"TextPaths","Docs":"","Typewords":["[]","[]","int32"]},{"Name":"HTMLPath","Docs":"","Typewords":["[]","int32"]}]},
-	"Part": {"Name":"Part","Docs":"","Fields":[{"Name":"BoundaryOffset","Docs":"","Typewords":["int64"]},{"Name":"HeaderOffset","Docs":"","Typewords":["int64"]},{"Name":"BodyOffset","Docs":"","Typewords":["int64"]},{"Name":"EndOffset","Docs":"","Typewords":["int64"]},{"Name":"RawLineCount","Docs":"","Typewords":["int64"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"MediaType","Docs":"","Typewords":["string"]},{"Name":"MediaSubType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["string"]},{"Name":"ContentDescription","Docs":"","Typewords":["string"]},{"Name":"ContentTransferEncoding","Docs":"","Typewords":["string"]},{"Name":"ContentDisposition","Docs":"","Typewords":["string"]},{"Name":"ContentMD5","Docs":"","Typewords":["string"]},{"Name":"ContentLanguage","Docs":"","Typewords":["string"]},{"Name":"ContentLocation","Docs":"","Typewords":["string"]},{"Name":"Envelope","Docs":"","Typewords":["nullable","Envelope"]},{"Name":"Parts","Docs":"","Typewords":["[]","Part"]},{"Name":"Message","Docs":"","Typewords":["nullable","Part"]}]},
+	"Part": {"Name":"Part","Docs":"","Fields":[{"Name":"BoundaryOffset","Docs":"","Typewords":["int64"]},{"Name":"HeaderOffset","Docs":"","Typewords":["int64"]},{"Name":"BodyOffset","Docs":"","Typewords":["int64"]},{"Name":"EndOffset","Docs":"","Typewords":["int64"]},{"Name":"RawLineCount","Docs":"","Typewords":["int64"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"MediaType","Docs":"","Typewords":["string"]},{"Name":"MediaSubType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentDescription","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentTransferEncoding","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentDisposition","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentMD5","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentLanguage","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentLocation","Docs":"","Typewords":["nullable","string"]},{"Name":"Envelope","Docs":"","Typewords":["nullable","Envelope"]},{"Name":"Parts","Docs":"","Typewords":["[]","Part"]},{"Name":"Message","Docs":"","Typewords":["nullable","Part"]}]},
 	"Envelope": {"Name":"Envelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","Address"]},{"Name":"Sender","Docs":"","Typewords":["[]","Address"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","Address"]},{"Name":"To","Docs":"","Typewords":["[]","Address"]},{"Name":"CC","Docs":"","Typewords":["[]","Address"]},{"Name":"BCC","Docs":"","Typewords":["[]","Address"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
 	"Address": {"Name":"Address","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["string"]}]},
 	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},

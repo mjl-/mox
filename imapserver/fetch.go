@@ -776,11 +776,15 @@ func (cmd *fetchCmd) xbinary(a fetchAtt) (string, token) {
 		cmd.xerrorf("binary only allowed on leaf parts, not multipart/* or message/rfc822 or message/global")
 	}
 
-	switch p.ContentTransferEncoding {
+	var cte string
+	if p.ContentTransferEncoding != nil {
+		cte = *p.ContentTransferEncoding
+	}
+	switch cte {
 	case "", "7BIT", "8BIT", "BINARY", "BASE64", "QUOTED-PRINTABLE":
 	default:
 		// ../rfc/9051:5913
-		xusercodeErrorf("UNKNOWN-CTE", "unknown Content-Transfer-Encoding %q", p.ContentTransferEncoding)
+		xusercodeErrorf("UNKNOWN-CTE", "unknown Content-Transfer-Encoding %q", cte)
 	}
 
 	r := p.Reader()
@@ -992,7 +996,11 @@ func bodyFldParams(p *message.Part) token {
 	return params
 }
 
-func bodyFldEnc(s string) token {
+func bodyFldEnc(cte *string) token {
+	var s string
+	if cte != nil {
+		s = *cte
+	}
 	up := strings.ToUpper(s)
 	switch up {
 	case "7BIT", "8BIT", "BINARY", "BASE64", "QUOTED-PRINTABLE":
@@ -1002,14 +1010,14 @@ func bodyFldEnc(s string) token {
 }
 
 func bodyFldMd5(p *message.Part) token {
-	if p.ContentMD5 == "" {
+	if p.ContentMD5 == nil {
 		return nilt
 	}
-	return string0(p.ContentMD5)
+	return string0(*p.ContentMD5)
 }
 
 func bodyFldDisp(log mlog.Log, p *message.Part) token {
-	if p.ContentDisposition == "" {
+	if p.ContentDisposition == nil {
 		return nilt
 	}
 
@@ -1019,12 +1027,12 @@ func bodyFldDisp(log mlog.Log, p *message.Part) token {
 	// And decodes character sets and removes language tags, like
 	// "title*0*=us-ascii'en'hello%20world. ../rfc/2231:210
 
-	disp, params, err := mime.ParseMediaType(p.ContentDisposition)
+	disp, params, err := mime.ParseMediaType(*p.ContentDisposition)
 	if err != nil {
-		log.Debugx("parsing content-disposition, ignoring", err, slog.String("header", p.ContentDisposition))
+		log.Debugx("parsing content-disposition, ignoring", err, slog.String("header", *p.ContentDisposition))
 		return nilt
 	} else if len(params) == 0 {
-		log.Debug("content-disposition has no parameters, ignoring", slog.String("header", p.ContentDisposition))
+		log.Debug("content-disposition has no parameters, ignoring", slog.String("header", *p.ContentDisposition))
 		return nilt
 	}
 	var fields listspace
@@ -1036,14 +1044,14 @@ func bodyFldDisp(log mlog.Log, p *message.Part) token {
 
 func bodyFldLang(p *message.Part) token {
 	// todo: ../rfc/3282:86 ../rfc/5646:218 we currently just split on comma and trim space, should properly parse header.
-	if p.ContentLanguage == "" {
+	if p.ContentLanguage == nil {
 		return nilt
 	}
 	var l listspace
-	for _, s := range strings.Split(p.ContentLanguage, ",") {
+	for _, s := range strings.Split(*p.ContentLanguage, ",") {
 		s = strings.TrimSpace(s)
 		if s == "" {
-			return string0(p.ContentLanguage)
+			return string0(*p.ContentLanguage)
 		}
 		l = append(l, string0(s))
 	}
@@ -1051,10 +1059,10 @@ func bodyFldLang(p *message.Part) token {
 }
 
 func bodyFldLoc(p *message.Part) token {
-	if p.ContentLocation == "" {
+	if p.ContentLocation == nil {
 		return nilt
 	}
-	return string0(p.ContentLocation)
+	return string0(*p.ContentLocation)
 }
 
 // xbodystructure returns a "body".

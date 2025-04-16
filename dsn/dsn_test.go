@@ -50,8 +50,8 @@ func tcheckType(t *testing.T, p *message.Part, mt, mst, cte string) {
 	if !strings.EqualFold(p.MediaSubType, mst) {
 		t.Fatalf("got mediasubtype %q, expected %q", p.MediaSubType, mst)
 	}
-	if !strings.EqualFold(p.ContentTransferEncoding, cte) {
-		t.Fatalf("got content-transfer-encoding %q, expected %q", p.ContentTransferEncoding, cte)
+	if !(cte == "" && p.ContentTransferEncoding == nil || cte != "" && p.ContentTransferEncoding != nil && strings.EqualFold(cte, *p.ContentTransferEncoding)) {
+		t.Fatalf("got content-transfer-encoding %v, expected %v", p.ContentTransferEncoding, cte)
 	}
 }
 

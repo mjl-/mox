@@ -1151,6 +1151,7 @@
 					"Name": "ContentID",
 					"Docs": "",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},
@@ -1158,6 +1159,7 @@
 					"Name": "ContentDescription",
 					"Docs": "",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},
@@ -1165,6 +1167,7 @@
 					"Name": "ContentTransferEncoding",
 					"Docs": "In upper case.",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},
@@ -1172,6 +1175,7 @@
 					"Name": "ContentDisposition",
 					"Docs": "",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},
@@ -1179,6 +1183,7 @@
 					"Name": "ContentMD5",
 					"Docs": "",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},
@@ -1186,6 +1191,7 @@
 					"Name": "ContentLanguage",
 					"Docs": "",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},
@@ -1193,6 +1199,7 @@
 					"Name": "ContentLocation",
 					"Docs": "",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},

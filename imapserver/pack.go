@@ -34,11 +34,11 @@ func (t niltoken) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }
 
-func nilOrString(s string) token {
-	if s == "" {
+func nilOrString(s *string) token {
+	if s == nil {
 		return nilt
 	}
-	return string0(s)
+	return string0(*s)
 }
 
 type string0 string
