@@ -63,6 +63,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox config dnsrecords domain
 	mox config describe-domains >domains.conf
 	mox config describe-static >mox.conf
+	mox config account list
 	mox config account add account address
 	mox config account rm account
 	mox config account disable account message
@@ -952,6 +953,15 @@ This configuration file needs modifications to make it valid. For example, it
 may contain unfinished list items.
 
 	usage: mox config describe-static >mox.conf
+
+# mox config account list
+
+List all accounts.
+
+Each account is printed on a line, with optional additional tab-separated
+information, such as "(disabled)".
+
+	usage: mox config account list
 
 # mox config account add
 

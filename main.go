@@ -145,6 +145,7 @@ var commands = []struct {
 	{"config dnsrecords", cmdConfigDNSRecords},
 	{"config describe-domains", cmdConfigDescribeDomains},
 	{"config describe-static", cmdConfigDescribeStatic},
+	{"config account list", cmdConfigAccountList},
 	{"config account add", cmdConfigAccountAdd},
 	{"config account rm", cmdConfigAccountRemove},
 	{"config account disable", cmdConfigAccountDisable},
@@ -994,6 +995,27 @@ func ctlcmdConfigAccountRemove(ctl *ctl, account string) {
 	ctl.xwrite(account)
 	ctl.xreadok()
 	fmt.Println("account removed")
+}
+
+func cmdConfigAccountList(c *cmd) {
+	c.help = `List all accounts.
+
+Each account is printed on a line, with optional additional tab-separated
+information, such as "(disabled)".
+`
+	args := c.Parse()
+	if len(args) != 0 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAccountList(xctl())
+}
+
+func ctlcmdConfigAccountList(ctl *ctl) {
+	ctl.xwrite("accountlist")
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
 }
 
 func cmdConfigAccountDisable(c *cmd) {

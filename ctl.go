@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,7 +34,6 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webapi"
-	"slices"
 )
 
 // ctl represents a connection to the ctl unix domain socket of a running mox instance.
@@ -1055,6 +1055,25 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 		err := admin.AccountRemove(ctx, account)
 		xctl.xcheck(err, "removing account")
 		xctl.xwriteok()
+
+	case "accountlist":
+		/* protocol:
+		> "accountlist"
+		< "ok" or error
+		< stream
+		*/
+		xctl.xwriteok()
+		xw := xctl.writer()
+		all, disabled := mox.Conf.AccountsDisabled()
+		slices.Sort(all)
+		for _, account := range all {
+			var extra string
+			if slices.Contains(disabled, account) {
+				extra += "\t(disabled)"
+			}
+			fmt.Fprintf(xw, "%s%s\n", account, extra)
+		}
+		xw.xclose()
 
 	case "accountdisabled":
 		/* protocol:

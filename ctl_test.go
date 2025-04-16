@@ -305,6 +305,12 @@ func TestCtl(t *testing.T) {
 	testctl(func(xctl *ctl) {
 		ctlcmdConfigAccountDisabled(xctl, "mjl2", "testing")
 	})
+
+	// "accountlist"
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAccountList(xctl)
+	})
+
 	testctl(func(xctl *ctl) {
 		ctlcmdConfigAccountDisabled(xctl, "mjl2", "")
 	})
