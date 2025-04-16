@@ -60,38 +60,11 @@ func FuzzServer(f *testing.F) {
 		f.Add(tag + cmd)
 	}
 
-	log := mlog.New("imapserver", nil)
-	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imapserverfuzz/mox.conf")
-	mox.MustLoadConfig(true, false)
-	store.Close() // May not be open, we ignore error.
-	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
-	os.RemoveAll(dataDir)
-	err := store.Init(ctxbg)
-	if err != nil {
-		f.Fatalf("store init: %v", err)
-	}
-	defer store.Switchboard()()
-
-	acc, err := store.OpenAccount(log, "mjl", false)
-	if err != nil {
-		f.Fatalf("open account: %v", err)
-	}
-	defer func() {
-		acc.Close()
-		acc.WaitClosed()
-	}()
-	err = acc.SetPassword(log, password0)
-	if err != nil {
-		f.Fatalf("set password: %v", err)
-	}
-
-	comm := store.RegisterComm(acc)
-	defer comm.Unregister()
-
 	var cid int64 = 1
 
 	var fl *os.File
 	if false {
+		var err error
 		fl, err = os.OpenFile("fuzz.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			f.Fatalf("fuzz log")
@@ -105,6 +78,34 @@ func FuzzServer(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, s string) {
+		log := mlog.New("imapserver", nil)
+		mox.ConfigStaticPath = filepath.FromSlash("../testdata/imapserverfuzz/mox.conf")
+		mox.MustLoadConfig(true, false)
+		store.Close() // May not be open, we ignore error.
+		dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
+		os.RemoveAll(dataDir)
+		err := store.Init(ctxbg)
+		if err != nil {
+			t.Fatalf("store init: %v", err)
+		}
+		defer store.Switchboard()()
+
+		acc, err := store.OpenAccount(log, "mjl", false)
+		if err != nil {
+			t.Fatalf("open account: %v", err)
+		}
+		defer func() {
+			acc.Close()
+			acc.WaitClosed()
+		}()
+		err = acc.SetPassword(log, password0)
+		if err != nil {
+			t.Fatalf("set password: %v", err)
+		}
+
+		comm := store.RegisterComm(acc)
+		defer comm.Unregister()
+
 		run := func(cmds []string) {
 			limitersInit() // Reset rate limiters.
 			serverConn, clientConn := net.Pipe()
