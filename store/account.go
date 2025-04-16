@@ -975,20 +975,24 @@ type Account struct {
 }
 
 type Upgrade struct {
-	ID              byte
-	Threads         byte // 0: None, 1: Adding MessageID's completed, 2: Adding ThreadID's completed.
-	MailboxModSeq   bool // Whether mailboxes have been assigned modseqs.
-	MailboxParentID bool // Setting ParentID on mailboxes.
-	MailboxCounts   bool // Global flag about whether we have mailbox flags. Instead of previous per-mailbox boolean.
+	ID                  byte
+	Threads             byte // 0: None, 1: Adding MessageID's completed, 2: Adding ThreadID's completed.
+	MailboxModSeq       bool // Whether mailboxes have been assigned modseqs.
+	MailboxParentID     bool // Setting ParentID on mailboxes.
+	MailboxCounts       bool // Global flag about whether we have mailbox flags. Instead of previous per-mailbox boolean.
+	MessageParseVersion int  // If different than latest, all messages will be reparsed.
 }
 
-// upgradeInit is the value to for new account database, that don't need any upgrading.
+const MessageParseVersionLatest = 1
+
+// upgradeInit is the value for new account database, which don't need any upgrading.
 var upgradeInit = Upgrade{
-	ID:              1, // Singleton.
-	Threads:         2,
-	MailboxModSeq:   true,
-	MailboxParentID: true,
-	MailboxCounts:   true,
+	ID:                  1, // Singleton.
+	Threads:             2,
+	MailboxModSeq:       true,
+	MailboxParentID:     true,
+	MailboxCounts:       true,
+	MessageParseVersion: MessageParseVersionLatest,
 }
 
 // InitialUIDValidity returns a UIDValidity used for initializing an account.
@@ -1132,6 +1136,8 @@ func openAccount(log mlog.Log, name string) (a *Account, rerr error) {
 // or error. Only exported for use by subcommands that verify the database file.
 // Almost all account opens must go through OpenAccount/OpenEmail/OpenEmailAuth.
 func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, rerr error) {
+	log = log.With(slog.String("account", accountName))
+
 	dbpath := filepath.Join(accountDir, "index.db")
 
 	// Create account if it doesn't exist yet.
@@ -1501,6 +1507,68 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		}
 	}
 
+	if up.MessageParseVersion != MessageParseVersionLatest {
+		log.Debug("upgrade: reparsing message for mime structures for new message parse version", slog.Int("current", up.MessageParseVersion), slog.Int("latest", MessageParseVersionLatest))
+
+		// Unless we also need to upgrade threading, we'll be reparsing messages in the
+		// background so opening of the account is quick.
+		done := make(chan error, 1)
+		bg := up.Threads == 2
+
+		// Increase account use before holding on to account in background.
+		// Caller holds the lock. The goroutine below decreases nused by calling
+		// closeAccount.
+		acc.nused++
+
+		go func() {
+			start := time.Now()
+
+			var rerr error
+			defer func() {
+				x := recover()
+				if x != nil {
+					rerr = fmt.Errorf("unhandled panic: %v", x)
+					log.Error("unhandled panic reparsing messages", slog.Any("err", x))
+					debug.PrintStack()
+					metrics.PanicInc(metrics.Store)
+				}
+
+				if bg && rerr != nil {
+					log.Errorx("upgrade failed: reparsing message for mime structures for new message parse version", rerr, slog.Duration("duration", time.Since(start)))
+				}
+				done <- rerr
+
+				// Must be done at end of defer. Our parent context/goroutine has openAccounts lock
+				// held, so we won't make progress until after the enclosing method has returned.
+				err := closeAccount(acc)
+				log.Check(err, "closing account after reparsing messages")
+			}()
+
+			var total int
+			total, rerr = acc.ReparseMessages(mox.Shutdown, log)
+			if rerr != nil {
+				rerr = fmt.Errorf("reparsing messages and updating mime structures in message index: %w", rerr)
+				return
+			}
+
+			up.MessageParseVersion = MessageParseVersionLatest
+			rerr = acc.DB.Update(context.TODO(), &up)
+			if rerr != nil {
+				rerr = fmt.Errorf("marking latest message parse version: %w", rerr)
+				return
+			}
+
+			log.Info("upgrade completed: reparsing message for mime structures for new message parse version", slog.Int("total", total), slog.Duration("duration", time.Since(start)))
+		}()
+
+		if !bg {
+			err := <-done
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	if up.Threads == 2 {
 		close(acc.threadsCompleted)
 		return acc, nil
@@ -1514,11 +1582,11 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 	// Ensure all messages have a MessageID and SubjectBase, which are needed when
 	// matching threads.
 	// Then assign messages to threads, in the same way we do during imports.
-	log.Info("upgrading account for threading, in background", slog.String("account", acc.Name))
+	log.Info("upgrading account for threading, in background")
 	go func() {
 		defer func() {
 			err := closeAccount(acc)
-			log.Check(err, "closing use of account after upgrading account storage for threads", slog.String("account", a.Name))
+			log.Check(err, "closing use of account after upgrading account storage for threads")
 
 			// Mark that upgrade has finished, possibly error is indicated in threadsErr.
 			close(acc.threadsCompleted)
@@ -1537,9 +1605,9 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		err := upgradeThreads(mox.Shutdown, log, acc, up)
 		if err != nil {
 			a.threadsErr = err
-			log.Errorx("upgrading account for threading, aborted", err, slog.String("account", a.Name))
+			log.Errorx("upgrading account for threading, aborted", err)
 		} else {
-			log.Info("upgrading account for threading, completed", slog.String("account", a.Name))
+			log.Info("upgrading account for threading, completed")
 		}
 	}()
 	return acc, nil

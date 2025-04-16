@@ -1706,8 +1706,6 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 		xctl.xwriteok()
 		xw := xctl.writer()
 
-		const batchSize = 100
-
 		xreparseAccount := func(accName string) {
 			acc, err := store.OpenAccount(log, accName, false)
 			xctl.xcheck(err, "open account")
@@ -1716,43 +1714,11 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 				log.Check(err, "closing account after reparsing messages")
 			}()
 
-			total := 0
-			var lastID int64
-			for {
-				var n int
-				// Don't process all message in one transaction, we could block the account for too long.
-				err := acc.DB.Write(ctx, func(tx *bstore.Tx) error {
-					q := bstore.QueryTx[store.Message](tx)
-					q.FilterEqual("Expunged", false)
-					q.FilterGreater("ID", lastID)
-					q.Limit(batchSize)
-					q.SortAsc("ID")
-					return q.ForEach(func(m store.Message) error {
-						lastID = m.ID
-						mr := acc.MessageReader(m)
-						p, err := message.EnsurePart(log.Logger, false, mr, m.Size)
-						if err != nil {
-							fmt.Fprintf(xw, "parsing message %d: %v (continuing)\n", m.ID, err)
-						}
-						m.ParsedBuf, err = json.Marshal(p)
-						if err != nil {
-							return fmt.Errorf("marshal parsed message: %v", err)
-						}
-						total++
-						n++
-						if err := tx.Update(&m); err != nil {
-							return fmt.Errorf("update message: %v", err)
-						}
-						return nil
-					})
+			start := time.Now()
+			total, err := acc.ReparseMessages(ctx, log)
+			xctl.xcheck(err, "reparse messages")
 
-				})
-				xctl.xcheck(err, "update messages with parsed mime structure")
-				if n < batchSize {
-					break
-				}
-			}
-			fmt.Fprintf(xw, "%d message(s) reparsed for account %s\n", total, accName)
+			fmt.Fprintf(xw, "%d message(s) reparsed for account %s in %dms\n", total, accName, time.Since(start)/time.Millisecond)
 		}
 
 		if accountOpt != "" {
