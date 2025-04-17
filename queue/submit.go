@@ -215,8 +215,10 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		}
 		msgr = store.FileMsgReader(m0.MsgPrefix, f)
 		defer func() {
-			err := msgr.Close()
-			qlog.Check(err, "closing message after delivery attempt")
+			if msgr != nil {
+				err := msgr.Close()
+				qlog.Check(err, "closing message after delivery attempt")
+			}
 		}()
 	}
 
@@ -230,6 +232,13 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	if submiterr != nil {
 		qlog.Infox("smtp transaction for delivery failed", submiterr)
 	}
+
+	// Must close before processing, because that may try to remove the message file,
+	// and on Windows we can't have it open when we remove it.
+	cerr := msgr.Close()
+	qlog.Check(cerr, "closing message after delivery attempt")
+	msgr = nil
+
 	failed, delivered = processDeliveries(qlog, m0, msgs, addr, transport.Host, backoff, rcptErrs, submiterr)
 }
 
