@@ -16,7 +16,7 @@ import (
 
 // We process messages in database transactions in batches. Otherwise, for accounts
 // with many messages, we would get slowdown with many unwritten blocks in memory.
-var reparseMessageBatchSize = 10000
+var reparseMessageBatchSize = 1000
 
 // ReparseMessages reparses all messages, updating the MIME structure in
 // Message.ParsedBuf.
