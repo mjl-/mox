@@ -103,6 +103,7 @@ func (a *Account) ReparseMessages(ctx context.Context, log mlog.Log) (int, error
 						if r.Err != nil {
 							log.Errorx("marshal parsed form of message", r.Err, slog.Int64("msgid", r.Message.ID))
 						} else {
+							r.Message.ParsedBuf = r.Buf
 							if err := tx.Update(r.Message); err != nil {
 								return fmt.Errorf("update message: %w", err)
 							}
@@ -120,6 +121,7 @@ func (a *Account) ReparseMessages(ctx context.Context, log mlog.Log) (int, error
 				if r.Err != nil {
 					log.Errorx("marshal parsed form of message", r.Err, slog.Int64("msgid", r.Message.ID))
 				} else {
+					r.Message.ParsedBuf = r.Buf
 					if err := tx.Update(r.Message); err != nil {
 						return fmt.Errorf("update message with id %d: %w", r.Message.ID, err)
 					}

@@ -983,7 +983,7 @@ type Upgrade struct {
 	MessageParseVersion int  // If different than latest, all messages will be reparsed.
 }
 
-const MessageParseVersionLatest = 1
+const MessageParseVersionLatest = 2
 
 // upgradeInit is the value for new account database, which don't need any upgrading.
 var upgradeInit = Upgrade{
