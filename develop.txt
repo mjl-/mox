@@ -335,7 +335,6 @@ done
 - Add release to the Latest release & News sections of website/index.md.
 - Create git tag (note: "#" is comment, not title/header), push code.
 - Build and publish new docker image.
-- Publish signed release notes for updates.xmox.nl and update DNS record.
 - Deploy update to website.
 - Create new release on the github page, so watchers get a notification.
   Copy/paste it manually from the tag text, and add link to download/compile
@@ -343,3 +342,4 @@ done
 - Publish new cross-referenced code/rfc to www.xmox.nl/xr/.
 - Update moxtools with latest version.
 - Update implementations support matrix.
+- Publish signed release notes for updates.xmox.nl and update DNS record.
