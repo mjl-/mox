@@ -1094,13 +1094,12 @@ func TestDMARCReport(t *testing.T) {
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/dmarcreport/mox.conf"), resolver)
 	defer ts.close()
 
-	run := func(report string, n int) {
+	run := func(rcptTo, report string, n int) {
 		t.Helper()
 		ts.run(func(client *smtpclient.Client) {
 			t.Helper()
 
 			mailFrom := "remote@example.org"
-			rcptTo := "mjl@mox.example"
 
 			msgb := &bytes.Buffer{}
 			_, xerr := fmt.Fprintf(msgb, "From: %s\r\nTo: %s\r\nSubject: dmarc report\r\nMIME-Version: 1.0\r\nContent-Type: text/xml\r\n\r\n", mailFrom, rcptTo)
@@ -1121,13 +1120,33 @@ func TestDMARCReport(t *testing.T) {
 		})
 	}
 
-	run(dmarcReport, 0)
-	run(strings.ReplaceAll(dmarcReport, "xmox.nl", "mox.example"), 1)
+	n := 0
+	run("dmarc-reports@mox.example", dmarcReport, 0) // Wrong domain in report.
+
+	report := strings.ReplaceAll(dmarcReport, "xmox.nl", "mox.example")
+	n++
+	run("dmarc-reports@mox.example", report, n)
 
 	// We always store as an evaluation, but as optional for reports.
 	evals := checkEvaluationCount(t, 2)
 	tcompare(t, evals[0].Optional, true)
 	tcompare(t, evals[1].Optional, true)
+
+	// Not a dmarc recipient, delivery should succeed.
+	run("mjl@mox.example", report, n)
+	run("mjl-test@mox.example", report, n)
+	run("mjl+test@mox.example", report, n)
+	// Likewise, address that is prefix of reporting address.
+	run("dmarc@mox.example", report, n)
+	run("Dmarc-test@mox.example", report, n)
+	run("dmarc+test@mox.example", report, n)
+
+	// Localpart catchall separators work for dmarc reporting addresses too.
+	n++
+	run("Dmarc-reports-test@mox.example", report, n)
+
+	n++
+	run("dmarc-Reports+test@mox.example", report, n)
 }
 
 const dmarcReport = `<?xml version="1.0" encoding="UTF-8" ?>
@@ -1245,17 +1264,39 @@ func TestTLSReport(t *testing.T) {
 		})
 	}
 
-	const tlsrpt = `{"organization-name":"Example.org","date-range":{"start-datetime":"2022-01-07T00:00:00Z","end-datetime":"2022-01-07T23:59:59Z"},"contact-info":"tlsrpt@example.org","report-id":"1","policies":[{"policy":{"policy-type":"no-policy-found","policy-domain":"xmox.nl"},"summary":{"total-successful-session-count":1,"total-failure-session-count":0}}]}`
+	tlsrpt := `{"organization-name":"Example.org","date-range":{"start-datetime":"2022-01-07T00:00:00Z","end-datetime":"2022-01-07T23:59:59Z"},"contact-info":"tlsrpt@example.org","report-id":"1","policies":[{"policy":{"policy-type":"no-policy-found","policy-domain":"xmox.nl"},"summary":{"total-successful-session-count":1,"total-failure-session-count":0}}]}`
 
-	run("mjl@mox.example", tlsrpt, 0)
-	run("mjl@mox.example", strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example"), 1)
-	run("mjl@mailhost.mox.example", strings.ReplaceAll(tlsrpt, "xmox.nl", "mailhost.mox.example"), 2)
+	n := 0
+	run("tls-reports@mox.example", tlsrpt, n) // Wrong domain in report.
+
+	tlsrptdom := strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example")
+	n++
+	run("tls-reports@mox.example", tlsrptdom, n)
+
+	tlsrpthost := strings.ReplaceAll(tlsrpt, "xmox.nl", "mailhost.mox.example")
+	n++
+	run("tls-reports@mailhost.mox.example", tlsrpthost, n)
 
 	// We always store as an evaluation, but as optional for reports.
 	evals := checkEvaluationCount(t, 3)
 	tcompare(t, evals[0].Optional, true)
 	tcompare(t, evals[1].Optional, true)
 	tcompare(t, evals[2].Optional, true)
+
+	// Catchall separators work for reporting address too.
+	n++
+	run("Tls-reports+more@mox.example", tlsrptdom, n)
+	n++
+	run("tls-Reports-more@mox.example", tlsrptdom, n)
+
+	// Non-reporting addresses, mail accepted, but not as report.
+	run("mjl@mox.example", tlsrptdom, n)
+	run("Mjl-other@mox.example", tlsrptdom, n)
+	run("mjl+other@mox.example", tlsrptdom, n)
+	// Likewise, address that is prefix of reporting address.
+	run("tls@mox.example", tlsrptdom, n)
+	run("Tls-other@mox.example", tlsrptdom, n)
+	run("tls+other@mox.example", tlsrptdom, n)
 }
 
 func TestRatelimitConnectionrate(t *testing.T) {

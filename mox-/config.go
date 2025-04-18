@@ -1747,6 +1747,8 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if _, ok := c.Accounts[dmarc.Account]; !ok {
 			addDomainErrorf("DMARC account %q does not exist", dmarc.Account)
 		}
+
+		// Note: For backwards compabilitiy, DMARC reporting localparts can contain catchall separators.
 		lp, err := smtp.ParseLocalpart(dmarc.Localpart)
 		if err != nil {
 			addDomainErrorf("invalid DMARC localpart %q: %s", dmarc.Localpart, err)
@@ -1760,9 +1762,13 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			addrdom, err = dns.ParseDomain(dmarc.Domain)
 			if err != nil {
 				addDomainErrorf("DMARC domain %q: %s", dmarc.Domain, err)
-			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
+			} else if adomain, ok := c.Domains[addrdom.Name()]; !ok {
 				addDomainErrorf("unknown domain %q for DMARC address", addrdom)
+			} else if !adomain.LocalpartCaseSensitive {
+				lp = smtp.Localpart(strings.ToLower(string(lp)))
 			}
+		} else if !domain.LocalpartCaseSensitive {
+			lp = smtp.Localpart(strings.ToLower(string(lp)))
 		}
 		if addrdom == domain.Domain {
 			domainHasAddress[addrdom.Name()] = true
@@ -1793,6 +1799,8 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if _, ok := c.Accounts[tlsrpt.Account]; !ok {
 			addDomainErrorf("TLSRPT account %q does not exist", tlsrpt.Account)
 		}
+
+		// Note: For backwards compabilitiy, TLS reporting localparts can contain catchall separators.
 		lp, err := smtp.ParseLocalpart(tlsrpt.Localpart)
 		if err != nil {
 			addDomainErrorf("invalid TLSRPT localpart %q: %s", tlsrpt.Localpart, err)
@@ -1807,9 +1815,13 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			addrdom, err = dns.ParseDomain(tlsrpt.Domain)
 			if err != nil {
 				addDomainErrorf("TLSRPT domain %q: %s", tlsrpt.Domain, err)
-			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
+			} else if adomain, ok := c.Domains[addrdom.Name()]; !ok {
 				addDomainErrorf("unknown domain %q for TLSRPT address", tlsrpt.Domain)
+			} else if !adomain.LocalpartCaseSensitive {
+				lp = smtp.Localpart(strings.ToLower(string(lp)))
 			}
+		} else if !domain.LocalpartCaseSensitive {
+			lp = smtp.Localpart(strings.ToLower(string(lp)))
 		}
 		if addrdom == domain.Domain {
 			domainHasAddress[addrdom.Name()] = true

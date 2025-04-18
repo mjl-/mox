@@ -329,7 +329,7 @@ type DMARC struct {
 	Account   string `sconf-doc:"Account to deliver to."`
 	Mailbox   string `sconf-doc:"Mailbox to deliver to, e.g. DMARC."`
 
-	ParsedLocalpart smtp.Localpart `sconf:"-"`
+	ParsedLocalpart smtp.Localpart `sconf:"-"` // Lower-case if case-sensitivity is not configured for domain. Not "canonical" for catchall separators for backwards compatibility.
 	DNSDomain       dns.Domain     `sconf:"-"` // Effective domain, always set based on Domain field or Domain where this is configured.
 }
 
@@ -347,7 +347,7 @@ type TLSRPT struct {
 	Account   string `sconf-doc:"Account to deliver to."`
 	Mailbox   string `sconf-doc:"Mailbox to deliver to, e.g. TLSRPT."`
 
-	ParsedLocalpart smtp.Localpart `sconf:"-"`
+	ParsedLocalpart smtp.Localpart `sconf:"-"` // Lower-case if case-sensitivity is not configured for domain. Not "canonical" for catchall separators for backwards compatibility.
 	DNSDomain       dns.Domain     `sconf:"-"` // Effective domain, always set based on Domain field or Domain where this is configured.
 }
 

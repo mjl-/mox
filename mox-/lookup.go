@@ -85,17 +85,49 @@ func LookupAddress(localpart smtp.Localpart, domain dns.Domain, allowPostmaster,
 	return accAddr.Account, nil, canonical, accAddr.Destination, nil
 }
 
+// lp and rlp are both lower-case when domain localparts aren't case sensitive.
+func matchReportingSeparators(lp, rlp smtp.Localpart, d config.Domain) bool {
+	lps := string(lp)
+	rlps := string(rlp)
+
+	if !strings.HasPrefix(lps, rlps) {
+		return false
+	}
+	if len(lps) == len(rlps) {
+		return true
+	}
+	rem := lps[len(rlps):]
+	for _, sep := range d.LocalpartCatchallSeparatorsEffective {
+		if strings.HasPrefix(rem, sep) {
+			return true
+		}
+	}
+	return false
+}
+
 // CanonicalLocalpart returns the canonical localpart, removing optional catchall
 // separators, and optionally lower-casing the string.
+// The DMARC and TLS reporting addresses are treated specially, they may contain a
+// localpart catchall separator for historic configurations (not for new
+// configurations). We try to match them first, still taking additional localpart
+// catchall separators into account.
 func CanonicalLocalpart(localpart smtp.Localpart, d config.Domain) smtp.Localpart {
+	if !d.LocalpartCaseSensitive {
+		localpart = smtp.Localpart(strings.ToLower(string(localpart)))
+	}
+
+	if d.DMARC != nil && matchReportingSeparators(localpart, d.DMARC.ParsedLocalpart, d) {
+		return d.DMARC.ParsedLocalpart
+	}
+	if d.TLSRPT != nil && matchReportingSeparators(localpart, d.TLSRPT.ParsedLocalpart, d) {
+		return d.TLSRPT.ParsedLocalpart
+	}
+
 	for _, sep := range d.LocalpartCatchallSeparatorsEffective {
 		t := strings.SplitN(string(localpart), sep, 2)
 		localpart = smtp.Localpart(t[0])
 	}
 
-	if !d.LocalpartCaseSensitive {
-		localpart = smtp.Localpart(strings.ToLower(string(localpart)))
-	}
 	return localpart
 }
 

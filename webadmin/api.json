@@ -3693,7 +3693,7 @@
 				},
 				{
 					"Name": "ParsedLocalpart",
-					"Docs": "",
+					"Docs": "Lower-case if case-sensitivity is not configured for domain. Not \"canonical\" for catchall separators for backwards compatibility.",
 					"Typewords": [
 						"Localpart"
 					]
@@ -3776,7 +3776,7 @@
 				},
 				{
 					"Name": "ParsedLocalpart",
-					"Docs": "",
+					"Docs": "Lower-case if case-sensitivity is not configured for domain. Not \"canonical\" for catchall separators for backwards compatibility.",
 					"Typewords": [
 						"Localpart"
 					]

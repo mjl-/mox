@@ -2535,6 +2535,23 @@ func (Admin) DomainClientSettingsDomainSave(ctx context.Context, domainName, cli
 // settings for a domain.
 func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName string, localpartCatchallSeparators []string, localpartCaseSensitive bool) {
 	err := admin.DomainSave(ctx, domainName, func(domain *config.Domain) error {
+		// We don't allow introducing new catchall separators that are used in DMARC/TLS
+		// reporting. Can occur in existing configs for backwards compatibility.
+		containsSep := func(seps []string) bool {
+			for _, sep := range seps {
+				if domain.DMARC != nil && strings.Contains(domain.DMARC.Localpart, sep) {
+					return true
+				}
+				if domain.TLSRPT != nil && strings.Contains(domain.TLSRPT.Localpart, sep) {
+					return true
+				}
+			}
+			return false
+		}
+		if !containsSep(domain.LocalpartCatchallSeparatorsEffective) && containsSep(localpartCatchallSeparators) {
+			xusererrorf(ctx, "cannot add localpart catchall separators that are used in dmarc and/or tls reporting addresses, change reporting addresses first")
+		}
+
 		domain.LocalpartCatchallSeparatorsEffective = localpartCatchallSeparators
 		// If there is a single separator, we prefer the non-list form, it's easier to
 		// read/edit and should suffice for most setups.
@@ -2557,6 +2574,17 @@ func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName string, l
 // disabled.
 func (Admin) DomainDMARCAddressSave(ctx context.Context, domainName, localpart, domain, account, mailbox string) {
 	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
+		// DMARC reporting addresses can contain the localpart catchall separator(s) for
+		// backwards compability (hence not enforced when parsing the config files), but we
+		// don't allow creating them.
+		if d.DMARC == nil || d.DMARC.Localpart != localpart {
+			for _, sep := range d.LocalpartCatchallSeparatorsEffective {
+				if strings.Contains(localpart, sep) {
+					xusererrorf(ctx, "dmarc reporting address cannot contain catchall separator %q in localpart (%q)", sep, localpart)
+				}
+			}
+		}
+
 		if localpart == "" {
 			d.DMARC = nil
 		} else {
@@ -2577,6 +2605,17 @@ func (Admin) DomainDMARCAddressSave(ctx context.Context, domainName, localpart, 
 // disabled.
 func (Admin) DomainTLSRPTAddressSave(ctx context.Context, domainName, localpart, domain, account, mailbox string) {
 	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
+		// TLS reporting addresses can contain the localpart catchall separator(s) for
+		// backwards compability (hence not enforced when parsing the config files), but we
+		// don't allow creating them.
+		if d.TLSRPT == nil || d.TLSRPT.Localpart != localpart {
+			for _, sep := range d.LocalpartCatchallSeparatorsEffective {
+				if strings.Contains(localpart, sep) {
+					xusererrorf(ctx, "tls reporting address cannot contain catchall separator %q in localpart (%q)", sep, localpart)
+				}
+			}
+		}
+
 		if localpart == "" {
 			d.TLSRPT = nil
 		} else {

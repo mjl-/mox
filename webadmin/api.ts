@@ -309,7 +309,7 @@ export interface DMARC {
 	Domain: string
 	Account: string
 	Mailbox: string
-	ParsedLocalpart: Localpart
+	ParsedLocalpart: Localpart  // Lower-case if case-sensitivity is not configured for domain. Not "canonical" for catchall separators for backwards compatibility.
 	DNSDomain: Domain  // Effective domain, always set based on Domain field or Domain where this is configured.
 }
 
@@ -325,7 +325,7 @@ export interface TLSRPT {
 	Domain: string
 	Account: string
 	Mailbox: string
-	ParsedLocalpart: Localpart
+	ParsedLocalpart: Localpart  // Lower-case if case-sensitivity is not configured for domain. Not "canonical" for catchall separators for backwards compatibility.
 	DNSDomain: Domain  // Effective domain, always set based on Domain field or Domain where this is configured.
 }
 
