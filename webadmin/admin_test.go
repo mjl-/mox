@@ -281,14 +281,14 @@ func TestAdmin(t *testing.T) {
 	tneedErrorCode(t, "user:error", func() { api.DomainLocalpartConfigSave(ctxbg, "bogus.example", nil, false) })
 	api.DomainLocalpartConfigSave(ctxbg, "mox.example", nil, false) // Restore.
 
-	api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarc-reports", "", "mjl", "DMARC")
-	tneedErrorCode(t, "user:error", func() { api.DomainDMARCAddressSave(ctxbg, "bogus.example", "dmarc-reports", "", "mjl", "DMARC") })
-	tneedErrorCode(t, "user:error", func() { api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarc-reports", "", "bogus", "DMARC") })
+	api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarcreports", "", "mjl", "DMARC")
+	tneedErrorCode(t, "user:error", func() { api.DomainDMARCAddressSave(ctxbg, "bogus.example", "dmarcreports", "", "mjl", "DMARC") })
+	tneedErrorCode(t, "user:error", func() { api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarcreports", "", "bogus", "DMARC") })
 	api.DomainDMARCAddressSave(ctxbg, "mox.example", "", "", "", "") // Restore.
 
-	api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "tls-reports", "", "mjl", "TLSRPT")
-	tneedErrorCode(t, "user:error", func() { api.DomainTLSRPTAddressSave(ctxbg, "bogus.example", "tls-reports", "", "mjl", "TLSRPT") })
-	tneedErrorCode(t, "user:error", func() { api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "tls-reports", "", "bogus", "TLSRPT") })
+	api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "tlsreports", "", "mjl", "TLSRPT")
+	tneedErrorCode(t, "user:error", func() { api.DomainTLSRPTAddressSave(ctxbg, "bogus.example", "tlsreports", "", "mjl", "TLSRPT") })
+	tneedErrorCode(t, "user:error", func() { api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "tlsreports", "", "bogus", "TLSRPT") })
 	api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "", "", "", "") // Restore.
 
 	// todo: cannot enable mta-sts because we have no listener, which would require a tls cert for the domain.

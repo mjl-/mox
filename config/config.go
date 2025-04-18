@@ -61,7 +61,7 @@ type Static struct {
 	HostTLSRPT struct {
 		Account   string `sconf-doc:"Account to deliver TLS reports to. Typically same account as for postmaster."`
 		Mailbox   string `sconf-doc:"Mailbox to deliver TLS reports to. Recommended value: TLSRPT."`
-		Localpart string `sconf-doc:"Localpart at hostname to accept TLS reports at. Recommended value: tls-reports."`
+		Localpart string `sconf-doc:"Localpart at hostname to accept TLS reports at. Recommended value: tlsreports."`
 
 		ParsedLocalpart smtp.Localpart `sconf:"-"`
 	} `sconf:"optional" sconf-doc:"Destination for per-host TLS reports (TLSRPT). TLS reports can be per recipient domain (for MTA-STS), or per MX host (for DANE). The per-domain TLS reporting configuration is in domains.conf. This is the TLS reporting configuration for this host. If absent, no host-based TLSRPT address is configured, and no host TLSRPT DNS record is suggested."`
@@ -324,7 +324,7 @@ type AliasAddress struct {
 }
 
 type DMARC struct {
-	Localpart string `sconf-doc:"Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarc-reports."`
+	Localpart string `sconf-doc:"Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarcreports."`
 	Domain    string `sconf:"optional" sconf-doc:"Alternative domain for reporting address, for incoming reports. Typically empty, causing the domain wherein this config exists to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the DMARC DNS record for the not fully hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the suggested DNS settings. Unicode name."`
 	Account   string `sconf-doc:"Account to deliver to."`
 	Mailbox   string `sconf-doc:"Mailbox to deliver to, e.g. DMARC."`
@@ -342,7 +342,7 @@ type MTASTS struct {
 }
 
 type TLSRPT struct {
-	Localpart string `sconf-doc:"Address-part before the @ that accepts TLSRPT reports. Recommended value: tls-reports."`
+	Localpart string `sconf-doc:"Address-part before the @ that accepts TLSRPT reports. Recommended value: tlsreports."`
 	Domain    string `sconf:"optional" sconf-doc:"Alternative domain for reporting address, for incoming reports. Typically empty, causing the domain wherein this config exists to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the TLSRPT DNS record for the not fully hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the suggested DNS settings. Unicode name."`
 	Account   string `sconf-doc:"Account to deliver to."`
 	Mailbox   string `sconf-doc:"Mailbox to deliver to, e.g. TLSRPT."`

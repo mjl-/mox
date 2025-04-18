@@ -1678,7 +1678,7 @@ const domain = async (d: string) => {
 			dmarcFieldset=dom.fieldset(
 				style({display: 'flex', gap: '1em'}),
 				dom.label(
-					attr.title('Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarc-reports.'),
+					attr.title('Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarcreports.'),
 					dom.div('Localpart'),
 					dmarcLocalpart=dom.input(attr.value(domainConfig.DMARC?.Localpart || '')),
 				),

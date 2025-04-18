@@ -546,7 +546,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 		# Mailbox to deliver TLS reports to. Recommended value: TLSRPT.
 		Mailbox:
 
-		# Localpart at hostname to accept TLS reports at. Recommended value: tls-reports.
+		# Localpart at hostname to accept TLS reports at. Recommended value: tlsreports.
 		Localpart:
 
 	# Mailboxes to create for new accounts. Inbox is always created. Mailboxes can be
@@ -864,7 +864,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			DMARC:
 
 				# Address-part before the @ that accepts DMARC reports. Must be
-				# non-internationalized. Recommended value: dmarc-reports.
+				# non-internationalized. Recommended value: dmarcreports.
 				Localpart:
 
 				# Alternative domain for reporting address, for incoming reports. Typically empty,
@@ -932,7 +932,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			TLSRPT:
 
 				# Address-part before the @ that accepts TLSRPT reports. Recommended value:
-				# tls-reports.
+				# tlsreports.
 				Localpart:
 
 				# Alternative domain for reporting address, for incoming reports. Typically empty,

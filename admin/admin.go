@@ -219,12 +219,12 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		DKIM:                       confDKIM,
 		DMARC: &config.DMARC{
 			Account:   accountName,
-			Localpart: "dmarc-reports",
+			Localpart: "dmarcreports",
 			Mailbox:   "DMARC",
 		},
 		TLSRPT: &config.TLSRPT{
 			Account:   accountName,
-			Localpart: "tls-reports",
+			Localpart: "tlsreports",
 			Mailbox:   "TLSRPT",
 		},
 	}

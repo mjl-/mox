@@ -883,7 +883,7 @@ and check the admin page for the needed DNS records.`)
 	sc.Postmaster.Account = accountName
 	sc.Postmaster.Mailbox = "Postmaster"
 	sc.HostTLSRPT.Account = accountName
-	sc.HostTLSRPT.Localpart = "tls-reports"
+	sc.HostTLSRPT.Localpart = "tlsreports"
 	sc.HostTLSRPT.Mailbox = "TLSRPT"
 
 	mox.ConfigStaticPath = filepath.FromSlash("config/mox.conf")

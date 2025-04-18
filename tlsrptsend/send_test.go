@@ -54,13 +54,13 @@ func TestSendReports(t *testing.T) {
 	resolver := dns.MockResolver{
 		TXT: map[string][]string{
 			"_smtp._tls.xn--74h.example.": {
-				"v=TLSRPTv1; rua=mailto:tls-reports@xn--74h.example,https://ignored.example/",
+				"v=TLSRPTv1; rua=mailto:tlsreports@xn--74h.example,https://ignored.example/",
 			},
 			"_smtp._tls.mailhost.xn--74h.example.": {
-				"v=TLSRPTv1; rua=mailto:tls-reports1@mailhost.xn--74h.example,mailto:tls-reports2@mailhost.xn--74h.example; rua=mailto:tls-reports3@mailhost.xn--74h.example",
+				"v=TLSRPTv1; rua=mailto:tlsreports1@mailhost.xn--74h.example,mailto:tlsreports2@mailhost.xn--74h.example; rua=mailto:tlsreports3@mailhost.xn--74h.example",
 			},
 			"_smtp._tls.noreport.example.": {
-				"v=TLSRPTv1; rua=mailto:tls-reports@noreport.example",
+				"v=TLSRPTv1; rua=mailto:tlsreports@noreport.example",
 			},
 			"_smtp._tls.mailhost.norua.example.": {
 				"v=TLSRPTv1;",
@@ -466,34 +466,34 @@ func TestSendReports(t *testing.T) {
 	// Multiple results, some are combined into a single report, another result
 	// generates a separate report to multiple rua's, and the last don't send a report.
 	test(tlsResults, map[string][]tlsrpt.Report{
-		"tls-reports@xn--74h.example":           {report1},
-		"tls-reports1@mailhost.xn--74h.example": {report2},
-		"tls-reports2@mailhost.xn--74h.example": {report2},
-		"tls-reports3@mailhost.xn--74h.example": {report2},
+		"tlsreports@xn--74h.example":           {report1},
+		"tlsreports1@mailhost.xn--74h.example": {report2},
+		"tlsreports2@mailhost.xn--74h.example": {report2},
+		"tlsreports3@mailhost.xn--74h.example": {report2},
 	})
 
 	// If MX target has same reporting addresses as recipient domain, only recipient
 	// domain should get a report.
-	resolver.TXT["_smtp._tls.mailhost.xn--74h.example."] = []string{"v=TLSRPTv1; rua=mailto:tls-reports@xn--74h.example"}
+	resolver.TXT["_smtp._tls.mailhost.xn--74h.example."] = []string{"v=TLSRPTv1; rua=mailto:tlsreports@xn--74h.example"}
 	test(tlsResults[:2], map[string][]tlsrpt.Report{
-		"tls-reports@xn--74h.example": {report1},
+		"tlsreports@xn--74h.example": {report1},
 	})
 
-	resolver.TXT["_smtp._tls.sharedsender.example."] = []string{"v=TLSRPTv1; rua=mailto:tls-reports@xn--74h.example"}
+	resolver.TXT["_smtp._tls.sharedsender.example."] = []string{"v=TLSRPTv1; rua=mailto:tlsreports@xn--74h.example"}
 	test(tlsResults, map[string][]tlsrpt.Report{
-		"tls-reports@xn--74h.example": {report1, report3},
+		"tlsreports@xn--74h.example": {report1, report3},
 	})
 
 	// Suppressed addresses don't get a report.
-	resolver.TXT["_smtp._tls.mailhost.xn--74h.example."] = []string{"v=TLSRPTv1; rua=mailto:tls-reports1@mailhost.xn--74h.example,mailto:tls-reports2@mailhost.xn--74h.example; rua=mailto:tls-reports3@mailhost.xn--74h.example"}
+	resolver.TXT["_smtp._tls.mailhost.xn--74h.example."] = []string{"v=TLSRPTv1; rua=mailto:tlsreports1@mailhost.xn--74h.example,mailto:tlsreports2@mailhost.xn--74h.example; rua=mailto:tlsreports3@mailhost.xn--74h.example"}
 	db.Insert(ctxbg,
-		&tlsrptdb.SuppressAddress{ReportingAddress: "tls-reports@xn--74h.example", Until: time.Now().Add(-time.Minute)},                  // Expired, so ignored.
-		&tlsrptdb.SuppressAddress{ReportingAddress: "tls-reports1@mailhost.xn--74h.example", Until: time.Now().Add(time.Minute)},         // Still valid.
-		&tlsrptdb.SuppressAddress{ReportingAddress: "tls-reports3@mailhost.xn--74h.example", Until: time.Now().Add(31 * 24 * time.Hour)}, // Still valid.
+		&tlsrptdb.SuppressAddress{ReportingAddress: "tlsreports@xn--74h.example", Until: time.Now().Add(-time.Minute)},                  // Expired, so ignored.
+		&tlsrptdb.SuppressAddress{ReportingAddress: "tlsreports1@mailhost.xn--74h.example", Until: time.Now().Add(time.Minute)},         // Still valid.
+		&tlsrptdb.SuppressAddress{ReportingAddress: "tlsreports3@mailhost.xn--74h.example", Until: time.Now().Add(31 * 24 * time.Hour)}, // Still valid.
 	)
 	test(tlsResults, map[string][]tlsrpt.Report{
-		"tls-reports@xn--74h.example":           {report1},
-		"tls-reports2@mailhost.xn--74h.example": {report2},
+		"tlsreports@xn--74h.example":           {report1},
+		"tlsreports2@mailhost.xn--74h.example": {report2},
 	})
 
 	// Make reports success-only, ensuring we don't get a report anymore.
@@ -514,7 +514,7 @@ func TestSendReports(t *testing.T) {
 		}
 	}
 	test(tlsResults, map[string][]tlsrpt.Report{
-		"tls-reports@xn--74h.example":           {report1},
-		"tls-reports2@mailhost.xn--74h.example": {report2},
+		"tlsreports@xn--74h.example":           {report1},
+		"tlsreports2@mailhost.xn--74h.example": {report2},
 	})
 }
