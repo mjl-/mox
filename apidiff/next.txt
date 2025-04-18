@@ -1,7 +1,0 @@
-Below are the incompatible changes between v0.0.14 and next, per package.
-
-# message
-- Part.ContentDescription: changed from string to *string
-- Part.ContentID: changed from string to *string
-- Part.ContentTransferEncoding: changed from string to *string
-
