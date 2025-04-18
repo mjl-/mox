@@ -188,14 +188,15 @@ func mockUIDValidity() func() {
 }
 
 type testconn struct {
-	t          *testing.T
-	conn       net.Conn
-	client     *imapclient.Conn
-	uidonly    bool
-	done       chan struct{}
-	serverConn net.Conn
-	account    *store.Account
-	switchStop func()
+	t           *testing.T
+	conn        net.Conn
+	client      *imapclient.Conn
+	uidonly     bool
+	done        chan struct{}
+	serverConn  net.Conn
+	account     *store.Account
+	switchStop  func()
+	clientPanic bool
 
 	// Result of last command.
 	lastResponse imapclient.Response
@@ -400,6 +401,7 @@ func (tc *testconn) close0(waitclose bool) {
 		return
 	}
 	if tc.client != nil {
+		tc.clientPanic = false // Ignore errors writing to TLS connection the server also closed.
 		tc.client.Close()
 	}
 	err := tc.account.Close()
@@ -557,12 +559,20 @@ func startArgsMore(t *testing.T, uidonly, first, immediateTLS bool, serverConfig
 		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS, viaHTTPS, "")
 		close(done)
 	}()
-	opts := imapclient.Opts{
+	var tc *testconn
+	var opts imapclient.Opts
+	opts = imapclient.Opts{
 		Logger: slog.Default().With("cid", connCounter),
-		Error:  func(err error) { panic(err) },
+		Error: func(err error) {
+			if tc.clientPanic {
+				panic(err)
+			} else {
+				opts.Logger.Error("imapclient error", "err", err)
+			}
+		},
 	}
 	client, _ := imapclient.New(clientConn, &opts)
-	tc := &testconn{t: t, conn: clientConn, client: client, uidonly: uidonly, done: done, serverConn: serverConn, account: acc}
+	tc = &testconn{t: t, conn: clientConn, client: client, uidonly: uidonly, done: done, serverConn: serverConn, account: acc, clientPanic: true}
 	if first {
 		tc.switchStop = switchStop
 	}
