@@ -18,7 +18,6 @@ import (
 	"log/slog"
 	"mime"
 	"mime/multipart"
-	"net"
 	"net/http"
 	"net/textproto"
 	"os"
@@ -422,7 +421,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Check(werr, "writing error response")
 	}
 
-	la := loginAttempt(r, "webapi", "httpbasic")
+	la := loginAttempt(remoteIP.String(), r, "webapi", "httpbasic")
 	la.LoginAddress = email
 	defer func() {
 		store.LoginAttemptAdd(context.Background(), log, la)
@@ -530,12 +529,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // loginAttempt initializes a store.LoginAttempt, for adding to the store after
 // filling in the results and other details.
-func loginAttempt(r *http.Request, protocol, authMech string) store.LoginAttempt {
-	remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if remoteIP == "" {
-		remoteIP = r.RemoteAddr
-	}
-
+func loginAttempt(remoteIP string, r *http.Request, protocol, authMech string) store.LoginAttempt {
 	return store.LoginAttempt{
 		RemoteIP:  remoteIP,
 		TLS:       store.LoginAttemptTLS(r.TLS),

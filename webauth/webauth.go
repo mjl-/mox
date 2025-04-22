@@ -80,12 +80,7 @@ type SessionAuth interface {
 }
 
 // loginAttempt initializes a loginAttempt, for adding to the store after filling in the results and other details.
-func loginAttempt(r *http.Request, protocol, authMech string) store.LoginAttempt {
-	remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if remoteIP == "" {
-		remoteIP = r.RemoteAddr
-	}
-
+func loginAttempt(remoteIP string, r *http.Request, protocol, authMech string) store.LoginAttempt {
 	return store.LoginAttempt{
 		RemoteIP:  remoteIP,
 		TLS:       store.LoginAttemptTLS(r.TLS),
@@ -163,7 +158,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 		return
 	}
 
-	la := loginAttempt(r, kind, "websession")
+	la := loginAttempt(ip.String(), r, kind, "websession")
 	defer func() {
 		store.LoginAttemptAdd(context.Background(), log, la)
 	}()
@@ -271,7 +266,7 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 
 	username = norm.NFC.String(username)
 	valid, disabled, accountName, err := sessionAuth.login(ctx, log, username, password)
-	la := loginAttempt(r, kind, "weblogin")
+	la := loginAttempt(ip.String(), r, kind, "weblogin")
 	la.LoginAddress = username
 	la.AccountName = accountName
 	defer func() {
