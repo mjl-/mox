@@ -352,7 +352,7 @@ func (w *loggingWriter) Done() {
 		slog.Any("remoteaddr", w.R.RemoteAddr),
 		slog.String("tlsinfo", tlsinfo),
 		slog.String("useragent", w.R.Header.Get("User-Agent")),
-		slog.String("referrr", w.R.Header.Get("Referrer")),
+		slog.String("referer", w.R.Header.Get("Referer")),
 	}
 	if w.WebsocketRequest {
 		attrs = append(attrs,
