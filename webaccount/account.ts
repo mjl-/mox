@@ -61,6 +61,7 @@ const login = async (reason: string) => {
 								dom.div('Email address', style({marginBottom: '.5ex'})),
 								autosize=dom.span(dom._class('autosize'),
 									username=dom.input(
+										attr.type('email'),
 										attr.required(''),
 										attr.autocomplete('username'),
 										attr.placeholder('jane@example.org'),
