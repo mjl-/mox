@@ -27,7 +27,6 @@
 # The -ip flag ensures connections to the published ports make it to mox, and it
 # prevents listening on ::1 (IPv6 is not enabled in docker by default).
 
-version: '3.7'
 services:
   mox:
     # Replace "latest" with the version you want to run, see https://r.xmox.nl/r/mox/.
@@ -39,11 +38,11 @@ services:
     # machine, and the IPs of incoming connections for spam filtering.
     network_mode: 'host'
     volumes:
-      - ./config:/mox/config
-      - ./data:/mox/data
+      - ./config:/mox/config:z
+      - ./data:/mox/data:z
       # web is optional but recommended to bind in, useful for serving static files with
       # the webserver.
-      - ./web:/mox/web
+      - ./web:/mox/web:z
     working_dir: /mox
     restart: on-failure
     healthcheck:
