@@ -348,7 +348,7 @@ possibly making them potentially no longer readable by the previous version.
 					if du.MessageSize != totalSize {
 						checkf(errors.New(`wrong total message size, see mox recalculatemailboxcounts"`), dbpath, "account has wrong total message size %d, should be %d", du.MessageSize, totalSize)
 					}
-				} else if err != nil && !errors.Is(err, bstore.ErrAbsent) {
+				} else if !errors.Is(err, bstore.ErrAbsent) {
 					checkf(err, dbpath, "get disk usage")
 				}
 			}

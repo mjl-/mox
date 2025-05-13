@@ -389,7 +389,7 @@ func xbackupctl(ctx context.Context, xctl *ctl) {
 	srcAcmeDir := filepath.Join(srcDataDir, "acme")
 	if _, err := os.Stat(srcAcmeDir); err == nil {
 		backupDir("acme")
-	} else if err != nil && !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) {
 		xerrx("copying acme/", err)
 	}
 

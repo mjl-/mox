@@ -3974,7 +3974,7 @@ Opens database files directly, not going through a running mox instance.
 			return nil
 		}
 
-		wq := moxio.NewWorkQueue[store.Message, threadPrep](procs, workqueuesize, prepareMessages, processMessage)
+		wq := moxio.NewWorkQueue(procs, workqueuesize, prepareMessages, processMessage)
 
 		err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
 			q := bstore.QueryTx[store.Message](tx)
