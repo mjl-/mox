@@ -114,6 +114,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox rdap domainage domain
 	mox retrain [accountname]
 	mox sendmail [-Fname] [ignoredflags] [-t] [<message]
+	mox smtp dial host[:port]
 	mox spf check domain ip
 	mox spf lookup domain
 	mox spf parse txtrecord
@@ -1526,6 +1527,51 @@ binary should be setgid that group:
 
 
 	usage: mox sendmail [-Fname] [ignoredflags] [-t] [<message]
+
+# mox smtp dial
+
+Dial the address, initialize the SMTP session, including using STARTTLS to enable TLS if the server supports it.
+
+If no port is specified, SMTP port 25 is used.
+
+Data is copied between connection and stdin/stdout until either side closes the
+connection.
+
+The flags influence the TLS configuration, useful for debugging interoperability
+issues.
+
+No MTA-STS or DANE verification is done.
+
+Hint: Use "mox -loglevel trace smtp dial ..." to see the protocol messages
+exchanged during connection set up.
+
+	usage: mox smtp dial host[:port]
+	  -ehlohostname string
+	    	our hostname to use during the SMTP EHLO command
+	  -forcetls
+	    	use TLS, even if remote SMTP server does not announce STARTTLS extension
+	  -notls
+	    	do not use TLS
+	  -remotehostname string
+	    	remote hostname to use for TLS verification, if enabled; the hostname from the parameter is used by default
+	  -tlscerts string
+	    	path to root ca certificates in pem form, for verification
+	  -tlsciphersuites string
+	    	ciphersuites to allow, comma-separated, order is ignored, only for TLS 1.2 and earlier, empty value uses TLS stack defaults; values: tls_ecdhe_ecdsa_with_aes_128_cbc_sha, tls_ecdhe_ecdsa_with_aes_128_gcm_sha256, tls_ecdhe_ecdsa_with_aes_256_cbc_sha, tls_ecdhe_ecdsa_with_aes_256_gcm_sha384, tls_ecdhe_ecdsa_with_chacha20_poly1305_sha256, tls_ecdhe_rsa_with_aes_128_cbc_sha, tls_ecdhe_rsa_with_aes_128_gcm_sha256, tls_ecdhe_rsa_with_aes_256_cbc_sha, tls_ecdhe_rsa_with_aes_256_gcm_sha384, tls_ecdhe_rsa_with_chacha20_poly1305_sha256, and insecure: tls_ecdhe_ecdsa_with_aes_128_cbc_sha256, tls_ecdhe_ecdsa_with_rc4_128_sha, tls_ecdhe_rsa_with_3des_ede_cbc_sha, tls_ecdhe_rsa_with_aes_128_cbc_sha256, tls_ecdhe_rsa_with_rc4_128_sha, tls_rsa_with_3des_ede_cbc_sha, tls_rsa_with_aes_128_cbc_sha, tls_rsa_with_aes_128_cbc_sha256, tls_rsa_with_aes_128_gcm_sha256, tls_rsa_with_aes_256_cbc_sha, tls_rsa_with_aes_256_gcm_sha384, tls_rsa_with_rc4_128_sha
+	  -tlscurves string
+	    	tls ecc key exchange mechanisms to allow, comma-separated, order is ignored, empty value uses TLS stack defaults; values: curvep256, curvep384, curvep521, x25519, x25519mlkem768
+	  -tlsnodynamicrecordsizing
+	    	disable TLS dynamic record sizing
+	  -tlsnosessiontickets
+	    	disable TLS session tickets
+	  -tlsrenegotiation string
+	    	when to allow renegotiation; only applies to tls1.2 and earlier, not tls1.3; values: never, once, always (default "never")
+	  -tlsverify
+	    	verify remote hostname during TLS
+	  -tlsversionmax string
+	    	maximum TLS version, empty value uses TLS stack default; values: tls1.2, etc.
+	  -tlsversionmin string
+	    	minimum TLS version, empty value uses TLS stack default; values: tls1.2, etc.
 
 # mox spf check
 

@@ -12,6 +12,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -23,6 +24,7 @@ import (
 	"io/fs"
 	"log"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -201,6 +203,7 @@ var commands = []struct {
 	{"rdap domainage", cmdRDAPDomainage},
 	{"retrain", cmdRetrain},
 	{"sendmail", cmdSendmail},
+	{"smtp dial", cmdSMTPDial},
 	{"spf check", cmdSPFCheck},
 	{"spf lookup", cmdSPFLookup},
 	{"spf parse", cmdSPFParse},
@@ -1895,6 +1898,227 @@ with DKIM, by mox.
 	xcheckf(err, "making rsa private key")
 	_, err = os.Stdout.Write(buf)
 	xcheckf(err, "writing rsa private key")
+}
+
+// todo: options for specifying the domain this is the mx host of, and enabling dane and/or mta-sts verification
+func cmdSMTPDial(c *cmd) {
+	c.params = "host[:port]"
+
+	var tlsCerts, tlsCiphersuites, tlsCurves, tlsVersionMin, tlsVersionMax, tlsRenegotiation string
+	var tlsVerify, noTLS, forceTLS, tlsNoSessionTickets, tlsNoDynamicRecordSizing bool
+	var ehloHostnameStr, remoteHostnameStr string
+
+	ciphersuites := map[string]*tls.CipherSuite{}
+	ciphersuitesInsecure := map[string]*tls.CipherSuite{}
+	for _, v := range tls.CipherSuites() {
+		if slices.Contains(v.SupportedVersions, tls.VersionTLS10) || slices.Contains(v.SupportedVersions, tls.VersionTLS11) || slices.Contains(v.SupportedVersions, tls.VersionTLS12) {
+			ciphersuites[strings.ToLower(v.Name)] = v
+		}
+	}
+	for _, v := range tls.InsecureCipherSuites() {
+		if slices.Contains(v.SupportedVersions, tls.VersionTLS10) || slices.Contains(v.SupportedVersions, tls.VersionTLS11) || slices.Contains(v.SupportedVersions, tls.VersionTLS12) {
+			ciphersuitesInsecure[strings.ToLower(v.Name)] = v
+		}
+	}
+
+	curvesList := []tls.CurveID{
+		tls.CurveP256,
+		tls.CurveP384,
+		tls.CurveP521,
+		tls.X25519,
+		tls.X25519MLKEM768,
+	}
+	curves := map[string]tls.CurveID{}
+	for _, a := range curvesList {
+		curves[strings.ToLower(a.String())] = a
+	}
+
+	c.flag.StringVar(&tlsCiphersuites, "tlsciphersuites", "", "ciphersuites to allow, comma-separated, order is ignored, only for TLS 1.2 and earlier, empty value uses TLS stack defaults; values: "+strings.Join(slices.Sorted(maps.Keys(ciphersuites)), ", ")+", and insecure: "+strings.Join(slices.Sorted(maps.Keys(ciphersuitesInsecure)), ", "))
+	c.flag.StringVar(&tlsCurves, "tlscurves", "", "tls ecc key exchange mechanisms to allow, comma-separated, order is ignored, empty value uses TLS stack defaults; values: "+strings.Join(slices.Sorted(maps.Keys(curves)), ", "))
+	c.flag.StringVar(&tlsCerts, "tlscerts", "", "path to root ca certificates in pem form, for verification")
+	c.flag.StringVar(&tlsVersionMin, "tlsversionmin", "", "minimum TLS version, empty value uses TLS stack default; values: tls1.2, etc.")
+	c.flag.StringVar(&tlsVersionMax, "tlsversionmax", "", "maximum TLS version, empty value uses TLS stack default; values: tls1.2, etc.")
+	c.flag.BoolVar(&tlsVerify, "tlsverify", false, "verify remote hostname during TLS")
+	c.flag.BoolVar(&tlsNoSessionTickets, "tlsnosessiontickets", false, "disable TLS session tickets")
+	c.flag.BoolVar(&tlsNoDynamicRecordSizing, "tlsnodynamicrecordsizing", false, "disable TLS dynamic record sizing")
+	c.flag.BoolVar(&noTLS, "notls", false, "do not use TLS")
+	c.flag.BoolVar(&forceTLS, "forcetls", false, "use TLS, even if remote SMTP server does not announce STARTTLS extension")
+	c.flag.StringVar(&tlsRenegotiation, "tlsrenegotiation", "never", "when to allow renegotiation; only applies to tls1.2 and earlier, not tls1.3; values: never, once, always")
+	c.flag.StringVar(&ehloHostnameStr, "ehlohostname", "", "our hostname to use during the SMTP EHLO command")
+	c.flag.StringVar(&remoteHostnameStr, "remotehostname", "", "remote hostname to use for TLS verification, if enabled; the hostname from the parameter is used by default")
+
+	c.help = `Dial the address, initialize the SMTP session, including using STARTTLS to enable TLS if the server supports it.
+
+If no port is specified, SMTP port 25 is used.
+
+Data is copied between connection and stdin/stdout until either side closes the
+connection.
+
+The flags influence the TLS configuration, useful for debugging interoperability
+issues.
+
+No MTA-STS or DANE verification is done.
+
+Hint: Use "mox -loglevel trace smtp dial ..." to see the protocol messages
+exchanged during connection set up.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	if noTLS && forceTLS {
+		log.Fatalf("cannot have both -notls and -forcetls")
+	}
+
+	parseTLSVersion := func(s string) uint16 {
+		switch s {
+		case "tls1.0":
+			return tls.VersionTLS10
+		case "tls1.1":
+			return tls.VersionTLS11
+		case "tls1.2":
+			return tls.VersionTLS12
+		case "tls1.3":
+			return tls.VersionTLS13
+		case "":
+			return 0
+		default:
+			log.Fatalf("invalid tls version %q", s)
+			panic("not reached")
+		}
+	}
+	tlsConfig := tls.Config{
+		MinVersion:                  parseTLSVersion(tlsVersionMin),
+		MaxVersion:                  parseTLSVersion(tlsVersionMax),
+		InsecureSkipVerify:          !tlsVerify,
+		SessionTicketsDisabled:      tlsNoSessionTickets,
+		DynamicRecordSizingDisabled: tlsNoDynamicRecordSizing,
+	}
+
+	switch tlsRenegotiation {
+	case "never":
+		tlsConfig.Renegotiation = tls.RenegotiateNever
+	case "once":
+		tlsConfig.Renegotiation = tls.RenegotiateOnceAsClient
+	case "always":
+		tlsConfig.Renegotiation = tls.RenegotiateFreelyAsClient
+	default:
+		log.Fatalf("invalid value %q for -tlsrenegotation", tlsRenegotiation)
+	}
+	if tlsCerts != "" {
+		pool := x509.NewCertPool()
+		pembuf, err := os.ReadFile(tlsCerts)
+		xcheckf(err, "reading tls certificates")
+		ok := pool.AppendCertsFromPEM(pembuf)
+		if !ok {
+			c.log.Warn("no tls certificates found", slog.String("path", tlsCerts))
+		}
+		tlsConfig.RootCAs = pool
+	}
+	if tlsCiphersuites != "" {
+		for s := range strings.SplitSeq(tlsCiphersuites, ",") {
+			s = strings.TrimSpace(s)
+			c, ok := ciphersuites[s]
+			if !ok {
+				c, ok = ciphersuitesInsecure[s]
+			}
+			if !ok {
+				log.Fatalf("unknown ciphersuite %q", s)
+			}
+			tlsConfig.CipherSuites = append(tlsConfig.CipherSuites, c.ID)
+		}
+	}
+	if tlsCurves != "" {
+		for s := range strings.SplitSeq(tlsCurves, ",") {
+			s = strings.TrimSpace(s)
+			if c, ok := curves[s]; !ok {
+				log.Fatalf("unknown ecc key exchange algorithm %q", s)
+			} else {
+				tlsConfig.CurvePreferences = append(tlsConfig.CurvePreferences, c)
+			}
+		}
+	}
+
+	var host, portStr string
+	var err error
+	host, portStr, err = net.SplitHostPort(args[0])
+	if err != nil {
+		host = args[0]
+		portStr = "25"
+	}
+	port, err := strconv.ParseInt(portStr, 10, 64)
+	xcheckf(err, "parsing port %q", portStr)
+
+	if remoteHostnameStr == "" {
+		remoteHostnameStr = host
+	}
+	remoteHostname, err := dns.ParseDomain(remoteHostnameStr)
+	xcheckf(err, "parsing remote host")
+	tlsConfig.ServerName = remoteHostname.Name()
+
+	resolver := dns.StrictResolver{Pkg: "smtpdial"}
+	_, _, _, ips, _, err := smtpclient.GatherIPs(context.Background(), c.log.Logger, resolver, "ip", dns.IPDomain{Domain: remoteHostname}, nil)
+	xcheckf(err, "resolve host")
+	c.log.Info("resolved remote address", slog.Any("ips", ips))
+
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	dialedIPs := map[string][]net.IP{}
+	conn, ip, err := smtpclient.Dial(context.Background(), c.log.Logger, dialer, dns.IPDomain{Domain: remoteHostname}, ips, int(port), dialedIPs, nil)
+	xcheckf(err, "dial")
+	c.log.Info("connected to remote host", slog.Any("ip", ip))
+
+	tlsMode := smtpclient.TLSOpportunistic
+	if forceTLS {
+		tlsMode = smtpclient.TLSRequiredStartTLS
+	} else if noTLS {
+		tlsMode = smtpclient.TLSSkip
+	}
+	var ehloHostname dns.Domain
+	if ehloHostnameStr == "" {
+		name, err := os.Hostname()
+		xcheckf(err, "get hostname")
+		ehloHostnameStr = name
+	}
+	ehloHostname, err = dns.ParseDomain(ehloHostnameStr)
+	xcheckf(err, "parse hostname")
+
+	opts := smtpclient.Opts{
+		TLSConfig: &tlsConfig,
+	}
+	client, err := smtpclient.New(context.Background(), c.log.Logger, conn, tlsMode, false, ehloHostname, dns.Domain{}, opts)
+	xcheckf(err, "new smtp client")
+
+	cs := client.TLSConnectionState()
+	if cs == nil {
+		c.log.Info("smtp initialized without tls")
+	} else {
+		c.log.Info("smtp initialized with tls",
+			slog.String("version", tls.VersionName(cs.Version)),
+			slog.String("ciphersuite", strings.ToLower(tls.CipherSuiteName(cs.CipherSuite))),
+			slog.String("sni", cs.ServerName),
+		)
+		for _, chain := range cs.VerifiedChains {
+			var l []string
+			for _, cert := range chain {
+				s := fmt.Sprintf("dns names %q, common name %q, %s - %s, issuer %q)", strings.Join(cert.DNSNames, ","), cert.Subject.CommonName, cert.NotBefore.Format("2006-01-02T15:04:05"), cert.NotAfter.Format("2006-01-02T15:04:05"), cert.Issuer.CommonName)
+				l = append(l, s)
+			}
+			c.log.Info("tls certificate verification chain", slog.String("chain", strings.Join(l, "; ")))
+		}
+	}
+
+	conn, err = client.Conn()
+	xcheckf(err, "get smtp session connection")
+
+	go func() {
+		_, err := io.Copy(os.Stdout, conn)
+		xcheckf(err, "copy from connection to stdout")
+		err = conn.Close()
+		c.log.Check(err, "closing connection")
+	}()
+	_, err = io.Copy(conn, os.Stdin)
+	xcheckf(err, "copy from stdin to connection")
 }
 
 func cmdDANEDial(c *cmd) {

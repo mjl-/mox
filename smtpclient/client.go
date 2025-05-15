@@ -114,6 +114,7 @@ type Client struct {
 	daneMoreHostnames     []dns.Domain     // Additional allowed names in TLS certificate for DANE-TA.
 	daneVerifiedRecord    *adns.TLSA       // If non-nil, then will be set to verified DANE record if any.
 	clientCert            *tls.Certificate // If non-nil, tls client authentication is done.
+	tlsConfigOpts         *tls.Config      // If non-nil, tls config to use.
 
 	// TLS connection success/failure are added. These are always non-nil, regardless
 	// of what was passed in opts. It lets us unconditionally dereference them.
@@ -235,6 +236,12 @@ type Opts struct {
 	// tracked.
 	RecipientDomainResult *tlsrpt.Result // MTA-STS or no policy.
 	HostResult            *tlsrpt.Result // DANE or no policy.
+
+	// If not nil, the TLS config to use instead of the default. Useful for custom
+	// certificate verification or TLS parameters. The other DANE/TLS/certificate
+	// fields in [Opts], and the tlsVerifyPKIX and remoteHostname parameters to [New]
+	// have no effect when TLSConfig is set.
+	TLSConfig *tls.Config
 }
 
 // New initializes an SMTP session on the given connection, returning a client that
@@ -290,6 +297,7 @@ func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode,
 		cmds:                  []string{"(none)"},
 		recipientDomainResult: ensureResult(opts.RecipientDomainResult),
 		hostResult:            ensureResult(opts.HostResult),
+		tlsConfigOpts:         opts.TLSConfig,
 	}
 	c.log = mlog.New("smtpclient", elog).WithFunc(func() []slog.Attr {
 		now := time.Now()
@@ -353,6 +361,10 @@ func (c *Client) tlsConfig() *tls.Config {
 	// We always manage verification ourselves: We need to report in detail about
 	// failures. And we may have to verify both PKIX and DANE, record errors for
 	// each, and possibly ignore the errors.
+
+	if c.tlsConfigOpts != nil {
+		return c.tlsConfigOpts
+	}
 
 	verifyConnection := func(cs tls.ConnectionState) error {
 		// Collect verification errors. If there are none at the end, TLS validation
@@ -1453,9 +1465,10 @@ func (c *Client) Close() (rerr error) {
 	return
 }
 
-// Conn returns the connection with initialized SMTP session. Once the caller uses
-// this connection it is in control, and responsible for closing the connection,
-// and other functions on the client must not be called anymore.
+// Conn returns the connection with the initialized SMTP session, possibly wrapping
+// a TLS connection, and handling protocol trace logging. Once the caller uses this
+// connection it is in control, and responsible for closing the connection, and
+// other functions on the client must not be called anymore.
 func (c *Client) Conn() (net.Conn, error) {
 	if err := c.conn.SetDeadline(time.Time{}); err != nil {
 		return nil, fmt.Errorf("clearing io deadlines: %w", err)
