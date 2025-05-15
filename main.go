@@ -1927,7 +1927,7 @@ func cmdSMTPDial(c *cmd) {
 	}
 
 	c.flag.StringVar(&tlsCiphersuites, "tlsciphersuites", "", "ciphersuites to allow, comma-separated, order is ignored, only for TLS 1.2 and earlier, empty value uses TLS stack defaults; values: "+strings.Join(slices.Sorted(maps.Keys(ciphersuites)), ", ")+", and insecure: "+strings.Join(slices.Sorted(maps.Keys(ciphersuitesInsecure)), ", "))
-	c.flag.StringVar(&tlsCurves, "tlscurves", "", "tls ecc key exchange mechanisms to allow, comma-separated, order is ignored, empty value uses TLS stack defaults; values: "+strings.Join(slices.Sorted(maps.Keys(curves)), ", "))
+	c.flag.StringVar(&tlsCurves, "tlscurves", "", "tls ecc key exchange mechanisms to allow, comma-separated, order is ignored, empty value uses TLS stack defaults; values: curvep256, curvep384, curvep521, x25519, x25519mlkem768")
 	c.flag.StringVar(&tlsCerts, "tlscerts", "", "path to root ca certificates in pem form, for verification")
 	c.flag.StringVar(&tlsVersionMin, "tlsversionmin", "", "minimum TLS version, empty value uses TLS stack default; values: tls1.2, etc.")
 	c.flag.StringVar(&tlsVersionMax, "tlsversionmax", "", "maximum TLS version, empty value uses TLS stack default; values: tls1.2, etc.")
