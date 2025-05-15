@@ -514,6 +514,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Port for plain HTTP (non-TLS) webserver. (optional)
 				Port: 0
 
+				# Disable rate limiting for all requests to this port. (optional)
+				RateLimitDisabled: false
+
 			# All configured WebHandlers will serve on an enabled listener. Either ACME must
 			# be configured, or for each WebHandler domain a TLS certificate must be
 			# configured. (optional)
@@ -522,6 +525,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 				# Port for HTTPS webserver. (optional)
 				Port: 0
+
+				# Disable rate limiting for all requests to this port. (optional)
+				RateLimitDisabled: false
 
 	# Destination for emails delivered to postmaster addresses: a plain 'postmaster'
 	# without domain, 'postmaster@<hostname>' (also for each listener with SMTP

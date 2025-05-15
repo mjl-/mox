@@ -209,12 +209,14 @@ type Listener struct {
 		NonTLS  bool `sconf:"optional" sconf-doc:"If set, plain HTTP instead of HTTPS is spoken on the configured port. Can be useful when the mta-sts domain is reverse proxied."`
 	} `sconf:"optional" sconf-doc:"Serve MTA-STS policies describing SMTP TLS requirements. Requires a TLS config."`
 	WebserverHTTP struct {
-		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Port for plain HTTP (non-TLS) webserver."`
+		Enabled           bool
+		Port              int  `sconf:"optional" sconf-doc:"Port for plain HTTP (non-TLS) webserver."`
+		RateLimitDisabled bool `sconf:"optional" sconf-doc:"Disable rate limiting for all requests to this port."`
 	} `sconf:"optional" sconf-doc:"All configured WebHandlers will serve on an enabled listener."`
 	WebserverHTTPS struct {
-		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Port for HTTPS webserver."`
+		Enabled           bool
+		Port              int  `sconf:"optional" sconf-doc:"Port for HTTPS webserver."`
+		RateLimitDisabled bool `sconf:"optional" sconf-doc:"Disable rate limiting for all requests to this port."`
 	} `sconf:"optional" sconf-doc:"All configured WebHandlers will serve on an enabled listener. Either ACME must be configured, or for each WebHandler domain a TLS certificate must be configured."`
 }
 

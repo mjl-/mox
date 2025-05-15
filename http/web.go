@@ -386,11 +386,14 @@ type pathHandler struct {
 	Path      string                       // Path to register, like on http.ServeMux.
 	Handler   http.Handler
 }
+
 type serve struct {
-	Kinds     []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https, imap-https, smtp-https).
-	TLSConfig *tls.Config
-	NextProto tlsNextProtoMap // For HTTP server, when we do submission/imap with ALPN over the HTTPS port.
-	Favicon   bool
+	Kinds             []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https, imap-https, smtp-https).
+	TLSConfig         *tls.Config
+	NextProto         tlsNextProtoMap // For HTTP server, when we do submission/imap with ALPN over the HTTPS port.
+	Favicon           bool
+	Forwarded         bool // Requests are coming from a reverse proxy, we'll use X-Forwarded-For for the IP address to ratelimit.
+	RateLimitDisabled bool // Don't apply ratelimiting.
 
 	// SystemHandlers are for MTA-STS, autoconfig, ACME validation. They can't be
 	// overridden by WebHandlers. WebHandlers are evaluated next, and the internal
@@ -437,23 +440,41 @@ var (
 // metrics.
 func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 	now := time.Now()
-	// Rate limiting as early as possible.
-	ipstr, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		pkglog.Debugx("split host:port client remoteaddr", err, slog.Any("remoteaddr", r.RemoteAddr))
-	} else if ip := net.ParseIP(ipstr); ip == nil {
-		pkglog.Debug("parsing ip for client remoteaddr", slog.Any("remoteaddr", r.RemoteAddr))
-	} else if !limiterConnectionrate.Add(ip, now, 1) {
-		method := metricHTTPMethod(r.Method)
-		proto := "http"
-		if r.TLS != nil {
-			proto = "https"
-		}
-		metricRequest.WithLabelValues("(ratelimited)", proto, method, "429").Observe(0)
-		// No logging, that's just noise.
 
-		http.Error(xw, "429 - too many auth attempts", http.StatusTooManyRequests)
-		return
+	// Rate limiting as early as possible, if enabled.
+	if !s.RateLimitDisabled {
+		// If requests are coming from a reverse proxy, use the IP from X-Forwarded-For.
+		// Otherwise the remote IP for this connection.
+		var ipstr string
+		if s.Forwarded {
+			s := r.Header.Get("X-Forwarded-For")
+			ipstr = strings.TrimSpace(strings.Split(s, ",")[0])
+			if ipstr == "" {
+				pkglog.Debug("ratelimit: no ip address in X-Forwarded-For header")
+			}
+		} else {
+			var err error
+			ipstr, _, err = net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				pkglog.Debugx("ratelimit: parsing remote address", err, slog.String("remoteaddr", r.RemoteAddr))
+			}
+		}
+		ip := net.ParseIP(ipstr)
+		if ip == nil && ipstr != "" {
+			pkglog.Debug("ratelimit: invalid ip", slog.String("ip", ipstr))
+		}
+		if ip != nil && !limiterConnectionrate.Add(ip, now, 1) {
+			method := metricHTTPMethod(r.Method)
+			proto := "http"
+			if r.TLS != nil {
+				proto = "https"
+			}
+			metricRequest.WithLabelValues("(ratelimited)", proto, method, "429").Observe(0)
+			// No logging, that's just noise.
+
+			http.Error(xw, "429 - too many auth attempts", http.StatusTooManyRequests)
+			return
+		}
 	}
 
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
@@ -583,11 +604,11 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		return mox.Conf.IsClientSettingsDomain(host.Domain)
 	}
 
-	var ensureServe func(https bool, port int, kind string, favicon bool) *serve
-	ensureServe = func(https bool, port int, kind string, favicon bool) *serve {
+	var ensureServe func(https, forwarded, noRateLimiting bool, port int, kind string, favicon bool) *serve
+	ensureServe = func(https, forwarded, rateLimitDisabled bool, port int, kind string, favicon bool) *serve {
 		s := portServe[port]
 		if s == nil {
-			s = &serve{nil, nil, tlsNextProtoMap{}, false, nil, false, nil}
+			s = &serve{nil, nil, tlsNextProtoMap{}, false, false, false, nil, false, nil}
 			portServe[port] = s
 		}
 		s.Kinds = append(s.Kinds, kind)
@@ -595,6 +616,8 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			s.ServiceHandle("favicon", accountHostMatch, "/favicon.ico", mox.SafeHeaders(http.HandlerFunc(faviconHandle)))
 			s.Favicon = true
 		}
+		s.Forwarded = s.Forwarded || forwarded
+		s.RateLimitDisabled = s.RateLimitDisabled || rateLimitDisabled
 
 		// We clone TLS configs because we may modify it later on for this server, for
 		// ALPN. And we need copies because multiple listeners on http.Server where the
@@ -604,7 +627,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 
 			tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
 			if portServe[tlsport] == nil || !slices.Contains(portServe[tlsport].Kinds, "acme-tls-alpn-01") {
-				ensureServe(true, tlsport, "acme-tls-alpn-01", false)
+				ensureServe(true, false, false, tlsport, "acme-tls-alpn-01", false)
 			}
 		} else if https {
 			s.TLSConfig = l.TLS.Config.Clone()
@@ -624,10 +647,10 @@ func portServes(name string, l config.Listener) map[int]*serve {
 
 	if l.TLS != nil && l.TLS.ACME != "" && (l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled) {
 		port := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
-		ensureServe(true, port, "acme-tls-alpn-01", false)
+		ensureServe(true, false, false, port, "acme-tls-alpn-01", false)
 	}
 	if l.Submissions.Enabled && l.Submissions.EnabledOnHTTPS {
-		s := ensureServe(true, 443, "smtp-https", false)
+		s := ensureServe(true, false, false, 443, "smtp-https", false)
 		hostname := mox.Conf.Static.HostnameDomain
 		if l.Hostname != "" {
 			hostname = l.HostnameDomain
@@ -644,7 +667,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		}
 	}
 	if l.IMAPS.Enabled && l.IMAPS.EnabledOnHTTPS {
-		s := ensureServe(true, 443, "imap-https", false)
+		s := ensureServe(true, false, false, 443, "imap-https", false)
 		s.NextProto["imap"] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
 			imapserver.ServeTLSConn(name, conn, s.TLSConfig)
 		}
@@ -655,7 +678,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.AccountHTTP.Path != "" {
 			path = l.AccountHTTP.Path
 		}
-		srv := ensureServe(false, port, "account-http at "+path, true)
+		srv := ensureServe(false, l.AccountHTTP.Forwarded, false, port, "account-http at "+path, true)
 		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webaccount.Handler(path, l.AccountHTTP.Forwarded))))
 		srv.ServiceHandle("account", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "account", path)
@@ -667,7 +690,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.AccountHTTPS.Path != "" {
 			path = l.AccountHTTPS.Path
 		}
-		srv := ensureServe(true, port, "account-https at "+path, true)
+		srv := ensureServe(true, l.AccountHTTPS.Forwarded, false, port, "account-https at "+path, true)
 		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webaccount.Handler(path, l.AccountHTTPS.Forwarded))))
 		srv.ServiceHandle("account", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "account", path)
@@ -679,7 +702,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.AdminHTTP.Path != "" {
 			path = l.AdminHTTP.Path
 		}
-		srv := ensureServe(false, port, "admin-http at "+path, true)
+		srv := ensureServe(false, l.AdminHTTP.Forwarded, false, port, "admin-http at "+path, true)
 		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webadmin.Handler(path, l.AdminHTTP.Forwarded))))
 		srv.ServiceHandle("admin", listenerHostMatch, path, handler)
 		redirectToTrailingSlash(srv, listenerHostMatch, "admin", path)
@@ -691,7 +714,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.AdminHTTPS.Path != "" {
 			path = l.AdminHTTPS.Path
 		}
-		srv := ensureServe(true, port, "admin-https at "+path, true)
+		srv := ensureServe(true, l.AdminHTTPS.Forwarded, false, port, "admin-https at "+path, true)
 		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webadmin.Handler(path, l.AdminHTTPS.Forwarded))))
 		srv.ServiceHandle("admin", listenerHostMatch, path, handler)
 		redirectToTrailingSlash(srv, listenerHostMatch, "admin", path)
@@ -708,7 +731,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.WebAPIHTTP.Path != "" {
 			path = l.WebAPIHTTP.Path
 		}
-		srv := ensureServe(false, port, "webapi-http at "+path, true)
+		srv := ensureServe(false, l.WebAPIHTTP.Forwarded, false, port, "webapi-http at "+path, true)
 		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTP.Forwarded)))
 		srv.ServiceHandle("webapi", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webapi", path)
@@ -720,7 +743,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.WebAPIHTTPS.Path != "" {
 			path = l.WebAPIHTTPS.Path
 		}
-		srv := ensureServe(true, port, "webapi-https at "+path, true)
+		srv := ensureServe(true, l.WebAPIHTTPS.Forwarded, false, port, "webapi-https at "+path, true)
 		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTPS.Forwarded)))
 		srv.ServiceHandle("webapi", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webapi", path)
@@ -732,7 +755,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.WebmailHTTP.Path != "" {
 			path = l.WebmailHTTP.Path
 		}
-		srv := ensureServe(false, port, "webmail-http at "+path, true)
+		srv := ensureServe(false, l.WebmailHTTP.Forwarded, false, port, "webmail-http at "+path, true)
 		var accountPath string
 		if l.AccountHTTP.Enabled {
 			accountPath = "/"
@@ -751,7 +774,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if l.WebmailHTTPS.Path != "" {
 			path = l.WebmailHTTPS.Path
 		}
-		srv := ensureServe(true, port, "webmail-https at "+path, true)
+		srv := ensureServe(true, l.WebmailHTTPS.Forwarded, false, port, "webmail-https at "+path, true)
 		var accountPath string
 		if l.AccountHTTPS.Enabled {
 			accountPath = "/"
@@ -766,7 +789,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 
 	if l.MetricsHTTP.Enabled {
 		port := config.Port(l.MetricsHTTP.Port, 8010)
-		srv := ensureServe(false, port, "metrics-http", false)
+		srv := ensureServe(false, false, false, port, "metrics-http", false)
 		srv.SystemHandle("metrics", nil, "/metrics", mox.SafeHeaders(promhttp.Handler()))
 		srv.SystemHandle("metrics", nil, "/", mox.SafeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
@@ -782,7 +805,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 	if l.AutoconfigHTTPS.Enabled {
 		port := config.Port(l.AutoconfigHTTPS.Port, 443)
-		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "autoconfig-https", false)
+		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, false, false, port, "autoconfig-https", false)
 		if l.AutoconfigHTTPS.NonTLS {
 			ensureACMEHTTP01(srv)
 		}
@@ -812,7 +835,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 	if l.MTASTSHTTPS.Enabled {
 		port := config.Port(l.MTASTSHTTPS.Port, 443)
-		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, port, "mtasts-https", false)
+		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, false, false, port, "mtasts-https", false)
 		if l.MTASTSHTTPS.NonTLS {
 			ensureACMEHTTP01(srv)
 		}
@@ -832,19 +855,19 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if _, ok := portServe[port]; ok {
 			pkglog.Fatal("cannot serve pprof on same endpoint as other http services")
 		}
-		srv := &serve{[]string{"pprof-http"}, nil, nil, false, nil, false, nil}
+		srv := &serve{[]string{"pprof-http"}, nil, nil, false, false, false, nil, false, nil}
 		portServe[port] = srv
 		srv.SystemHandle("pprof", nil, "/", http.DefaultServeMux)
 	}
 	if l.WebserverHTTP.Enabled {
 		port := config.Port(l.WebserverHTTP.Port, 80)
-		srv := ensureServe(false, port, "webserver-http", false)
+		srv := ensureServe(false, false, l.WebserverHTTP.RateLimitDisabled, port, "webserver-http", false)
 		srv.Webserver = true
 		ensureACMEHTTP01(srv)
 	}
 	if l.WebserverHTTPS.Enabled {
 		port := config.Port(l.WebserverHTTPS.Port, 443)
-		srv := ensureServe(true, port, "webserver-https", false)
+		srv := ensureServe(true, false, l.WebserverHTTPS.RateLimitDisabled, port, "webserver-https", false)
 		srv.Webserver = true
 	}
 
