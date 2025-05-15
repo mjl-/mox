@@ -1921,13 +1921,6 @@ func cmdSMTPDial(c *cmd) {
 		}
 	}
 
-	curvesList := []tls.CurveID{
-		tls.CurveP256,
-		tls.CurveP384,
-		tls.CurveP521,
-		tls.X25519,
-		tls.X25519MLKEM768,
-	}
 	curves := map[string]tls.CurveID{}
 	for _, a := range curvesList {
 		curves[strings.ToLower(a.String())] = a
@@ -2017,7 +2010,7 @@ exchanged during connection set up.
 		tlsConfig.RootCAs = pool
 	}
 	if tlsCiphersuites != "" {
-		for s := range strings.SplitSeq(tlsCiphersuites, ",") {
+		for _, s := range strings.Split(tlsCiphersuites, ",") {
 			s = strings.TrimSpace(s)
 			c, ok := ciphersuites[s]
 			if !ok {
@@ -2030,7 +2023,7 @@ exchanged during connection set up.
 		}
 	}
 	if tlsCurves != "" {
-		for s := range strings.SplitSeq(tlsCurves, ",") {
+		for _, s := range strings.Split(tlsCurves, ",") {
 			s = strings.TrimSpace(s)
 			if c, ok := curves[s]; !ok {
 				log.Fatalf("unknown ecc key exchange algorithm %q", s)
