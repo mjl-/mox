@@ -1,0 +1,5 @@
+Below are the incompatible changes between v0.0.15 and next, per package.
+
+# smtpclient
+- GatherDestinations: changed from func(context.Context, *log/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.IPDomain) (bool, bool, bool, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dns.IPDomain, bool, error) to func(context.Context, *log/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.IPDomain) (bool, bool, bool, github.com/mjl-/mox/dns.Domain, []HostPref, bool, error)
+

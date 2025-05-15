@@ -1717,7 +1717,7 @@ func recipientSecurity(ctx context.Context, log mlog.Log, resolver dns.Resolver,
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		_, origNextHopAuthentic, expandedNextHopAuthentic, _, hosts, _, err := smtpclient.GatherDestinations(ctx, log.Logger, resolver, dns.IPDomain{Domain: addr.Domain})
+		_, origNextHopAuthentic, expandedNextHopAuthentic, _, hostPrefs, _, err := smtpclient.GatherDestinations(ctx, log.Logger, resolver, dns.IPDomain{Domain: addr.Domain})
 		if err != nil {
 			rs.DNSSEC = SecurityResultError
 			return
@@ -1734,10 +1734,10 @@ func recipientSecurity(ctx context.Context, log mlog.Log, resolver dns.Resolver,
 		}
 
 		// We're only looking at the first host to deliver to (typically first mx destination).
-		if len(hosts) == 0 || hosts[0].Domain.IsZero() {
+		if len(hostPrefs) == 0 || hostPrefs[0].Host.Domain.IsZero() {
 			return // Should not happen.
 		}
-		host := hosts[0]
+		host := hostPrefs[0].Host
 
 		// Resolve the IPs. Required for DANE to prevent bad DNS servers from causing an
 		// error result instead of no-DANE result.

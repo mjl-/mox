@@ -26,6 +26,12 @@ var (
 	errNoMail     = errors.New("domain does not accept email as indicated with single dot for mx record")
 )
 
+// HostPref is a host for delivery, with preference for MX records.
+type HostPref struct {
+	Host dns.IPDomain
+	Pref int // -1 when not an MX record.
+}
+
 // GatherDestinations looks up the hosts to deliver email to a domain ("next-hop").
 // If it is an IP address, it is the only destination to try. Otherwise CNAMEs of
 // the domain are followed. Then MX records for the expanded CNAME are looked up.
@@ -46,14 +52,14 @@ var (
 // were found, both the original and expanded next-hops must be authentic for DANE
 // to be option. For a non-IP with no MX records found, the authentic result can
 // be used to decide which of the names to use as TLSA base domain.
-func GatherDestinations(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, origNextHop dns.IPDomain) (haveMX, origNextHopAuthentic, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, hosts []dns.IPDomain, permanent bool, err error) {
+func GatherDestinations(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, origNextHop dns.IPDomain) (haveMX, origNextHopAuthentic, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, hostPrefs []HostPref, permanent bool, err error) {
 	// ../rfc/5321:3824
 
 	log := mlog.New("smtpclient", elog)
 
 	// IP addresses are dialed directly, and don't have TLSA records.
 	if len(origNextHop.IP) > 0 {
-		return false, false, false, expandedNextHop, []dns.IPDomain{origNextHop}, false, nil
+		return false, false, false, expandedNextHop, []HostPref{{origNextHop, -1}}, false, nil
 	}
 
 	// We start out assuming the result is authentic. Updated with each lookup.
@@ -133,8 +139,8 @@ func GatherDestinations(ctx context.Context, elog *slog.Logger, resolver dns.Res
 			}
 
 			// No MX record, attempt delivery directly to host. ../rfc/5321:3842
-			hosts = []dns.IPDomain{{Domain: expandedNextHop}}
-			return false, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, false, nil
+			hostPrefs = []HostPref{{dns.IPDomain{Domain: expandedNextHop}, -1}}
+			return false, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hostPrefs, false, nil
 		} else if err != nil {
 			log.Infox("mx record has some invalid records, keeping only the valid mx records", err)
 		}
@@ -158,12 +164,12 @@ func GatherDestinations(ctx context.Context, elog *slog.Logger, resolver dns.Res
 				err = fmt.Errorf("%w: invalid host name in mx record %q: %v", errDNS, mx.Host, err)
 				return true, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, nil, true, err
 			}
-			hosts = append(hosts, dns.IPDomain{Domain: host})
+			hostPrefs = append(hostPrefs, HostPref{dns.IPDomain{Domain: host}, int(mx.Pref)})
 		}
-		if len(hosts) > 0 {
+		if len(hostPrefs) > 0 {
 			err = nil
 		}
-		return true, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, false, err
+		return true, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hostPrefs, false, err
 	}
 }
 

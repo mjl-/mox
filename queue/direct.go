@@ -139,7 +139,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	// directly.
 	origNextHop := m0.RecipientDomain.Domain
 	ctx := mox.Shutdown
-	haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err := smtpclient.GatherDestinations(ctx, qlog.Logger, resolver, m0.RecipientDomain)
+	haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hostPrefs, permanent, err := smtpclient.GatherDestinations(ctx, qlog.Logger, resolver, m0.RecipientDomain)
 	if err != nil {
 		// If this is a DNSSEC authentication error, we'll collect it for TLS reporting.
 		// Hopefully it's a temporary misconfiguration that is solve before we try to send
@@ -196,7 +196,8 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	var lastErr = errors.New("no error") // Can be smtpclient.Error.
 	nmissingRequireTLS := 0
 	// todo: should make distinction between host permanently not accepting the message, and the message not being deliverable permanently. e.g. a mx host may have a size limit, or not accept 8bitmime, while another host in the list does accept the message. same for smtputf8, ../rfc/6531:555
-	for _, h := range hosts {
+	for _, hp := range hostPrefs {
+		h := hp.Host
 		// ../rfc/8461:913
 		if policy != nil && policy.Mode != mtasts.ModeNone && !policy.Matches(h.Domain) {
 			// todo: perhaps only send tlsrpt failure if none of the mx hosts matched? reporting about each mismatch seems useful for domain owners, to discover mtasts policies they didn't update after changing mx. there is a risk a domain owner intentionally didn't put all mx'es in the mtasts policy, but they probably won't mind being reported about that.
@@ -348,7 +349,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	// If we failed due to requiretls not being satisfied, make the delivery permanent.
 	// It is unlikely the recipient domain will implement requiretls during our retry
 	// period. Best to let the sender know immediately.
-	if len(hosts) > 0 && nmissingRequireTLS == len(hosts) {
+	if len(hostPrefs) > 0 && nmissingRequireTLS == len(hostPrefs) {
 		qlog.Info("marking delivery as permanently failed because recipient domain does not implement requiretls")
 		err := smtpclient.Error{
 			Permanent: true,

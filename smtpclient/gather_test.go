@@ -35,11 +35,11 @@ func ipdomain(s string) dns.IPDomain {
 	return dns.IPDomain{Domain: d}
 }
 
-func ipdomains(s ...string) (l []dns.IPDomain) {
-	for _, e := range s {
-		l = append(l, ipdomain(e))
+func hostprefs(pref int, names ...string) (l []HostPref) {
+	for _, s := range names {
+		l = append(l, HostPref{Host: ipdomain(s), Pref: pref})
 	}
-	return
+	return l
 }
 
 // Test basic MX lookup case, but also following CNAME, detecting CNAME loops and
@@ -86,10 +86,10 @@ func TestGatherDestinations(t *testing.T) {
 		resolver.CNAME[s] = next
 	}
 
-	test := func(ipd dns.IPDomain, expHosts []dns.IPDomain, expDomain dns.Domain, expPerm, expAuthic, expExpAuthic bool, expErr error) {
+	test := func(ipd dns.IPDomain, expHostPrefs []HostPref, expDomain dns.Domain, expPerm, expAuthic, expExpAuthic bool, expErr error) {
 		t.Helper()
 
-		_, authic, authicExp, ed, hosts, perm, err := GatherDestinations(ctxbg, log.Logger, resolver, ipd)
+		_, authic, authicExp, ed, hostPrefs, perm, err := GatherDestinations(ctxbg, log.Logger, resolver, ipd)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			// todo: could also check the individual errors? code currently does not have structured errors.
 			t.Fatalf("gather hosts: %v, expected %v", err, expErr)
@@ -97,8 +97,8 @@ func TestGatherDestinations(t *testing.T) {
 		if err != nil {
 			return
 		}
-		if !reflect.DeepEqual(hosts, expHosts) || ed != expDomain || perm != expPerm || authic != expAuthic || authicExp != expExpAuthic {
-			t.Fatalf("got hosts %#v, effectiveDomain %#v, permanent %#v, authic %v %v, expected %#v %#v %#v %v %v", hosts, ed, perm, authic, authicExp, expHosts, expDomain, expPerm, expAuthic, expExpAuthic)
+		if !reflect.DeepEqual(hostPrefs, expHostPrefs) || ed != expDomain || perm != expPerm || authic != expAuthic || authicExp != expExpAuthic {
+			t.Fatalf("got hosts %#v, effectiveDomain %#v, permanent %#v, authic %v %v, expected %#v %#v %#v %v %v", hostPrefs, ed, perm, authic, authicExp, expHostPrefs, expDomain, expPerm, expAuthic, expExpAuthic)
 		}
 	}
 
@@ -108,18 +108,18 @@ func TestGatherDestinations(t *testing.T) {
 		authic := i == 1
 		resolver.AllAuthentic = authic
 		// Basic with simple MX.
-		test(ipdomain("basic.example"), ipdomains("mail.basic.example"), domain("basic.example"), false, authic, authic, nil)
-		test(ipdomain("multimx.example"), ipdomains("mail1.multimx.example", "mail2.multimx.example"), domain("multimx.example"), false, authic, authic, nil)
+		test(ipdomain("basic.example"), hostprefs(10, "mail.basic.example"), domain("basic.example"), false, authic, authic, nil)
+		test(ipdomain("multimx.example"), hostprefs(10, "mail1.multimx.example", "mail2.multimx.example"), domain("multimx.example"), false, authic, authic, nil)
 		// Only an A record.
-		test(ipdomain("justhost.example"), ipdomains("justhost.example"), domain("justhost.example"), false, authic, authic, nil)
+		test(ipdomain("justhost.example"), hostprefs(-1, "justhost.example"), domain("justhost.example"), false, authic, authic, nil)
 		// Only an AAAA record.
-		test(ipdomain("justhost6.example"), ipdomains("justhost6.example"), domain("justhost6.example"), false, authic, authic, nil)
+		test(ipdomain("justhost6.example"), hostprefs(-1, "justhost6.example"), domain("justhost6.example"), false, authic, authic, nil)
 		// Follow CNAME.
-		test(ipdomain("cname.example"), ipdomains("mail.basic.example"), domain("basic.example"), false, authic, authic, nil)
+		test(ipdomain("cname.example"), hostprefs(10, "mail.basic.example"), domain("basic.example"), false, authic, authic, nil)
 		// No MX/CNAME, non-existence of host will be found out later.
-		test(ipdomain("absent.example"), ipdomains("absent.example"), domain("absent.example"), false, authic, authic, nil)
+		test(ipdomain("absent.example"), hostprefs(-1, "absent.example"), domain("absent.example"), false, authic, authic, nil)
 		// Followed CNAME, has no MX, non-existence of host will be found out later.
-		test(ipdomain("danglingcname.example"), ipdomains("absent.example"), domain("absent.example"), false, authic, authic, nil)
+		test(ipdomain("danglingcname.example"), hostprefs(-1, "absent.example"), domain("absent.example"), false, authic, authic, nil)
 		test(ipdomain("cnamelimit1.example"), nil, zerodom, true, authic, authic, errCNAMELimit)
 		test(ipdomain("cnameloop.example"), nil, zerodom, true, authic, authic, errCNAMELoop)
 		test(ipdomain("nullmx.example"), nil, zerodom, true, authic, authic, errNoMail)
@@ -127,9 +127,9 @@ func TestGatherDestinations(t *testing.T) {
 		test(ipdomain("temperror-cname.example"), nil, zerodom, false, authic, authic, errDNS)
 	}
 
-	test(ipdomain("10.0.0.1"), ipdomains("10.0.0.1"), zerodom, false, false, false, nil)
-	test(ipdomain("cnameinauthentic.example"), ipdomains("mail.basic.example"), domain("basic.example"), false, false, false, nil)
-	test(ipdomain("cname-to-inauthentic.example"), ipdomains("mail.basic.example"), domain("basic.example"), false, true, false, nil)
+	test(ipdomain("10.0.0.1"), hostprefs(-1, "10.0.0.1"), zerodom, false, false, false, nil)
+	test(ipdomain("cnameinauthentic.example"), hostprefs(10, "mail.basic.example"), domain("basic.example"), false, false, false, nil)
+	test(ipdomain("cname-to-inauthentic.example"), hostprefs(10, "mail.basic.example"), domain("basic.example"), false, true, false, nil)
 }
 
 func TestGatherIPs(t *testing.T) {

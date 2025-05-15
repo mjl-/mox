@@ -2204,12 +2204,12 @@ sharing most of its code.
 	var haveMX bool
 	var expandedNextHopAuthentic bool
 	var expandedNextHop dns.Domain
-	var hosts []dns.IPDomain
+	var hostPrefs []smtpclient.HostPref
 	if len(args) == 1 {
 		var permanent bool
 		var origNextHopAuthentic bool
 		var err error
-		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, c.log.Logger, resolver, dns.IPDomain{Domain: origNextHop})
+		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hostPrefs, permanent, err = smtpclient.GatherDestinations(ctxbg, c.log.Logger, resolver, dns.IPDomain{Domain: origNextHop})
 		status := "temporary"
 		if permanent {
 			status = "permanent"
@@ -2233,8 +2233,12 @@ sharing most of its code.
 		}
 
 		l := []string{}
-		for _, h := range hosts {
-			l = append(l, h.String())
+		for _, hp := range hostPrefs {
+			s := hp.Host.String()
+			if hp.Pref >= 0 {
+				s += fmt.Sprintf(" (pref %d)", hp.Pref)
+			}
+			l = append(l, s)
 		}
 		log.Printf("destinations: %s", strings.Join(l, ", "))
 	} else {
@@ -2243,18 +2247,14 @@ sharing most of its code.
 
 		expandedNextHopAuthentic = true
 		expandedNextHop = d
-		hosts = []dns.IPDomain{{Domain: d}}
+		hostPrefs = []smtpclient.HostPref{{Host: dns.IPDomain{Domain: d}, Pref: -1}}
 	}
 
 	dialedIPs := map[string][]net.IP{}
-	for _, host := range hosts {
-		// It should not be possible for hosts to have IP addresses: They are not
-		// allowed by dns.ParseDomain, and MX records cannot contain them.
-		if host.IsIP() {
-			log.Fatalf("unexpected IP address for destination host")
-		}
+	for _, hp := range hostPrefs {
+		host := hp.Host
 
-		log.Printf("attempting to connect to %s", host)
+		log.Printf("attempting to connect to %s (pref %d)", host, hp.Pref)
 
 		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, c.log.Logger, resolver, "ip", host, dialedIPs)
 		if err != nil {
