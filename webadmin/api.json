@@ -6901,6 +6901,14 @@
 						"nullable",
 						"TransportDirect"
 					]
+				},
+				{
+					"Name": "Fail",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"TransportFail"
+					]
 				}
 			]
 		},
@@ -7018,6 +7026,40 @@
 					"Docs": "",
 					"Typewords": [
 						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TransportFail",
+			"Docs": "TransportFail is a transport that fails all delivery attempts.",
+			"Fields": [
+				{
+					"Name": "SMTPCode",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "SMTPMessage",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Code",
+					"Docs": "Effective values to use, set when parsing.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Message",
+					"Docs": "",
+					"Typewords": [
+						"string"
 					]
 				}
 			]

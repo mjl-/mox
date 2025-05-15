@@ -235,6 +235,7 @@ type Transport struct {
 	SMTP        *TransportSMTP   `sconf:"optional" sconf-doc:"SMTP over a plain connection (possibly with STARTTLS), typically for old-fashioned unauthenticated relaying to a remote queue."`
 	Socks       *TransportSocks  `sconf:"optional" sconf-doc:"Like regular direct delivery, but makes outgoing connections through a SOCKS proxy."`
 	Direct      *TransportDirect `sconf:"optional" sconf-doc:"Like regular direct delivery, but allows to tweak outgoing connections."`
+	Fail        *TransportFail   `sconf:"optional" sconf-doc:"Immediately fails the delivery attempt."`
 }
 
 // TransportSMTP delivers messages by "submission" (SMTP, typically
@@ -276,6 +277,16 @@ type TransportDirect struct {
 	DisableIPv6 bool `sconf:"optional" sconf-doc:"If set, outgoing SMTP connections will *NOT* use IPv6 addresses to connect to remote SMTP servers."`
 
 	IPFamily string `sconf:"-" json:"-"`
+}
+
+// TransportFail is a transport that fails all delivery attempts.
+type TransportFail struct {
+	SMTPCode    int    `sconf:"optional" sconf-doc:"SMTP error code and optional enhanced error code to use for the failure. If empty, 554 is used (transaction failed)."`
+	SMTPMessage string `sconf:"optional" sconf-doc:"Message to include for the rejection. It will be shown in the DSN."`
+
+	// Effective values to use, set when parsing.
+	Code    int    `sconf:"-"`
+	Message string `sconf:"-"`
 }
 
 type Domain struct {

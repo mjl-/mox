@@ -1528,6 +1528,18 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 		qlog.Debug("delivering to single recipient", slog.Any("msgid", m0.ID), slog.Any("recipient", m0.Recipient()))
 	}
 
+	// Test for "Fail" transport before Localserve.
+	if transport.Fail != nil {
+		err := smtpclient.Error{
+			Permanent: transport.Fail.Code/100 == 5,
+			Code:      transport.Fail.Code,
+			Secode:    smtp.SePol7Other0,
+			Err:       fmt.Errorf("%s", transport.Fail.Message),
+		}
+		failMsgsDB(qlog, msgs, msgs[0].DialedIPs, backoff, dsn.NameIP{}, err)
+		return
+	}
+
 	if Localserve {
 		deliverLocalserve(ctx, qlog, msgs, backoff)
 		return

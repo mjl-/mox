@@ -1058,6 +1058,33 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		}
 	}
 
+	checkTransportFail := func(name string, t *config.TransportFail) {
+		addTransportErrorf := func(format string, args ...any) {
+			addErrorf("transport %s: %s", name, fmt.Sprintf(format, args...))
+		}
+
+		if t.SMTPCode == 0 {
+			t.Code = smtp.C554TransactionFailed
+		} else if t.SMTPCode/100 != 4 && t.SMTPCode/100 != 5 {
+			addTransportErrorf("smtp code %d must be 4xx or 5xx", t.SMTPCode/100)
+		} else {
+			t.Code = t.SMTPCode
+		}
+
+		if len(t.SMTPMessage) > 256 {
+			addTransportErrorf("message must be <= 256 characters")
+		}
+		for _, c := range t.SMTPMessage {
+			if c < ' ' || c >= 0x7f {
+				addTransportErrorf("message cannot contain control characters including newlines, and must be ascii-only")
+			}
+		}
+		t.Message = t.SMTPMessage
+		if t.Message == "" {
+			t.Message = "transport fail: explicit immediate delivery failure per configuration"
+		}
+	}
+
 	for name, t := range c.Transports {
 		addTransportErrorf := func(format string, args ...any) {
 			addErrorf("transport %s: %s", name, fmt.Sprintf(format, args...))
@@ -1083,6 +1110,10 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		if t.Direct != nil {
 			n++
 			checkTransportDirect(name, t.Direct)
+		}
+		if t.Fail != nil {
+			n++
+			checkTransportFail(name, t.Fail)
 		}
 		if n > 1 {
 			addTransportErrorf("cannot have multiple methods in a transport")

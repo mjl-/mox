@@ -948,6 +948,7 @@ export interface Transport {
 	SMTP?: TransportSMTP | null
 	Socks?: TransportSocks | null
 	Direct?: TransportDirect | null
+	Fail?: TransportFail | null
 }
 
 // TransportSMTP delivers messages by "submission" (SMTP, typically
@@ -978,6 +979,14 @@ export interface TransportSocks {
 export interface TransportDirect {
 	DisableIPv4: boolean
 	DisableIPv6: boolean
+}
+
+// TransportFail is a transport that fails all delivery attempts.
+export interface TransportFail {
+	SMTPCode: number
+	SMTPMessage: string
+	Code: number  // Effective values to use, set when parsing.
+	Message: string
 }
 
 // EvaluationStat summarizes stored evaluations, for inclusion in an upcoming
@@ -1151,7 +1160,7 @@ export enum AuthResult {
 	AuthAborted = "aborted",
 }
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"LoginAttempt":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSPublicKey":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"LoginAttempt":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSPublicKey":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportFail":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
 export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"AuthResult":true,"CSRFToken":true,"DMARCPolicy":true,"IP":true,"Localpart":true,"Mode":true,"RUA":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
@@ -1253,11 +1262,12 @@ export const types: TypenameMap = {
 	"WebRedirect": {"Name":"WebRedirect","Docs":"","Fields":[{"Name":"BaseURL","Docs":"","Typewords":["string"]},{"Name":"OrigPathRegexp","Docs":"","Typewords":["string"]},{"Name":"ReplacePath","Docs":"","Typewords":["string"]},{"Name":"StatusCode","Docs":"","Typewords":["int32"]}]},
 	"WebForward": {"Name":"WebForward","Docs":"","Fields":[{"Name":"StripPath","Docs":"","Typewords":["bool"]},{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"ResponseHeaders","Docs":"","Typewords":["{}","string"]}]},
 	"WebInternal": {"Name":"WebInternal","Docs":"","Fields":[{"Name":"BasePath","Docs":"","Typewords":["string"]},{"Name":"Service","Docs":"","Typewords":["string"]}]},
-	"Transport": {"Name":"Transport","Docs":"","Fields":[{"Name":"Submissions","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"Submission","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"SMTP","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"Socks","Docs":"","Typewords":["nullable","TransportSocks"]},{"Name":"Direct","Docs":"","Typewords":["nullable","TransportDirect"]}]},
+	"Transport": {"Name":"Transport","Docs":"","Fields":[{"Name":"Submissions","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"Submission","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"SMTP","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"Socks","Docs":"","Typewords":["nullable","TransportSocks"]},{"Name":"Direct","Docs":"","Typewords":["nullable","TransportDirect"]},{"Name":"Fail","Docs":"","Typewords":["nullable","TransportFail"]}]},
 	"TransportSMTP": {"Name":"TransportSMTP","Docs":"","Fields":[{"Name":"Host","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["int32"]},{"Name":"STARTTLSInsecureSkipVerify","Docs":"","Typewords":["bool"]},{"Name":"NoSTARTTLS","Docs":"","Typewords":["bool"]},{"Name":"Auth","Docs":"","Typewords":["nullable","SMTPAuth"]}]},
 	"SMTPAuth": {"Name":"SMTPAuth","Docs":"","Fields":[{"Name":"Username","Docs":"","Typewords":["string"]},{"Name":"Password","Docs":"","Typewords":["string"]},{"Name":"Mechanisms","Docs":"","Typewords":["[]","string"]}]},
 	"TransportSocks": {"Name":"TransportSocks","Docs":"","Fields":[{"Name":"Address","Docs":"","Typewords":["string"]},{"Name":"RemoteIPs","Docs":"","Typewords":["[]","string"]},{"Name":"RemoteHostname","Docs":"","Typewords":["string"]}]},
 	"TransportDirect": {"Name":"TransportDirect","Docs":"","Fields":[{"Name":"DisableIPv4","Docs":"","Typewords":["bool"]},{"Name":"DisableIPv6","Docs":"","Typewords":["bool"]}]},
+	"TransportFail": {"Name":"TransportFail","Docs":"","Fields":[{"Name":"SMTPCode","Docs":"","Typewords":["int32"]},{"Name":"SMTPMessage","Docs":"","Typewords":["string"]},{"Name":"Code","Docs":"","Typewords":["int32"]},{"Name":"Message","Docs":"","Typewords":["string"]}]},
 	"EvaluationStat": {"Name":"EvaluationStat","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["Domain"]},{"Name":"Dispositions","Docs":"","Typewords":["[]","string"]},{"Name":"Count","Docs":"","Typewords":["int32"]},{"Name":"SendReport","Docs":"","Typewords":["bool"]}]},
 	"Evaluation": {"Name":"Evaluation","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"PolicyDomain","Docs":"","Typewords":["string"]},{"Name":"Evaluated","Docs":"","Typewords":["timestamp"]},{"Name":"Optional","Docs":"","Typewords":["bool"]},{"Name":"IntervalHours","Docs":"","Typewords":["int32"]},{"Name":"Addresses","Docs":"","Typewords":["[]","string"]},{"Name":"PolicyPublished","Docs":"","Typewords":["PolicyPublished"]},{"Name":"SourceIP","Docs":"","Typewords":["string"]},{"Name":"Disposition","Docs":"","Typewords":["string"]},{"Name":"AlignedDKIMPass","Docs":"","Typewords":["bool"]},{"Name":"AlignedSPFPass","Docs":"","Typewords":["bool"]},{"Name":"OverrideReasons","Docs":"","Typewords":["[]","PolicyOverrideReason"]},{"Name":"EnvelopeTo","Docs":"","Typewords":["string"]},{"Name":"EnvelopeFrom","Docs":"","Typewords":["string"]},{"Name":"HeaderFrom","Docs":"","Typewords":["string"]},{"Name":"DKIMResults","Docs":"","Typewords":["[]","DKIMAuthResult"]},{"Name":"SPFResults","Docs":"","Typewords":["[]","SPFAuthResult"]}]},
 	"SuppressAddress": {"Name":"SuppressAddress","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ReportingAddress","Docs":"","Typewords":["string"]},{"Name":"Until","Docs":"","Typewords":["timestamp"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
@@ -1380,6 +1390,7 @@ export const parser = {
 	SMTPAuth: (v: any) => parse("SMTPAuth", v) as SMTPAuth,
 	TransportSocks: (v: any) => parse("TransportSocks", v) as TransportSocks,
 	TransportDirect: (v: any) => parse("TransportDirect", v) as TransportDirect,
+	TransportFail: (v: any) => parse("TransportFail", v) as TransportFail,
 	EvaluationStat: (v: any) => parse("EvaluationStat", v) as EvaluationStat,
 	Evaluation: (v: any) => parse("Evaluation", v) as Evaluation,
 	SuppressAddress: (v: any) => parse("SuppressAddress", v) as SuppressAddress,

@@ -725,6 +725,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# remote SMTP servers. (optional)
 				DisableIPv6: false
 
+			# Immediately fails the delivery attempt. (optional)
+			Fail:
+
+				# SMTP error code and optional enhanced error code to use for the failure. If
+				# empty, 554 is used (transaction failed). (optional)
+				SMTPCode: 0
+
+				# Message to include for the rejection. It will be shown in the DSN. (optional)
+				SMTPMessage:
+
 	# Do not send DMARC reports (aggregate only). By default, aggregate reports on
 	# DMARC evaluations are sent to domains if their DMARC policy requests them.
 	# Reports are sent at whole hours, with a minimum of 1 hour and maximum of 24
