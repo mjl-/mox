@@ -144,7 +144,7 @@ func FuzzServer(f *testing.F) {
 
 			err = serverConn.SetDeadline(time.Now().Add(time.Second))
 			flog(err, "set server deadline")
-			serve("test", cid, nil, serverConn, false, true, false, "")
+			serve("test", cid, nil, serverConn, false, false, true, false, "")
 			cid++
 		}
 

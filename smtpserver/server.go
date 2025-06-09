@@ -206,12 +206,14 @@ func Listen() {
 		listener := mox.Conf.Static.Listeners[name]
 
 		var tlsConfig, tlsConfigDelivery *tls.Config
+		var noTLSClientAuth bool
 		if listener.TLS != nil {
 			tlsConfig = listener.TLS.Config
 			// For SMTP delivery, if we get a TLS handshake for an SNI hostname that we don't
 			// allow, we'll fallback to a certificate for the listener hostname instead of
 			// causing the connection to fail. May improve interoperability.
 			tlsConfigDelivery = listener.TLS.ConfigFallback
+			noTLSClientAuth = listener.TLS.ClientAuthDisabled
 		}
 
 		maxMsgSize := listener.SMTPMaxMessageSize
@@ -234,7 +236,7 @@ func Listen() {
 					// https://github.com/golang/go/issues/70232.
 					tlsConfigDelivery.SessionTicketsDisabled = listener.SMTP.TLSSessionTicketsDisabled == nil || *listener.SMTP.TLSSessionTicketsDisabled
 				}
-				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
+				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, noTLSClientAuth, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
 			}
 		}
 		if listener.Submission.Enabled {
@@ -244,7 +246,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submission.Port, 587)
 			for _, ip := range listener.IPs {
-				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, true, nil, 0)
+				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, noTLSClientAuth, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, true, nil, 0)
 			}
 		}
 
@@ -255,7 +257,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submissions.Port, 465)
 			for _, ip := range listener.IPs {
-				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, true, nil, 0)
+				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, noTLSClientAuth, maxMsgSize, true, true, true, nil, 0)
 			}
 		}
 	}
@@ -263,7 +265,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	log := mlog.New("smtpserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
@@ -297,7 +299,7 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 
 			// Package is set on the resolver by the dkim/spf/dmarc/etc packages.
 			resolver := dns.StrictResolver{Log: log.Logger}
-			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, false, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
+			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, false, noTLSClientAuth, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
 		}
 	}
 
@@ -321,10 +323,11 @@ type conn struct {
 	origConn net.Conn
 	conn     net.Conn
 
-	tls           bool
-	extRequireTLS bool // Whether to announce and allow the REQUIRETLS extension.
-	viaHTTPS      bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
-	resolver      dns.Resolver
+	tls             bool
+	extRequireTLS   bool // Whether to announce and allow the REQUIRETLS extension.
+	viaHTTPS        bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
+	noTLSClientAuth bool
+	resolver        dns.Resolver
 	// The "x" in the readers and writes indicate Read and Write errors use panic to
 	// propagate the error.
 	xbr                   *bufio.Reader
@@ -435,7 +438,7 @@ func (c *conn) loginAttempt(useTLS bool, authMech string) store.LoginAttempt {
 // makeTLSConfig makes a new tls config that is bound to the connection for
 // possible client certificate authentication in case of submission.
 func (c *conn) makeTLSConfig() *tls.Config {
-	if !c.submission {
+	if !c.submission || c.noTLSClientAuth {
 		return c.baseTLSConfig
 	}
 
@@ -540,7 +543,7 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 		if err == bstore.ErrAbsent {
 			la.Result = store.AuthBadCredentials
 		}
-		return fmt.Errorf("looking up tls public key with fingerprint %s: %v", fp, err)
+		return fmt.Errorf("looking up tls public key with fingerprint %s, subject %q, issuer %q: %v", fp, cert.Subject, cert.Issuer, err)
 	}
 	la.LoginAddress = pubKey.LoginAddress
 
@@ -620,7 +623,7 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 	cancel()
 
 	cs := tlsConn.ConnectionState()
-	if cs.DidResume && len(cs.PeerCertificates) > 0 {
+	if cs.DidResume && len(cs.PeerCertificates) > 0 && !c.noTLSClientAuth {
 		// Verify client after session resumption.
 		err := c.tlsClientAuthVerifyPeerCertParsed(cs.PeerCertificates[0])
 		if err != nil {
@@ -634,6 +637,7 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 		slog.String("ciphersuite", ciphersuite),
 		slog.String("sni", cs.ServerName),
 		slog.Bool("resumed", cs.DidResume),
+		slog.Bool("notlsclientauth", c.noTLSClientAuth),
 		slog.Int("clientcerts", len(cs.PeerCertificates)),
 	}
 	if c.account != nil {
@@ -860,10 +864,10 @@ var cleanClose struct{} // Sentinel value for panic/recover indicating clean clo
 func ServeTLSConn(listenerName string, hostname dns.Domain, conn *tls.Conn, tlsConfig *tls.Config, submission, viaHTTPS bool, maxMsgSize int64, requireTLS bool) {
 	log := mlog.New("smtpserver", nil)
 	resolver := dns.StrictResolver{Log: log.Logger}
-	serve(listenerName, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, true, viaHTTPS, maxMsgSize, true, true, requireTLS, nil, 0)
+	serve(listenerName, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, true, viaHTTPS, true, maxMsgSize, true, true, requireTLS, nil, 0)
 }
 
-func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls, viaHTTPS bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls, viaHTTPS, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	var localIP, remoteIP net.IP
 	if a, ok := nc.LocalAddr().(*net.TCPAddr); ok {
 		localIP = a.IP
@@ -890,6 +894,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		submission:            submission,
 		tls:                   xtls,
 		viaHTTPS:              viaHTTPS,
+		noTLSClientAuth:       noTLSClientAuth,
 		extRequireTLS:         requireTLS,
 		resolver:              resolver,
 		lastlog:               time.Now(),
@@ -1209,7 +1214,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 			// case, or it would trigger the mechanism downgrade detection.
 			mechs = "SCRAM-SHA-256-PLUS SCRAM-SHA-256 SCRAM-SHA-1-PLUS SCRAM-SHA-1 CRAM-MD5 PLAIN LOGIN"
 		}
-		if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS {
+		if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS && !c.noTLSClientAuth {
 			mechs = "EXTERNAL " + mechs
 		}
 		c.xbwritelinef("250-AUTH %s", mechs)

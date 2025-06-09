@@ -217,6 +217,11 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				HostPrivateKeyFiles:
 					-
 
+				# Disable TLS client authentication with certificates/keys, preventing the TLS
+				# server from requesting a TLS certificate from clients. Useful for working around
+				# clients that don't handle TLS client authentication well. (optional)
+				ClientAuthDisabled: false
+
 			# Maximum size in bytes for incoming and outgoing messages. Default is 100MB.
 			# (optional)
 			SMTPMaxMessageSize: 0

@@ -556,7 +556,7 @@ func startArgsMore(t *testing.T, uidonly, first, immediateTLS bool, serverConfig
 	cid := connCounter - 1
 	go func() {
 		const viaHTTPS = false
-		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS, viaHTTPS, "")
+		serve("test", cid, serverConfig, serverConn, immediateTLS, false, allowLoginWithoutTLS, viaHTTPS, "")
 		close(done)
 	}()
 	var tc *testconn

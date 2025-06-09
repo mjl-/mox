@@ -192,9 +192,10 @@ type conn struct {
 	cid               int64
 	state             state
 	conn              net.Conn
-	connBroken        bool               // Once broken, we won't flush any more data.
-	tls               bool               // Whether TLS has been initialized.
-	viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
+	connBroken        bool // Once broken, we won't flush any more data.
+	tls               bool // Whether TLS has been initialized.
+	viaHTTPS          bool // Whether this connection came in via HTTPS (using TLS ALPN).
+	noTLSClientAuth   bool
 	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS, and possibly wrapping inflate.
 	tr                *moxio.TraceReader // Kept to change trace level when reading/writing cmd/auth/data.
 	line              chan lineErr       // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
@@ -384,21 +385,23 @@ func Listen() {
 		listener := mox.Conf.Static.Listeners[name]
 
 		var tlsConfig *tls.Config
+		var noTLSClientAuth bool
 		if listener.TLS != nil {
 			tlsConfig = listener.TLS.Config
+			noTLSClientAuth = listener.TLS.ClientAuthDisabled
 		}
 
 		if listener.IMAP.Enabled {
 			port := config.Port(listener.IMAP.Port, 143)
 			for _, ip := range listener.IPs {
-				listen1("imap", name, ip, port, tlsConfig, false, listener.IMAP.NoRequireSTARTTLS)
+				listen1("imap", name, ip, port, tlsConfig, false, noTLSClientAuth, listener.IMAP.NoRequireSTARTTLS)
 			}
 		}
 
 		if listener.IMAPS.Enabled {
 			port := config.Port(listener.IMAPS.Port, 993)
 			for _, ip := range listener.IPs {
-				listen1("imaps", name, ip, port, tlsConfig, true, false)
+				listen1("imaps", name, ip, port, tlsConfig, true, noTLSClientAuth, false)
 			}
 		}
 	}
@@ -406,7 +409,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noRequireSTARTTLS bool) {
+func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noTLSClientAuth, noRequireSTARTTLS bool) {
 	log := mlog.New("imapserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
@@ -439,7 +442,7 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 			}
 
 			metricIMAPConnection.WithLabelValues(protocol).Inc()
-			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS, false, "")
+			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noTLSClientAuth, noRequireSTARTTLS, false, "")
 		}
 	}
 
@@ -448,11 +451,11 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 
 // ServeTLSConn serves IMAP on a TLS connection.
 func ServeTLSConn(listenerName string, conn *tls.Conn, tlsConfig *tls.Config) {
-	serve(listenerName, mox.Cid(), tlsConfig, conn, true, false, true, "")
+	serve(listenerName, mox.Cid(), tlsConfig, conn, true, true, false, true, "")
 }
 
 func ServeConnPreauth(listenerName string, cid int64, conn net.Conn, preauthAddress string) {
-	serve(listenerName, cid, nil, conn, false, true, false, preauthAddress)
+	serve(listenerName, cid, nil, conn, false, true, true, false, preauthAddress)
 }
 
 // Serve starts serving on all listeners, launching a goroutine per listener.
@@ -766,7 +769,7 @@ var cleanClose struct{} // Sentinel value for panic/recover indicating clean clo
 // preauthenticated.
 //
 // The connection is closed before returning.
-func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS, viaHTTPS bool, preauthAddress string) {
+func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noTLSClientAuth, noRequireSTARTTLS, viaHTTPS bool, preauthAddress string) {
 	var remoteIP net.IP
 	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {
 		remoteIP = a.IP
@@ -780,6 +783,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		conn:              nc,
 		tls:               xtls,
 		viaHTTPS:          viaHTTPS,
+		noTLSClientAuth:   noTLSClientAuth,
 		lastlog:           time.Now(),
 		baseTLSConfig:     tlsConfig,
 		remoteIP:          remoteIP,
@@ -990,6 +994,10 @@ func (c *conn) makeTLSConfig() *tls.Config {
 	// config, so they can be used for this connection too.
 	tlsConf := c.baseTLSConfig.Clone()
 
+	if c.noTLSClientAuth {
+		return tlsConf
+	}
+
 	// Allow client certificate authentication, for use with the sasl "external"
 	// authentication mechanism.
 	tlsConf.ClientAuth = tls.RequestClientCert
@@ -1089,7 +1097,7 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 		if err == bstore.ErrAbsent {
 			c.loginAttempt.Result = store.AuthBadCredentials
 		}
-		return fmt.Errorf("looking up tls public key with fingerprint %s: %v", fp, err)
+		return fmt.Errorf("looking up tls public key with fingerprint %s, subject %q, issuer %q: %v", fp, cert.Subject, cert.Issuer, err)
 	}
 	c.loginAttempt.LoginAddress = pubKey.LoginAddress
 
@@ -1152,7 +1160,7 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 	cancel()
 
 	cs := tlsConn.ConnectionState()
-	if cs.DidResume && len(cs.PeerCertificates) > 0 {
+	if cs.DidResume && len(cs.PeerCertificates) > 0 && !c.noTLSClientAuth {
 		// Verify client after session resumption.
 		err := c.tlsClientAuthVerifyPeerCertParsed(cs.PeerCertificates[0])
 		if err != nil {
@@ -1167,6 +1175,7 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 		slog.String("ciphersuite", ciphersuite),
 		slog.String("sni", cs.ServerName),
 		slog.Bool("resumed", cs.DidResume),
+		slog.Bool("notlsclientauth", c.noTLSClientAuth),
 		slog.Int("clientcerts", len(cs.PeerCertificates)),
 	}
 	if c.account != nil {
@@ -2390,7 +2399,7 @@ func (c *conn) capabilities() string {
 	} else {
 		caps += " LOGINDISABLED"
 	}
-	if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS {
+	if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS && !c.noTLSClientAuth {
 		caps += " AUTH=EXTERNAL"
 	}
 	return caps

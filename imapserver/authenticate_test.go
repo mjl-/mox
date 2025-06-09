@@ -362,7 +362,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	cid := connCounter
 	go func() {
 		defer serverConn.Close()
-		serve("test", cid, &serverConfig, serverConn, true, false, false, "")
+		serve("test", cid, &serverConfig, serverConn, true, false, false, false, "")
 		close(done)
 	}()
 

@@ -257,7 +257,7 @@ func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	defer func() { <-serverdone }()
 
 	go func() {
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, ts.serverConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, false, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, ts.serverConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, false, false, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
@@ -476,7 +476,7 @@ func TestSubmission(t *testing.T) {
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{fakeCert(ts.t, false)},
 		}
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, false, 100<<20, false, false, false, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, false, false, 100<<20, false, false, false, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
@@ -1426,7 +1426,7 @@ func TestNonSMTP(t *testing.T) {
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{fakeCert(ts.t, false)},
 		}
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, false, 100<<20, false, false, false, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, false, false, 100<<20, false, false, false, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
