@@ -212,7 +212,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		records = append(records,
 			"; Remote servers can use MTA-STS to verify our TLS certificate with the",
 			"; WebPKI pool of CA's (certificate authorities) when delivering over SMTP with",
-			"; STARTTLSTLS.",
+			"; STARTTLS.",
 			fmt.Sprintf(`mta-sts.%s.            CNAME %s.`, d, h),
 			fmt.Sprintf(`_mta-sts.%s.           TXT "v=STSv1; id=%s"`, d, sts.PolicyID),
 			"",

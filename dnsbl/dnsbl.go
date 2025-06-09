@@ -10,7 +10,7 @@
 // looked up with an DNS "A" lookup of a name similar to an IPv4 address, but with
 // 4-bit hexadecimal dot-separated characters, in reverse.
 //
-// The health of a DNSBL "zone" can be check through a lookup of 127.0.0.1
+// The health of a DNSBL "zone" can be checked through a lookup of 127.0.0.1
 // (must not be present) and 127.0.0.2 (must be present).
 package dnsbl
 
