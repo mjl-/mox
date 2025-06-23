@@ -34,6 +34,10 @@ import (
 func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, certIssuerDomainName, acmeAccountURI string) ([]string, error) {
 	d := domain.ASCII
 	h := mox.Conf.Static.HostnameDomain.ASCII
+	csd := h
+	if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != mox.Conf.Static.HostnameDomain {
+		csd = domConf.ClientSettingsDNSDomain.ASCII
+	}
 
 	// The first line with ";" is used by ../testdata/integration/moxacmepebble.sh and
 	// ../testdata/integration/moxmail2.sh for selecting DNS records
@@ -238,12 +242,12 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		)
 	}
 
-	if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != mox.Conf.Static.HostnameDomain {
+	if csd != h {
 		records = append(records,
 			"; Client settings will reference a subdomain of the hosted domain, making it",
 			"; easier to migrate to a different server in the future by not requiring settings",
 			"; in all clients to be updated.",
-			fmt.Sprintf(`%-*s CNAME %s.`, 20+len(d), domConf.ClientSettingsDNSDomain.ASCII+".", h),
+			fmt.Sprintf(`%-*s CNAME %s.`, 20+len(d), csd+".", h),
 			"",
 		)
 	}
@@ -256,8 +260,8 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 
 		// ../rfc/6186:133 ../rfc/8314:692
 		"; For secure IMAP and submission autoconfig, point to mail host.",
-		fmt.Sprintf(`_imaps._tcp.%s.        SRV 0 1 993 %s.`, d, h),
-		fmt.Sprintf(`_submissions._tcp.%s.  SRV 0 1 465 %s.`, d, h),
+		fmt.Sprintf(`_imaps._tcp.%s.        SRV 0 1 993 %s.`, d, csd),
+		fmt.Sprintf(`_submissions._tcp.%s.  SRV 0 1 465 %s.`, d, csd),
 		"",
 		// ../rfc/6186:242
 		"; Next records specify POP3 and non-TLS ports are not to be used.",
@@ -291,9 +295,9 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 				fmt.Sprintf(`;; autoconfig.%s.      CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
 				fmt.Sprintf(`;; mta-sts.%s.         CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
 			)
-			if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != mox.Conf.Static.HostnameDomain {
+			if csd != h {
 				records = append(records,
-					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), domConf.ClientSettingsDNSDomain.ASCII, certIssuerDomainName, acmeAccountURI),
+					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), csd, certIssuerDomainName, acmeAccountURI),
 				)
 			}
 			if strings.HasSuffix(h, "."+d) {
