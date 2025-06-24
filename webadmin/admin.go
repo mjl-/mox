@@ -1401,10 +1401,13 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			}
 		}
 		srvhost := func(ok bool) string {
-			if ok {
-				return mox.Conf.Static.HostnameDomain.ASCII + "."
+			if !ok {
+				return "."
 			}
-			return "."
+			if domConf.ClientSettingsDomain != "" {
+				return domConf.ClientSettingsDNSDomain.ASCII + "."
+			}
+			return mox.Conf.Static.HostnameDomain.ASCII + "."
 		}
 		var reqs = []srvReq{
 			{name: "_submissions", port: 465, host: srvhost(submissions)},
