@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/mjl-/adns v0.0.0-20250321173553-ab04b05bdfea
 	github.com/mjl-/autocert v0.0.0-20250321204043-abab2b936e31
-	github.com/mjl-/bstore v0.0.9
+	github.com/mjl-/bstore v0.0.10
 	github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978
 	github.com/mjl-/sconf v0.0.7
 	github.com/mjl-/sherpa v0.6.7
@@ -14,7 +14,7 @@ require (
 	github.com/mjl-/sherpats v0.0.6
 	github.com/prometheus/client_golang v1.18.0
 	github.com/russross/blackfriday/v2 v2.1.0
-	go.etcd.io/bbolt v1.3.11
+	go.etcd.io/bbolt v1.3.12
 	golang.org/x/crypto v0.37.0
 	golang.org/x/net v0.39.0
 	golang.org/x/sys v0.32.0

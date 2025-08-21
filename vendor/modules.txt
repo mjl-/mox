@@ -16,7 +16,7 @@ github.com/mjl-/adns/internal/singleflight
 # github.com/mjl-/autocert v0.0.0-20250321204043-abab2b936e31
 ## explicit; go 1.20
 github.com/mjl-/autocert
-# github.com/mjl-/bstore v0.0.9
+# github.com/mjl-/bstore v0.0.10
 ## explicit; go 1.23.0
 github.com/mjl-/bstore
 # github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978
@@ -64,8 +64,8 @@ github.com/prometheus/procfs/internal/util
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
-# go.etcd.io/bbolt v1.3.11
-## explicit; go 1.22
+# go.etcd.io/bbolt v1.3.12
+## explicit; go 1.23
 go.etcd.io/bbolt
 # golang.org/x/crypto v0.37.0
 ## explicit; go 1.23.0

@@ -25,9 +25,10 @@ types, but not pointers to pointers:
   - Maps, with keys and values of any supported type, except keys with pointer types.
   - Slices and arrays, with elements of any supported type.
   - time.Time
-  - Types that implement binary.MarshalBinary and binary.UnmarshalBinary, useful
-    for struct types with state in private fields. Do not change the
-    (Un)marshalBinary method in an incompatible way without a data migration.
+  - Types that implement [encoding.BinaryMarshaler] and
+    [encoding.BinaryUnmarshaler], useful for struct types with state in private
+    fields. Do not change the (Un)marshalBinary method in an incompatible way
+    without a data migration.
   - Structs, with fields of any supported type.
 
 Note: int and uint are stored as int32 and uint32, for compatibility of database
@@ -201,7 +202,8 @@ manage disk pages itself, it cannot as efficiently pack an index page with many
 records.
 
 Interface values cannot be stored. This would require storing the type along
-with the value. Instead, use a type that is a BinaryMarshaler.
+with the value. Instead, use a type that is an [encoding.BinaryMarshaler] and
+[encoding.BinaryUnmarshaler].
 
 Values of builtin type "complex" cannot be stored.
 
