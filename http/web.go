@@ -821,7 +821,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 	if l.AutoconfigHTTPS.Enabled {
 		port := config.Port(l.AutoconfigHTTPS.Port, 443)
-		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, false, false, port, "autoconfig-https", false)
+		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, l.AutoconfigHTTPS.Enabled, false, port, "autoconfig-https", false)
 		if l.AutoconfigHTTPS.NonTLS {
 			ensureACMEHTTP01(srv)
 		}
@@ -851,7 +851,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 	if l.MTASTSHTTPS.Enabled {
 		port := config.Port(l.MTASTSHTTPS.Port, 443)
-		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, false, false, port, "mtasts-https", false)
+		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, l.MTASTSHTTPS.Forwarded, false, port, "mtasts-https", false)
 		if l.MTASTSHTTPS.NonTLS {
 			ensureACMEHTTP01(srv)
 		}
