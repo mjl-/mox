@@ -112,6 +112,7 @@ type loggingWriter struct {
 	W                responseWriterFlusher // Calls are forwarded.
 	Start            time.Time
 	R                *http.Request
+	Forwarded        bool
 	WebsocketRequest bool // Whether request from was websocket.
 
 	// Set by router.
@@ -318,6 +319,19 @@ func (w *loggingWriter) error(err error) {
 	}
 }
 
+func (w *loggingWriter) remoteAddr() string {
+	if w.Forwarded {
+		s := w.R.Header.Get("X-Forwarded-For")
+		ipstr := strings.TrimSpace(strings.Split(s, ",")[0])
+		if ip := net.ParseIP(ipstr); ip != nil {
+			return ip.String()
+		}
+	}
+
+	host, _, _ := net.SplitHostPort(w.R.RemoteAddr)
+	return host
+}
+
 func (w *loggingWriter) Done() {
 	if w.Err == nil && w.Gzip != nil {
 		if err := w.Gzip.Close(); err != nil {
@@ -349,11 +363,12 @@ func (w *loggingWriter) Done() {
 		slog.Duration("duration", time.Since(w.Start)),
 		slog.Int("statuscode", w.StatusCode),
 		slog.String("proto", strings.ToLower(w.R.Proto)),
-		slog.Any("remoteaddr", w.R.RemoteAddr),
+		slog.String("remoteaddr", w.remoteAddr()),
 		slog.String("tlsinfo", tlsinfo),
 		slog.String("useragent", w.R.Header.Get("User-Agent")),
 		slog.String("referer", w.R.Header.Get("Referer")),
 	}
+
 	if w.WebsocketRequest {
 		attrs = append(attrs,
 			slog.Bool("websocketrequest", true),
@@ -487,9 +502,10 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 	}
 
 	nw := &loggingWriter{
-		W:     wf,
-		Start: now,
-		R:     r,
+		W:         wf,
+		Start:     now,
+		R:         r,
+		Forwarded: s.Forwarded,
 	}
 	defer nw.Done()
 
