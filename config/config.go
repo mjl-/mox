@@ -188,7 +188,7 @@ type Listener struct {
 	AdminHTTPS   WebService `sconf:"optional" sconf-doc:"Admin web interface listener like AdminHTTP, but for HTTPS. Requires a TLS config."`
 	WebmailHTTP  WebService `sconf:"optional" sconf-doc:"Webmail client, for reading email. Default path is /webmail/."`
 	WebmailHTTPS WebService `sconf:"optional" sconf-doc:"Webmail client, like WebmailHTTP, but for HTTPS. Requires a TLS config."`
-	WebAPIHTTP   WebService `sconf:"optional" sconf-doc:"Like WebAPIHTTP, but with plain HTTP, without TLS."`
+	WebAPIHTTP   WebService `sconf:"optional" sconf-doc:"Like WebAPIHTTPS, but with plain HTTP, without TLS."`
 	WebAPIHTTPS  WebService `sconf:"optional" sconf-doc:"WebAPI, a simple HTTP/JSON-based API for email, with HTTPS (requires a TLS config). Default path is /webapi/."`
 	MetricsHTTP  struct {
 		Enabled bool

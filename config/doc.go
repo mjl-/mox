@@ -433,7 +433,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# limiting and for the "secure" status of cookies. (optional)
 				Forwarded: false
 
-			# Like WebAPIHTTP, but with plain HTTP, without TLS. (optional)
+			# Like WebAPIHTTPS, but with plain HTTP, without TLS. (optional)
 			WebAPIHTTP:
 				Enabled: false
 
