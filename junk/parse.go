@@ -15,6 +15,8 @@ import (
 
 	"golang.org/x/net/html"
 
+	"go.etcd.io/bbolt"
+
 	"github.com/mjl-/mox/message"
 )
 
@@ -63,7 +65,11 @@ func (f *Filter) ParseMessage(p message.Part) (map[string]struct{}, error) {
 				if len(w) <= 3 {
 					continue
 				}
-				metaWords[k+":"+w] = struct{}{}
+				s := k + ":" + w
+				if len(s) > bbolt.MaxKeySize {
+					continue
+				}
+				metaWords[s] = struct{}{}
 			}
 		}
 	}
@@ -163,6 +169,13 @@ func (f *Filter) tokenizeText(r io.Reader, words map[string]struct{}) error {
 	var prev string
 	var prev2 string
 
+	wordAdd := func(s string) {
+		if len(s) > bbolt.MaxKeySize {
+			return
+		}
+		words[s] = struct{}{}
+	}
+
 	add := func() {
 		defer b.Reset()
 		if b.Len() <= 2 {
@@ -193,13 +206,13 @@ func (f *Filter) tokenizeText(r io.Reader, words map[string]struct{}) error {
 		// todo: do something for URLs, parse them? keep their domain only?
 
 		if f.Threegrams && prev2 != "" && prev != "" {
-			words[prev2+" "+prev+" "+s] = struct{}{}
+			wordAdd(prev2 + " " + prev + " " + s)
 		}
 		if f.Twograms && prev != "" {
-			words[prev+" "+s] = struct{}{}
+			wordAdd(prev + " " + s)
 		}
 		if f.Onegrams {
-			words[s] = struct{}{}
+			wordAdd(s)
 		}
 		prev2 = prev
 		prev = s
