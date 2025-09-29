@@ -451,7 +451,10 @@ type Account struct {
 	MaxFirstTimeRecipientsPerDay int                    `sconf:"optional" sconf-doc:"Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200."`
 	NoFirstTimeSenderDelay       bool                   `sconf:"optional" sconf-doc:"Do not apply a delay to SMTP connections before accepting an incoming message from a first-time sender. Can be useful for accounts that sends automated responses and want instant replies."`
 	NoCustomPassword             bool                   `sconf:"optional" sconf-doc:"If set, this account cannot set a password of their own choice, but can only set a new randomly generated password, preventing password reuse across services and use of weak passwords. Custom account passwords can be set by the admin."`
-	Routes                       []Route                `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates these account routes, domain routes and finally global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
+	IMAPCapabilitiesDisabled     []string               `sconf:"optional" sconf-doc:"IMAP capabilities (upper-case) to disable on the connection after authentication. Useful if the account uses an email client with an incompatible implementation for a capability/extension."`
+	// We will not work around client incompatibilities based on client software. ../rfc/2971:93
+
+	Routes []Route `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates these account routes, domain routes and finally global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
 
 	DNSDomain                  dns.Domain     `sconf:"-"` // Parsed form of Domain.
 	JunkMailbox                *regexp.Regexp `sconf:"-" json:"-"`

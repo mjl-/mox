@@ -395,6 +395,9 @@ const index = async () => {
 	let suppressionAddress: HTMLInputElement
 	let suppressionReason: HTMLInputElement
 
+	let imapFieldset: HTMLFieldSetElement
+	let imapCapabilitiesDisabled: HTMLInputElement
+
 	const importTrack = async (token: string) => {
 		const importConnection = dom.div('Waiting for updates...')
 		importProgress.appendChild(importConnection)
@@ -1475,6 +1478,33 @@ openssl pkcs12 \\
 					dom.td(suppressionReason=dom.input(style({width: '100%'}), attr.form('suppressionAdd'))),
 					dom.td(),
 					dom.td(dom.submitbutton('Add suppression', attr.form('suppressionAdd'))),
+				),
+			),
+		),
+		dom.br(),
+
+		dom.h2('IMAP'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				await check(imapFieldset, (async () => await client.IMAPSave(imapCapabilitiesDisabled.value.split(' ').filter(s => s)))())
+			},
+			imapFieldset=dom.fieldset(
+				dom.div(
+					style({display: 'flex', gap: '1em', alignItems: 'flex-end'}),
+					dom.div(
+						dom.label(
+							'Disabled IMAP capabilities (space-separated)',
+							attr.title('IMAP capabilities (upper-case) to disable on the connection after authentication. Useful if the account uses an email client with an incompatible implementation for a capability/extension.'),
+							dom.br(),
+							imapCapabilitiesDisabled=dom.input(attr.value((acc.IMAPCapabilitiesDisabled || []).join(' '))),
+						),
+					),
+					dom.div(
+						dom.submitbutton('Save'),
+					),
 				),
 			),
 		),

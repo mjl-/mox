@@ -551,6 +551,14 @@ func TestAccount(t *testing.T) {
 	tcheck(t, err, "list tls public keys")
 	tcompare(t, len(tpkl), 0)
 
+	tneedErrorCode(t, "user:error", func() { api.IMAPSave(ctx, []string{"BAD\nBAD"}) })
+	api.IMAPSave(ctx, []string{"UIDONLY"})
+	account, _, _, _ = api.Account(ctx)
+	tcompare(t, account.IMAPCapabilitiesDisabled, []string{"UIDONLY"})
+	api.IMAPSave(ctx, []string{})
+	account, _, _, _ = api.Account(ctx)
+	tcompare(t, account.IMAPCapabilitiesDisabled, []string{})
+
 	api.Logout(ctx)
 	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })
 }

@@ -982,3 +982,37 @@ func TestReference(t *testing.T) {
 	tc2.transactf("ok", "fetch 1 rfc822.size")
 	tc2.xuntagged(tc.untaggedFetch(1, 1, imapclient.FetchRFC822Size(len(exampleMsg))))
 }
+
+// Test that disabled capabilities aren't announced after authentication, and can't be enabled.
+func TestCapabilitiesDisabled(t *testing.T) {
+	tc := start(t, false)
+	defer tc.close()
+
+	// Set password for account.
+	acc, err := store.OpenAccount(pkglog, "imapcaps", false)
+	tcheck(t, err, "open account")
+	err = acc.SetPassword(pkglog, password0)
+	tcheck(t, err, "set password")
+
+	var caps, capsx []imapclient.Capability
+	for _, s := range serverCapabilitiesList {
+		s = strings.ToUpper(s)
+		caps = append(caps, imapclient.Capability(s))
+		if s != "UIDONLY" {
+			capsx = append(capsx, imapclient.Capability(s))
+		}
+	}
+	caps = append(caps, "STARTTLS", "AUTH=PLAIN")
+	capsx = append(capsx, "STARTTLS", "AUTH=PLAIN")
+
+	// Initially, all transactions are announced.
+	tc.transactf("ok", "capability")
+	tc.xuntagged(imapclient.UntaggedCapability(caps))
+
+	// After login, UIDONLY is disabled for the account.
+	tc.login("imapcaps@mox.example", password0)
+	tc.transactf("ok", "capability")
+	tc.xuntagged(imapclient.UntaggedCapability(capsx))
+	tc.transactf("ok", "enable condstore uidonly")
+	tc.xuntagged(imapclient.UntaggedEnabled{imapclient.CapCondstore}) // Not UIDONLY.
+}

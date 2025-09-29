@@ -803,3 +803,23 @@ func (Account) LoginAttempts(ctx context.Context, limit int) []store.LoginAttemp
 	xcheckf(ctx, err, "listing login attempts")
 	return l
 }
+
+func (Account) IMAPSave(ctx context.Context, capabilitiesDisabled []string) {
+	// Basic check for capabilities.
+	for _, s := range capabilitiesDisabled {
+		if strings.ToUpper(s) != s {
+			xcheckuserf(ctx, errors.New("capability must be in upper case"), "checking capabilities")
+		}
+		for _, c := range s {
+			if c <= ' ' {
+				xcheckuserf(ctx, errors.New("capability cannot contain control characters"), "checking capabilities")
+			}
+		}
+	}
+
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		acc.IMAPCapabilitiesDisabled = capabilitiesDisabled
+	})
+	xcheckf(ctx, err, "saving disabled imap capabilities")
+}

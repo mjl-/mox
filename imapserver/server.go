@@ -137,13 +137,14 @@ var badClientDelay = time.Second // Before reads and after 1-byte writes for pro
 var authFailDelay = time.Second  // After authentication failure.
 
 // Capabilities (extensions) the server supports. Connections will add a few more,
-// e.g. STARTTLS, LOGINDISABLED, AUTH=PLAIN.
+// e.g. STARTTLS, LOGINDISABLED, AUTH=PLAIN. Accounts may disable some
+// capabilities, to work around compatibility issues.
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-var serverCapabilities = strings.Join([]string{
+var serverCapabilitiesList = []string{
 	"IMAP4rev2",                       // ../rfc/9051
 	"IMAP4rev1",                       // ../rfc/3501
 	"ENABLE",                          // ../rfc/5161
@@ -186,7 +187,8 @@ var serverCapabilities = strings.Join([]string{
 	"NOTIFY",                          // ../rfc/5465:195
 	"UIDONLY",                         // ../rfc/9586:127
 	// "COMPRESS=DEFLATE", // ../rfc/4978, disabled for interoperability issues: The flate reader (inflate) still blocks on partial flushes, preventing progress.
-}, " ")
+}
+var serverCapabilities = strings.Join(serverCapabilitiesList, " ")
 
 type conn struct {
 	cid               int64
@@ -2389,6 +2391,19 @@ func (c *conn) cmdCapability(tag, cmd string, p *parser) {
 // For use in cmdCapability and untagged OK responses on connection start, login and authenticate.
 func (c *conn) capabilities() string {
 	caps := serverCapabilities
+	if c.account != nil {
+		conf, _ := c.account.Conf()
+		if len(conf.IMAPCapabilitiesDisabled) > 0 {
+			l := make([]string, 0, len(serverCapabilitiesList))
+			for _, cap := range serverCapabilitiesList {
+				if !slices.Contains(conf.IMAPCapabilitiesDisabled, strings.ToUpper(cap)) {
+					l = append(l, cap)
+				}
+			}
+			caps = strings.Join(l, " ")
+		}
+	}
+
 	// ../rfc/9051:1238
 	// We only allow starting without TLS when explicitly configured, in violation of RFC.
 	if !c.tls && c.baseTLSConfig != nil {
@@ -3076,8 +3091,22 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 	// We should only echo that we recognize as needing enabling.
 	var enabled string
 	var qresync bool
+
+	// Accounts can suppress capabilities, we ignore them when the client tries to
+	// enable them.
+	var disabled []string
+	if c.account != nil {
+		conf, _ := c.account.Conf()
+		disabled = conf.IMAPCapabilitiesDisabled
+	}
+
 	for _, s := range caps {
 		cap := capability(strings.ToUpper(s))
+
+		if slices.Contains(disabled, string(cap)) {
+			continue
+		}
+
 		switch cap {
 		case capIMAP4rev2,
 			capUTF8Accept,

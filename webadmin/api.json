@@ -4222,6 +4222,14 @@
 					]
 				},
 				{
+					"Name": "IMAPCapabilitiesDisabled",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
 					"Name": "Routes",
 					"Docs": "",
 					"Typewords": [

@@ -587,6 +587,20 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "IMAPSave",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "capabilitiesDisabled",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
@@ -738,6 +752,14 @@
 					"Docs": "",
 					"Typewords": [
 						"bool"
+					]
+				},
+				{
+					"Name": "IMAPCapabilitiesDisabled",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
 					]
 				},
 				{

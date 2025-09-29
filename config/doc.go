@@ -1314,6 +1314,12 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# (optional)
 			NoCustomPassword: false
 
+			# IMAP capabilities (upper-case) to disable on the connection after
+			# authentication. Useful if the account uses an email client with an incompatible
+			# implementation for a capability/extension. (optional)
+			IMAPCapabilitiesDisabled:
+				-
+
 			# Routes for delivering outgoing messages through the queue. Each delivery attempt
 			# evaluates these account routes, domain routes and finally global routes. The
 			# transport of the first matching route is used in the delivery attempt. If no
