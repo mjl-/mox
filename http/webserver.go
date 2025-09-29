@@ -207,7 +207,7 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 
 	f, err := os.Open(fspath)
 	if err != nil {
-		if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
+		if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.EINVAL) {
 			if h.ContinueNotFound {
 				// We haven't handled this request, try a next WebHandler in the list.
 				return false
