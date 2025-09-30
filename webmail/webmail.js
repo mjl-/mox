@@ -3698,14 +3698,35 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		body = body.replace(/\r/g, '').replace(/\n\n\n\n*/g, '\n\n').trim();
 		let editOffset = 0;
 		if (forward) {
+			const env = mi.Envelope;
+			const subject = env.Subject ? [env.Subject] : [];
+			const date = pm.Headers?.Date || [];
+			const from = (env.From || []).map(a => formatAddress(a));
+			const replyTo = (env.ReplyTo || []).map(a => formatAddress(a));
+			const to = (env.To || []).map(a => formatAddress(a));
+			const cc = (env.CC || []).map(a => formatAddress(a));
 			let prefix = `\n\n---- Forwarded Message ----\n`;
-			const keys = ['Subject', 'Date', 'From', 'Reply-To', 'To', 'Cc'];
 			const padspace = (s, size) => s + ' '.repeat(size - s.length);
-			for (const k of keys) {
-				for (const v of (pm.Headers?.[k] || [])) {
-					prefix += padspace(k + ':', 10) + v + '\n';
+			const add = (k, l) => {
+				if (l.length === 0) {
+					return;
 				}
-			}
+				const last = l.length - 1;
+				l.map((v, i) => {
+					prefix += padspace(k, 10) + ' ' + v;
+					if (i < last) {
+						prefix += ',';
+					}
+					prefix += '\n';
+					k = '';
+				});
+			};
+			add('Subject:', subject);
+			add('Date:', date);
+			add('From:', from);
+			add('Reply-To:', replyTo);
+			add('To:', to);
+			add('Cc:', cc);
 			body = prefix + '\n' + body;
 		}
 		else {
