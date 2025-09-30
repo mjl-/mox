@@ -99,8 +99,7 @@ func (w Webmail) LoginPrep(ctx context.Context) string {
 	log := reqInfo.Log
 
 	var data [8]byte
-	_, err := cryptorand.Read(data[:])
-	xcheckf(ctx, err, "generate token")
+	cryptorand.Read(data[:])
 	loginToken := base64.RawURLEncoding.EncodeToString(data[:])
 
 	webauth.LoginPrep(ctx, log, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken)
@@ -581,11 +580,7 @@ func xrandomID(ctx context.Context, n int) string {
 
 func xrandom(ctx context.Context, n int) []byte {
 	buf := make([]byte, n)
-	x, err := cryptorand.Read(buf)
-	xcheckf(ctx, err, "read random")
-	if x != n {
-		xcheckf(ctx, errors.New("short random read"), "read random")
-	}
+	cryptorand.Read(buf)
 	return buf
 }
 

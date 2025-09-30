@@ -1226,9 +1226,7 @@ error too, for reference.
 	prefix := stem + "." + timestamp
 
 	seed := make([]byte, ed25519.SeedSize)
-	if _, err := cryptorand.Read(seed); err != nil {
-		panic(err)
-	}
+	cryptorand.Read(seed)
 	privKey := ed25519.NewKeyFromSeed(seed)
 	privKeyBuf, err := x509.MarshalPKCS8PrivateKey(privKey)
 	xcheckf(err, "marshal private key as pkcs8")

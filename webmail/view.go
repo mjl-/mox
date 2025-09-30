@@ -438,10 +438,9 @@ var sseTokens = ssetokens{
 // xgenerate creates and saves a new token. It ensures no more than 10 tokens
 // per account exist, removing old ones if needed.
 func (x *ssetokens) xgenerate(ctx context.Context, accName, address string, sessionToken store.SessionToken) string {
-	buf := make([]byte, 16)
-	_, err := cryptrand.Read(buf)
-	xcheckf(ctx, err, "generating token")
-	st := ssetoken{base64.RawURLEncoding.EncodeToString(buf), accName, address, sessionToken, time.Now().Add(time.Minute)}
+	var buf [16]byte
+	cryptrand.Read(buf[:])
+	st := ssetoken{base64.RawURLEncoding.EncodeToString(buf[:]), accName, address, sessionToken, time.Now().Add(time.Minute)}
 
 	x.Lock()
 	defer x.Unlock()

@@ -2574,11 +2574,7 @@ func xrandomID(n int) string {
 
 func xrandom(n int) []byte {
 	buf := make([]byte, n)
-	x, err := cryptorand.Read(buf)
-	xcheckf(err, "read random")
-	if x != n {
-		xcheckf(errors.New("short random read"), "read random")
-	}
+	cryptorand.Read(buf)
 	return buf
 }
 

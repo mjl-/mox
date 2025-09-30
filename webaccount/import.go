@@ -212,10 +212,8 @@ func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix str
 		}
 	}()
 
-	buf := make([]byte, 16)
-	if _, err := cryptrand.Read(buf); err != nil {
-		return "", false, err
-	}
+	var buf [16]byte
+	cryptrand.Read(buf[:])
 	token := fmt.Sprintf("%x", buf)
 
 	if _, err := f.Seek(0, 0); err != nil {

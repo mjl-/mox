@@ -245,12 +245,8 @@ func sessionAddToken(ctx context.Context, log mlog.Log, acc *Account, ls *LoginS
 func SessionAdd(ctx context.Context, log mlog.Log, accountName, loginAddress string) (session SessionToken, csrf CSRFToken, rerr error) {
 	// Prepare new LoginSession.
 	ls := LoginSession{0, time.Time{}, time.Now().Add(sessionLifetime), [16]byte{}, [16]byte{}, accountName, loginAddress, "", ""}
-	if _, err := cryptorand.Read(ls.SessionTokenBinary[:]); err != nil {
-		return "", "", err
-	}
-	if _, err := cryptorand.Read(ls.CSRFTokenBinary[:]); err != nil {
-		return "", "", err
-	}
+	cryptorand.Read(ls.SessionTokenBinary[:])
+	cryptorand.Read(ls.CSRFTokenBinary[:])
 	ls.sessionToken = SessionToken(base64.RawURLEncoding.EncodeToString(ls.SessionTokenBinary[:]))
 	ls.csrfToken = CSRFToken(base64.RawURLEncoding.EncodeToString(ls.CSRFTokenBinary[:]))
 

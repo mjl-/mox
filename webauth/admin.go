@@ -85,12 +85,8 @@ func (a *adminSessionAuth) add(ctx context.Context, log mlog.Log, accountName st
 
 	// Generate new tokens.
 	var sessionData, csrfData [16]byte
-	if _, err := cryptorand.Read(sessionData[:]); err != nil {
-		return "", "", err
-	}
-	if _, err := cryptorand.Read(csrfData[:]); err != nil {
-		return "", "", err
-	}
+	cryptorand.Read(sessionData[:])
+	cryptorand.Read(csrfData[:])
 	sessionToken = store.SessionToken(base64.RawURLEncoding.EncodeToString(sessionData[:]))
 	csrfToken = store.CSRFToken(base64.RawURLEncoding.EncodeToString(csrfData[:]))
 

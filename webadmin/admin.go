@@ -248,8 +248,7 @@ func (w Admin) LoginPrep(ctx context.Context) string {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
 	var data [8]byte
-	_, err := cryptorand.Read(data[:])
-	xcheckf(ctx, err, "generate token")
+	cryptorand.Read(data[:])
 	loginToken := base64.RawURLEncoding.EncodeToString(data[:])
 
 	webauth.LoginPrep(ctx, log, "webadmin", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken)

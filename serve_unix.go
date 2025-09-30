@@ -227,9 +227,7 @@ Only implemented on unix systems, not Windows.
 	recvidbuf, err := os.ReadFile(recvidpath)
 	if err != nil || len(recvidbuf) != 16+8 {
 		recvidbuf = make([]byte, 16+8)
-		if _, err := cryptorand.Read(recvidbuf); err != nil {
-			log.Fatalx("reading random recvid data", err)
-		}
+		cryptorand.Read(recvidbuf)
 		if err := os.WriteFile(recvidpath, recvidbuf, 0660); err != nil {
 			log.Fatalx("writing recvidpath", err, slog.String("path", recvidpath))
 		}

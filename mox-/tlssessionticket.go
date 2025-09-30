@@ -25,9 +25,7 @@ func StartTLSSessionTicketKeyRefresher(ctx context.Context, log mlog.Log, c *tls
 	go func() {
 		for {
 			var nk [32]byte
-			if _, err := cryptorand.Read(nk[:]); err != nil {
-				panic(err)
-			}
+			cryptorand.Read(nk[:])
 			if len(keys) > 7 {
 				keys = keys[:7]
 			}

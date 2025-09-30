@@ -3,7 +3,6 @@ package mox
 import (
 	cryptorand "crypto/rand"
 	"encoding/binary"
-	"fmt"
 	mathrand2 "math/rand/v2"
 	"sync"
 )
@@ -17,9 +16,7 @@ type rand struct {
 // functions can be called concurrently.
 func NewPseudoRand() *rand {
 	var seed [32]byte
-	if _, err := cryptorand.Read(seed[:]); err != nil {
-		panic(err)
-	}
+	cryptorand.Read(seed[:])
 	return &rand{rand: mathrand2.New(mathrand2.NewChaCha8(seed))}
 }
 
@@ -37,10 +34,7 @@ func (r *rand) IntN(n int) int {
 
 // CryptoRandInt returns a cryptographically random number.
 func CryptoRandInt() int64 {
-	buf := make([]byte, 8)
-	_, err := cryptorand.Read(buf)
-	if err != nil {
-		panic(fmt.Errorf("reading random bytes: %v", err))
-	}
-	return int64(binary.LittleEndian.Uint64(buf))
+	var buf [8]byte
+	cryptorand.Read(buf[:])
+	return int64(binary.LittleEndian.Uint64(buf[:]))
 }

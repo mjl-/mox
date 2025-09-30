@@ -79,10 +79,7 @@ func (e Error) Error() string {
 // nonce.
 func MakeRandom() []byte {
 	buf := make([]byte, 12)
-	_, err := cryptorand.Read(buf)
-	if err != nil {
-		panic("generate random")
-	}
+	cryptorand.Read(buf)
 	return buf
 }
 

@@ -139,10 +139,7 @@ during those commands instead of during "data".
 	if err != nil {
 		log.Errorx("reading receivedid.key", err)
 		recvidbuf = make([]byte, 16+8)
-		_, err := cryptorand.Read(recvidbuf)
-		if err != nil {
-			log.Fatalx("read random recvid key", err)
-		}
+		cryptorand.Read(recvidbuf)
 	}
 	if err := mox.ReceivedIDInit(recvidbuf[:16], recvidbuf[16:]); err != nil {
 		log.Fatalx("init receivedid", err)
@@ -469,8 +466,7 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 
 	// Write receivedid.key.
 	recvidbuf := make([]byte, 16+8)
-	_, err = cryptorand.Read(recvidbuf)
-	xcheck(err, "reading random recvid data")
+	cryptorand.Read(recvidbuf)
 	err = os.WriteFile(filepath.Join(dir, "receivedid.key"), recvidbuf, 0660)
 	xcheck(err, "writing receivedid.key")
 

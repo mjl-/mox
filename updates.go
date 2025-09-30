@@ -109,10 +109,9 @@ func cmdUpdatesGenkey(c *cmd) {
 	}
 
 	buf := make([]byte, ed25519.SeedSize)
-	_, err := cryptorand.Read(buf)
-	xcheckf(err, "generating key")
+	cryptorand.Read(buf)
 	enc := base64.NewEncoder(base64.StdEncoding, os.Stdout)
-	_, err = enc.Write(buf)
+	_, err := enc.Write(buf)
 	xcheckf(err, "writing private key")
 	err = enc.Close()
 	xcheckf(err, "writing private key")
