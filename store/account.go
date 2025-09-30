@@ -2576,11 +2576,17 @@ func (a *Account) SetPassword(log mlog.Log, password string) error {
 
 		pw.SCRAMSHA1.Salt = scram.MakeRandom()
 		pw.SCRAMSHA1.Iterations = 2 * 4096
-		pw.SCRAMSHA1.SaltedPassword = scram.SaltPassword(sha1.New, password, pw.SCRAMSHA1.Salt, pw.SCRAMSHA1.Iterations)
+		pw.SCRAMSHA1.SaltedPassword, err = scram.SaltPassword(sha1.New, password, pw.SCRAMSHA1.Salt, pw.SCRAMSHA1.Iterations)
+		if err != nil {
+			return fmt.Errorf("scram sha1 salt password: %w", err)
+		}
 
 		pw.SCRAMSHA256.Salt = scram.MakeRandom()
 		pw.SCRAMSHA256.Iterations = 4096
-		pw.SCRAMSHA256.SaltedPassword = scram.SaltPassword(sha256.New, password, pw.SCRAMSHA256.Salt, pw.SCRAMSHA256.Iterations)
+		pw.SCRAMSHA256.SaltedPassword, err = scram.SaltPassword(sha256.New, password, pw.SCRAMSHA256.Salt, pw.SCRAMSHA256.Iterations)
+		if err != nil {
+			return fmt.Errorf("scram sha256 salt password: %w", err)
+		}
 
 		if err := tx.Insert(&pw); err != nil {
 			return fmt.Errorf("inserting new password: %v", err)

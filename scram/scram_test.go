@@ -34,7 +34,8 @@ func tcheck(t *testing.T, err error, msg string) {
 func TestSCRAMSHA1Server(t *testing.T) {
 	// Test vector from ../rfc/5802:496
 	salt := base64Decode("QSXCR+Q6sek8bf92")
-	saltedPassword := SaltPassword(sha1.New, "pencil", salt, 4096)
+	saltedPassword, err := SaltPassword(sha1.New, "pencil", salt, 4096)
+	tcheck(t, err, "saltpassword")
 
 	server, err := NewServer(sha1.New, []byte("n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL"), nil, false)
 	server.serverNonceOverride = "3rfcNHYJY1ZVvWVs7j"
@@ -54,7 +55,8 @@ func TestSCRAMSHA1Server(t *testing.T) {
 func TestSCRAMSHA256Server(t *testing.T) {
 	// Test vector from ../rfc/7677:122
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword(sha256.New, "pencil", salt, 4096)
+	saltedPassword, err := SaltPassword(sha256.New, "pencil", salt, 4096)
+	tcheck(t, err, "saltpassword")
 
 	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"), nil, false)
 	server.serverNonceOverride = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
@@ -74,7 +76,8 @@ func TestSCRAMSHA256Server(t *testing.T) {
 // Bad attempt with wrong password.
 func TestScramServerBadPassword(t *testing.T) {
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword(sha256.New, "marker", salt, 4096)
+	saltedPassword, err := SaltPassword(sha256.New, "marker", salt, 4096)
+	tcheck(t, err, "saltpassword")
 
 	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"), nil, false)
 	server.serverNonceOverride = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
@@ -90,7 +93,8 @@ func TestScramServerBadPassword(t *testing.T) {
 // Bad attempt with different number of rounds.
 func TestScramServerBadIterations(t *testing.T) {
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword(sha256.New, "pencil", salt, 2048)
+	saltedPassword, err := SaltPassword(sha256.New, "pencil", salt, 2048)
+	tcheck(t, err, "saltpassword")
 
 	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"), nil, false)
 	server.serverNonceOverride = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
@@ -106,7 +110,8 @@ func TestScramServerBadIterations(t *testing.T) {
 // Another attempt but with a randomly different nonce.
 func TestScramServerBad(t *testing.T) {
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword(sha256.New, "pencil", salt, 4096)
+	saltedPassword, err := SaltPassword(sha256.New, "pencil", salt, 4096)
+	tcheck(t, err, "saltpassword")
 
 	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"), nil, false)
 	tcheck(t, err, "newserver")
@@ -159,7 +164,8 @@ func TestScram(t *testing.T) {
 		}
 
 		salt := MakeRandom()
-		saltedPassword := SaltPassword(h, password, salt, iterations)
+		saltedPassword, err := SaltPassword(h, password, salt, iterations)
+		tcheck(t, err, "saltpassword")
 
 		client := NewClient(h, username, "", noServerPlus, clientcs)
 		client.clientNonce = clientNonce

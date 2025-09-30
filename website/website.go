@@ -339,7 +339,7 @@ func (r *renderer) RenderNode(w io.Writer, node *blackfriday.Node, entering bool
 
 func (r *renderer) writeConfig(w io.Writer, data []byte) {
 	var fields []string
-	for _, line := range bytes.Split(data, []byte("\n")) {
+	for line := range bytes.SplitSeq(data, []byte("\n")) {
 		var attrs, link string
 
 		s := string(line)

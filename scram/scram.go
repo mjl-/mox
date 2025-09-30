@@ -14,6 +14,7 @@ package scram
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/pbkdf2"
 	cryptorand "crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
@@ -22,7 +23,6 @@ import (
 	"hash"
 	"strings"
 
-	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/text/secure/precis"
 	"golang.org/x/text/unicode/norm"
 )
@@ -98,9 +98,9 @@ func precisPassword(password string) string {
 }
 
 // SaltPassword returns a salted password.
-func SaltPassword(h func() hash.Hash, password string, salt []byte, iterations int) []byte {
+func SaltPassword(h func() hash.Hash, password string, salt []byte, iterations int) ([]byte, error) {
 	password = precisPassword(password)
-	return pbkdf2.Key([]byte(password), salt, iterations, h().Size(), h)
+	return pbkdf2.Key(h, password, salt, iterations, h().Size())
 }
 
 // hmac0 returns the hmac with key over msg.
@@ -458,7 +458,10 @@ func (c *Client) ServerFirst(serverFirst []byte, password string) (clientFinal s
 
 	c.authMessage = c.clientFirstBare + "," + c.serverFirst + "," + c.clientFinalWithoutProof
 
-	c.saltedPassword = SaltPassword(c.h, password, salt, iterations)
+	c.saltedPassword, rerr = SaltPassword(c.h, password, salt, iterations)
+	if rerr != nil {
+		return "", fmt.Errorf("%w: salt password: %v", ErrUnsafe, rerr)
+	}
 	clientKey := hmac0(c.h, c.saltedPassword, "Client Key")
 	h := c.h()
 	h.Write(clientKey)

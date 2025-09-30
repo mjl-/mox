@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -550,6 +551,9 @@ test
 		}
 	})
 	// We refuse rsa keys smaller than 1024 bits.
+	// Go1.24 and onwards won't use 512 bits keys without explicitly enabling through GODEBUG.
+	godebug := os.Getenv("GODEBUG")
+	t.Setenv("GODEBUG", "rsa1024min=0")
 	test(nil, StatusPermerror, ErrWeakKey, func() {
 		key := getWeakRSAKey(t)
 		record.Key = "rsa"
@@ -564,6 +568,7 @@ test
 		sel.PrivateKey = key
 		selectors = []Selector{sel}
 	})
+	t.Setenv("GODEBUG", godebug)
 	// Key not allowed for email by DNS record. ../rfc/6376:1541
 	test(nil, StatusPermerror, ErrKeyNotForEmail, func() {
 		recordTxt += ";s=other"

@@ -233,7 +233,10 @@ func TestClient(t *testing.T) {
 						xcs := serverConn.(*tls.Conn).ConnectionState()
 						cs = &xcs
 					}
-					saltedPassword := scram.SaltPassword(h, "test", salt, iterations)
+					saltedPassword, err := scram.SaltPassword(h, "test", salt, iterations)
+					if err != nil {
+						fail("scram salt password: %w", err)
+					}
 
 					clientFirst, err := base64.StdEncoding.DecodeString(t[1])
 					if err != nil {

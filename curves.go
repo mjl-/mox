@@ -1,4 +1,4 @@
-//go:build !go1.24
+//go:build go1.24
 
 package main
 
@@ -11,4 +11,5 @@ var curvesList = []tls.CurveID{
 	tls.CurveP384,
 	tls.CurveP521,
 	tls.X25519,
+	tls.X25519MLKEM768,
 }

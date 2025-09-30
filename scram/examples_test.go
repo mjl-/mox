@@ -9,6 +9,12 @@ import (
 )
 
 func Example() {
+	check := func(err error, msg string) {
+		if err != nil {
+			log.Fatalf("%s: %s", msg, err)
+		}
+	}
+
 	// Prepare credentials.
 	//
 	// The client normally remembers the password and uses it during authentication.
@@ -19,13 +25,8 @@ func Example() {
 	iterations := 4096
 	salt := scram.MakeRandom()
 	password := "test1234"
-	saltedPassword := scram.SaltPassword(sha256.New, password, salt, iterations)
-
-	check := func(err error, msg string) {
-		if err != nil {
-			log.Fatalf("%s: %s", msg, err)
-		}
-	}
+	saltedPassword, err := scram.SaltPassword(sha256.New, password, salt, iterations)
+	check(err, "salt password")
 
 	// Make a new client for authenticating user mjl with SCRAM-SHA-256.
 	username := "mjl"
