@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -509,9 +510,7 @@ func (Account) DestinationSave(ctx context.Context, destName string, oldDest, ne
 
 		// Make copy of reference values.
 		nd := map[string]config.Destination{}
-		for dn, d := range conf.Destinations {
-			nd[dn] = d
-		}
+		maps.Copy(nd, conf.Destinations)
 		nd[destName] = newDest
 		conf.Destinations = nd
 	})

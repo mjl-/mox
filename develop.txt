@@ -316,6 +316,7 @@ done
 
 - Gather feedback on recent changes.
 - Check if dependencies need updates.
+- Run "make modernize".
 - Update to latest publicsuffix/ list.
 - Check code if there are deprecated features that can be removed.
 - Generate apidiff and check if breaking changes can be prevented. Update moxtools.

@@ -475,7 +475,7 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	upgrade := r.Header.Get("Upgrade")
 	if upgrade != "" && !(r.ProtoMajor == 1 && r.ProtoMinor == 0) {
 		// Websockets have case-insensitive string "websocket".
-		for _, s := range strings.Split(upgrade, ",") {
+		for s := range strings.SplitSeq(upgrade, ",") {
 			if strings.EqualFold(textproto.TrimString(s), "websocket") {
 				forwardWebsocket(h, w, r, path)
 				return true
@@ -549,7 +549,7 @@ func forwardWebsocket(h *config.WebForward, w http.ResponseWriter, r *http.Reque
 
 	// ../rfc/6455:1153
 	var connectionUpgrade bool
-	for _, s := range strings.Split(r.Header.Get("Connection"), ",") {
+	for s := range strings.SplitSeq(r.Header.Get("Connection"), ",") {
 		if strings.EqualFold(textproto.TrimString(s), "upgrade") {
 			connectionUpgrade = true
 			break
@@ -854,7 +854,7 @@ func removeHopByHopHeaders(h http.Header) {
 	// RFC 7230, section 6.1: Remove headers listed in the "Connection" header.
 	// ../rfc/7230:2817
 	for _, f := range h["Connection"] {
-		for _, sf := range strings.Split(f, ",") {
+		for sf := range strings.SplitSeq(f, ",") {
 			if sf = textproto.TrimString(sf); sf != "" {
 				h.Del(sf)
 			}

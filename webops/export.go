@@ -29,7 +29,7 @@ func Export(log mlog.Log, accName string, w http.ResponseWriter, r *http.Request
 	messageIDstr := r.FormValue("messageids")
 	var messageIDs []int64
 	if messageIDstr != "" {
-		for _, s := range strings.Split(messageIDstr, ",") {
+		for s := range strings.SplitSeq(messageIDstr, ",") {
 			id, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("400 - bad request - bad message id %q: %v", s, err), http.StatusBadRequest)

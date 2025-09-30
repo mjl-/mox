@@ -94,6 +94,10 @@ govendor:
 	go mod vendor
 	./genlicenses.sh
 
+modernize:
+	# skip slicescontains because it rewrites to unintuitive slices.ContainsFunc
+	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -category=-slicescontains -fix -test ./...
+
 test-integration:
 	-docker compose -f docker-compose-integration.yml kill
 	-docker compose -f docker-compose-integration.yml down

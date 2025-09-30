@@ -1892,7 +1892,7 @@ func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) (res
 func (Admin) MonitorDNSBLsSave(ctx context.Context, text string) {
 	var zones []dns.Domain
 	publicZones := mox.Conf.Static.Listeners["public"].SMTP.DNSBLZones
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

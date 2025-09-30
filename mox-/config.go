@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -130,9 +131,7 @@ func (c *Config) LogLevelRemove(log mlog.Log, pkg string) {
 // must be called with log lock held.
 func (c *Config) copyLogLevels() map[string]slog.Level {
 	m := map[string]slog.Level{}
-	for pkg, level := range c.Log {
-		m[pkg] = level
-	}
+	maps.Copy(m, c.Log)
 	return m
 }
 

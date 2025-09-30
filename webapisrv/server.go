@@ -1241,7 +1241,7 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 	var refs []string
 	for _, s := range h.Values("References") {
 		s = strings.ReplaceAll(s, "\t", " ")
-		for _, w := range strings.Split(s, " ") {
+		for w := range strings.SplitSeq(s, " ") {
 			if w != "" {
 				refs = append(refs, w)
 			}

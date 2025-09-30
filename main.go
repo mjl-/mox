@@ -417,7 +417,7 @@ func usage(l []cmd, unlisted bool) {
 		if c.unlisted && !unlisted {
 			continue
 		}
-		for _, line := range strings.Split(c.params, "\n") {
+		for line := range strings.SplitSeq(c.params, "\n") {
 			x := append([]string{"mox"}, c.words...)
 			if line != "" {
 				x = append(x, line)
@@ -2008,7 +2008,7 @@ exchanged during connection set up.
 		tlsConfig.RootCAs = pool
 	}
 	if tlsCiphersuites != "" {
-		for _, s := range strings.Split(tlsCiphersuites, ",") {
+		for s := range strings.SplitSeq(tlsCiphersuites, ",") {
 			s = strings.TrimSpace(s)
 			c, ok := ciphersuites[s]
 			if !ok {
@@ -2021,7 +2021,7 @@ exchanged during connection set up.
 		}
 	}
 	if tlsCurves != "" {
-		for _, s := range strings.Split(tlsCurves, ",") {
+		for s := range strings.SplitSeq(tlsCurves, ",") {
 			s = strings.TrimSpace(s)
 			if c, ok := curves[s]; !ok {
 				log.Fatalf("unknown ecc key exchange algorithm %q", s)
@@ -2128,7 +2128,7 @@ connection.
 
 	allowedUsages := []adns.TLSAUsage{}
 	if usages != "" {
-		for _, s := range strings.Split(usages, ",") {
+		for s := range strings.SplitSeq(usages, ",") {
 			var usage adns.TLSAUsage
 			switch strings.ToLower(s) {
 			case "pkix-ta", strconv.Itoa(int(adns.TLSAUsagePKIXTA)):

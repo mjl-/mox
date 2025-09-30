@@ -1048,7 +1048,7 @@ func bodyFldLang(p *message.Part) token {
 		return nilt
 	}
 	var l listspace
-	for _, s := range strings.Split(*p.ContentLanguage, ",") {
+	for s := range strings.SplitSeq(*p.ContentLanguage, ",") {
 		s = strings.TrimSpace(s)
 		if s == "" {
 			return string0(*p.ContentLanguage)

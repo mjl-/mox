@@ -816,8 +816,8 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			}
 			// Thunderbird requests an autodiscovery URL at the email address domain name, so
 			// autoconfig prefix is optional.
-			if strings.HasPrefix(dom.ASCII, "autoconfig.") {
-				dom.ASCII = strings.TrimPrefix(dom.ASCII, "autoconfig.")
+			if after, ok := strings.CutPrefix(dom.ASCII, "autoconfig."); ok {
+				dom.ASCII = after
 				dom.Unicode = strings.TrimPrefix(dom.Unicode, "autoconfig.")
 			}
 			// Autodiscovery uses a SRV record. It shouldn't point to a CNAME. So we directly

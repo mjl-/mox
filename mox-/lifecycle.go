@@ -37,7 +37,7 @@ func RestorePassedFiles() {
 
 	// 0,1,2 are stdin,stdout,stderr, 3 is the first passed fd (first listeners, then files).
 	var o uintptr = 3
-	for _, addr := range strings.Split(s, ",") {
+	for addr := range strings.SplitSeq(s, ",") {
 		passedListeners[addr] = os.NewFile(o, addr)
 		o++
 	}
@@ -46,7 +46,7 @@ func RestorePassedFiles() {
 	if files == "" {
 		return
 	}
-	for _, path := range strings.Split(files, ",") {
+	for path := range strings.SplitSeq(files, ",") {
 		passedFiles[path] = append(passedFiles[path], os.NewFile(o, path))
 		o++
 	}

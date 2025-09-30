@@ -1998,9 +1998,7 @@ func (Webmail) RulesetAdd(ctx context.Context, rcptTo string, ruleset config.Rul
 		}
 
 		nd := map[string]config.Destination{}
-		for addr, d := range acc.Destinations {
-			nd[addr] = d
-		}
+		maps.Copy(nd, acc.Destinations)
 		dest.Rulesets = append(slices.Clone(dest.Rulesets), ruleset)
 		nd[rcptTo] = dest
 		acc.Destinations = nd
@@ -2018,9 +2016,7 @@ func (Webmail) RulesetRemove(ctx context.Context, rcptTo string, ruleset config.
 		}
 
 		nd := map[string]config.Destination{}
-		for addr, d := range acc.Destinations {
-			nd[addr] = d
-		}
+		maps.Copy(nd, acc.Destinations)
 		var l []config.Ruleset
 		skipped := 0
 		for _, rs := range dest.Rulesets {

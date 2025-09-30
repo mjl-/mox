@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -243,9 +244,7 @@ func TestWebsocket(t *testing.T) {
 
 	clone := func(m map[string]string) map[string]string {
 		r := map[string]string{}
-		for k, v := range m {
-			r[k] = v
-		}
+		maps.Copy(r, m)
 		return r
 	}
 

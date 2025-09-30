@@ -462,7 +462,7 @@ func testSearch(t *testing.T, uidonly bool) {
 // esearchall makes an UntaggedEsearch response with All set, for comparisons.
 func esearchall0(ss string) imapclient.NumSet {
 	seqset := imapclient.NumSet{}
-	for _, rs := range strings.Split(ss, ",") {
+	for rs := range strings.SplitSeq(ss, ",") {
 		t := strings.Split(rs, ":")
 		if len(t) > 2 {
 			panic("bad seqset")

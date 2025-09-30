@@ -94,7 +94,7 @@ func ctlcmdQueueHoldrulesRemove(ctl *ctl, id int64) {
 // filtering the messages the operation applies to.
 func flagFilterSort(fs *flag.FlagSet, f *queue.Filter, s *queue.Sort) {
 	fs.Func("ids", "comma-separated list of message IDs", func(v string) error {
-		for _, s := range strings.Split(v, ",") {
+		for s := range strings.SplitSeq(v, ",") {
 			id, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				return err
@@ -144,7 +144,7 @@ func flagFilterSort(fs *flag.FlagSet, f *queue.Filter, s *queue.Sort) {
 // flagRetiredFilterSort has filters for retired messages.
 func flagRetiredFilterSort(fs *flag.FlagSet, f *queue.RetiredFilter, s *queue.RetiredSort) {
 	fs.Func("ids", "comma-separated list of retired message IDs", func(v string) error {
-		for _, s := range strings.Split(v, ",") {
+		for s := range strings.SplitSeq(v, ",") {
 			id, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				return err
@@ -608,7 +608,7 @@ func ctlcmdQueueRetiredPrint(ctl *ctl, id string) {
 // filtering the webhooks the operation applies to.
 func flagHookFilterSort(fs *flag.FlagSet, f *queue.HookFilter, s *queue.HookSort) {
 	fs.Func("ids", "comma-separated list of webhook IDs", func(v string) error {
-		for _, s := range strings.Split(v, ",") {
+		for s := range strings.SplitSeq(v, ",") {
 			id, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				return err
@@ -650,7 +650,7 @@ func flagHookFilterSort(fs *flag.FlagSet, f *queue.HookFilter, s *queue.HookSort
 // for filtering the webhooks the operation applies to.
 func flagHookRetiredFilterSort(fs *flag.FlagSet, f *queue.HookRetiredFilter, s *queue.HookRetiredSort) {
 	fs.Func("ids", "comma-separated list of retired webhook IDs", func(v string) error {
-		for _, s := range strings.Split(v, ",") {
+		for s := range strings.SplitSeq(v, ",") {
 			id, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				return err

@@ -20,7 +20,7 @@ func FuzzParser(f *testing.F) {
 	if err != nil {
 		f.Fatalf("reading seed: %v", err)
 	}
-	for _, s := range strings.Split(string(buf), "\n") {
+	for s := range strings.SplitSeq(string(buf), "\n") {
 		f.Add(s + "\r\n")
 	}
 	f.Add("1:3")
