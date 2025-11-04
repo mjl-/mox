@@ -234,6 +234,13 @@ func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHost
 		return nil, nil
 	}
 
+	// Names without dot (e.g. "443" in practice) are rejected with an error by
+	// autocert, so handle it early instead of causing error logging/alerting.
+	if !strings.Contains(strings.Trim(hello.ServerName, "."), ".") {
+		log.Debug("tls request for server name without dot, rejecting")
+		return nil, fmt.Errorf("invalid sni server name without dot")
+	}
+
 	cert, err := m.Manager.GetCertificate(hello)
 	if err != nil && errors.Is(err, errHostNotAllowed) {
 		if !fallbackUnknownSNI {
