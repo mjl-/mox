@@ -2,6 +2,7 @@ package message
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -36,9 +37,13 @@ func (p Part) Preview(log mlog.Log) (string, error) {
 	mt := p.MediaType + "/" + p.MediaSubType
 	switch mt {
 	case "TEXT/PLAIN", "/":
-		r := &moxio.LimitReader{R: p.ReaderUTF8OrBinary(), Limit: 100 * 1024}
+		r := &moxio.LimitReader{R: p.ReaderUTF8OrBinary(), Limit: 1024 * 1024}
 		s, err := previewText(r)
 		if err != nil {
+			if errors.Is(err, moxio.ErrLimit) {
+				log.Debug("no preview in first mb of text message")
+				return "", nil
+			}
 			return "", fmt.Errorf("making preview from text part: %v", err)
 		}
 		return s, nil
@@ -56,6 +61,10 @@ func (p Part) Preview(log mlog.Log) (string, error) {
 		// Turn text body into a preview text.
 		s, err = previewText(strings.NewReader(s))
 		if err != nil {
+			if errors.Is(err, moxio.ErrLimit) {
+				log.Debug("no preview in first mb of html message")
+				return "", nil
+			}
 			return "", fmt.Errorf("making preview from text from html: %v", err)
 		}
 		return s, nil
