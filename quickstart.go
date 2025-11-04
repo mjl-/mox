@@ -869,9 +869,11 @@ and check the admin page for the needed DNS records.`)
 		internal.AutoconfigHTTPS.Enabled = true
 		internal.AutoconfigHTTPS.Port = 81
 		internal.AutoconfigHTTPS.NonTLS = true
+		internal.AutoconfigHTTPS.Forwarded = true
 		internal.MTASTSHTTPS.Enabled = true
 		internal.MTASTSHTTPS.Port = 81
 		internal.MTASTSHTTPS.NonTLS = true
+		internal.MTASTSHTTPS.Forwarded = true
 		internal.WebserverHTTP.Enabled = true
 		internal.WebserverHTTP.Port = 81
 	}
