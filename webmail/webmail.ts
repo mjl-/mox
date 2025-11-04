@@ -313,7 +313,7 @@ const login = async (reason: string) => {
 								autosize=dom.span(dom._class('autosize'),
 									username=dom.input(
 										attr.required(''),
-										attr.autocomplete('username'),
+										attr.autocomplete('email'),
 										attr.placeholder('jane@example.org'),
 										function change() { autosize.dataset.value = username.value },
 										function input() { autosize.dataset.value = username.value },

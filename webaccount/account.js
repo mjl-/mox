@@ -1001,7 +1001,7 @@ const login = async (reason) => {
 			finally {
 				fieldset.disabled = false;
 			}
-		}, fieldset = dom.fieldset(dom.h1('Account'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Email address', style({ marginBottom: '.5ex' })), autosize = dom.span(dom._class('autosize'), username = dom.input(attr.required(''), attr.autocomplete('username'), attr.placeholder('jane@example.org'), function change() { autosize.dataset.value = username.value; }, function input() { autosize.dataset.value = username.value; }))), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
+		}, fieldset = dom.fieldset(dom.h1('Account'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Email address', style({ marginBottom: '.5ex' })), autosize = dom.span(dom._class('autosize'), username = dom.input(attr.required(''), attr.autocomplete('email'), attr.placeholder('jane@example.org'), function change() { autosize.dataset.value = username.value; }, function input() { autosize.dataset.value = username.value; }))), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
 		document.body.appendChild(root);
 		username.focus();
 	});
@@ -1554,7 +1554,7 @@ const index = async () => {
 					tpk.LoginAddress = ntpk.LoginAddress;
 					tpk.Name = ntpk.Name;
 					tpk.NoIMAPPreauth = ntpk.NoIMAPPreauth;
-				}, loginAddress = dom.input(attr.type('email'), attr.value(tpk.LoginAddress), attr.required('')))), dom.td(name = dom.input(attr.form(formID), attr.value(tpk.Name), attr.required(''))), dom.td(tpk.Type), dom.td(dom.label(noIMAPPreauth = dom.input(attr.form(formID), attr.type('checkbox'), tpk.NoIMAPPreauth ? attr.checked('') : []), ' No IMAP "preauth"', attr.title(preauthHelp))), dom.td(tpk.Fingerprint), dom.td(update = dom.submitbutton(attr.form(formID), 'Update')), dom.td(dom.form(async function submit(e) {
+				}, loginAddress = dom.input(attr.autocomplete('email'), attr.value(tpk.LoginAddress), attr.required('')))), dom.td(name = dom.input(attr.form(formID), attr.value(tpk.Name), attr.required(''))), dom.td(tpk.Type), dom.td(dom.label(noIMAPPreauth = dom.input(attr.form(formID), attr.type('checkbox'), tpk.NoIMAPPreauth ? attr.checked('') : []), ' No IMAP "preauth"', attr.title(preauthHelp))), dom.td(tpk.Fingerprint), dom.td(update = dom.submitbutton(attr.form(formID), 'Update')), dom.td(dom.form(async function submit(e) {
 					e.stopPropagation();
 					e.preventDefault();
 					await check(e.target, client.TLSPublicKeyRemove(tpk.Fingerprint));
@@ -1587,7 +1587,7 @@ const index = async () => {
 					tlspubkeys.push(ntpk);
 					render();
 					close();
-				}, dom.label(style({ display: 'block', marginBottom: '1ex' }), dom.div(dom.b('Login address')), address = dom.input(attr.type('email'), attr.value(localStorageGet('webaccountaddress') || ''), attr.required('')), dom.div(style({ fontStyle: 'italic', marginTop: '.5ex' }), 'Login address used for sessions using this key.')), dom.label(style({ display: 'block', marginBottom: '1ex' }), noIMAPPreauth = dom.input(attr.type('checkbox')), ' No IMAP "preauth"', attr.title(preauthHelp)), dom.div(style({ display: 'block', marginBottom: '1ex' }), dom.label(dom.div(dom.b('Certificate')), file = dom.input(attr.type('file'), attr.required(''))), dom.p(style({ fontStyle: 'italic', margin: '1ex 0' }), 'Upload a PEM file containing a certificate, not a private key. Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration, and constraints are not verified. ', dom.a('Show suggested commands', attr.href(''), function click(e) {
+				}, dom.label(style({ display: 'block', marginBottom: '1ex' }), dom.div(dom.b('Login address')), address = dom.input(attr.autocomplete('email'), attr.value(localStorageGet('webaccountaddress') || ''), attr.required('')), dom.div(style({ fontStyle: 'italic', marginTop: '.5ex' }), 'Login address used for sessions using this key.')), dom.label(style({ display: 'block', marginBottom: '1ex' }), noIMAPPreauth = dom.input(attr.type('checkbox')), ' No IMAP "preauth"', attr.title(preauthHelp)), dom.div(style({ display: 'block', marginBottom: '1ex' }), dom.label(dom.div(dom.b('Certificate')), file = dom.input(attr.type('file'), attr.required(''))), dom.p(style({ fontStyle: 'italic', margin: '1ex 0' }), 'Upload a PEM file containing a certificate, not a private key. Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration, and constraints are not verified. ', dom.a('Show suggested commands', attr.href(''), function click(e) {
 					e.preventDefault();
 					popup(dom.h1('Generate a private key and certificate'), dom.pre(dom._class('literal'), `export keyname=...    # Used for file names, certificate "common name" and as name of tls public key.
 					  # Suggestion: Use an application name and/or email address.

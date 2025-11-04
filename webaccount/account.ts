@@ -62,7 +62,7 @@ const login = async (reason: string) => {
 								autosize=dom.span(dom._class('autosize'),
 									username=dom.input(
 										attr.required(''),
-										attr.autocomplete('username'),
+										attr.autocomplete('email'),
 										attr.placeholder('jane@example.org'),
 										function change() { autosize.dataset.value = username.value },
 										function input() { autosize.dataset.value = username.value },
@@ -943,7 +943,7 @@ const index = async () => {
 												tpk.Name = ntpk.Name
 												tpk.NoIMAPPreauth = ntpk.NoIMAPPreauth
 											},
-											loginAddress=dom.input(attr.type('email'), attr.value(tpk.LoginAddress), attr.required('')),
+											loginAddress=dom.input(attr.autocomplete('email'), attr.value(tpk.LoginAddress), attr.required('')),
 										),
 									),
 									dom.td(name=dom.input(attr.form(formID), attr.value(tpk.Name), attr.required(''))),
@@ -1003,7 +1003,7 @@ const index = async () => {
 									dom.label(
 										style({display: 'block', marginBottom: '1ex'}),
 										dom.div(dom.b('Login address')),
-										address=dom.input(attr.type('email'), attr.value(localStorageGet('webaccountaddress') || ''), attr.required('')),
+										address=dom.input(attr.autocomplete('email'), attr.value(localStorageGet('webaccountaddress') || ''), attr.required('')),
 										dom.div(style({fontStyle: 'italic', marginTop: '.5ex'}), 'Login address used for sessions using this key.'),
 									),
 									dom.label(
