@@ -183,7 +183,7 @@ func loginAttemptWrite(l ...LoginAttempt) {
 				slog.String("protocol", a.Protocol),
 				slog.String("authmech", a.AuthMech),
 				slog.String("result", string(a.Result)),
-				slog.String("remoteip", a.RemoteIP),
+				slog.String("clientip", a.RemoteIP),
 				slog.String("localip", a.LocalIP),
 				slog.String("tls", a.TLS),
 				slog.String("useragent", a.UserAgent),

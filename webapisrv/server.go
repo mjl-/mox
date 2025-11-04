@@ -376,17 +376,17 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	t0 := time.Now()
 
-	// If remote IP/network resulted in too many authentication failures, refuse to serve.
-	remoteIP := webauth.RemoteIP(log, s.isForwarded, r)
-	if remoteIP == nil {
+	// If client IP/network resulted in too many authentication failures, refuse to serve.
+	clientIP := webauth.ClientIP(log, s.isForwarded, r)
+	if clientIP == nil {
 		metricResults.WithLabelValues(fn, "internal").Inc()
 		log.Debug("cannot find remote ip for rate limiter")
 		http.Error(w, "500 - internal server error - cannot find remote ip", http.StatusInternalServerError)
 		return
 	}
-	if !mox.LimiterFailedAuth.CanAdd(remoteIP, t0, 1) {
+	if !mox.LimiterFailedAuth.CanAdd(clientIP, t0, 1) {
 		metrics.AuthenticationRatelimitedInc("webapi")
-		log.Debug("refusing connection due to many auth failures", slog.Any("remoteip", remoteIP))
+		log.Debug("refusing connection due to many auth failures", slog.Any("clientip", clientIP))
 		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
 		return
 	}
@@ -421,7 +421,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Check(werr, "writing error response")
 	}
 
-	la := loginAttempt(remoteIP.String(), r, "webapi", "httpbasic")
+	la := loginAttempt(clientIP.String(), r, "webapi", "httpbasic")
 	la.LoginAddress = email
 	defer func() {
 		store.LoginAttemptAdd(context.Background(), log, la)
@@ -431,7 +431,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	acc, la.AccountName, err = store.OpenEmailAuth(log, email, password, true)
 	if err != nil {
-		mox.LimiterFailedAuth.Add(remoteIP, t0, 1)
+		mox.LimiterFailedAuth.Add(clientIP, t0, 1)
 		if errors.Is(err, mox.ErrDomainNotFound) || errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, store.ErrUnknownCredentials) || errors.Is(err, store.ErrLoginDisabled) {
 			log.Debug("bad http basic authentication credentials")
 			metricResults.WithLabelValues(fn, "badauth").Inc()
@@ -450,7 +450,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	la.AccountName = acc.Name
 	la.Result = store.AuthSuccess
-	mox.LimiterFailedAuth.Reset(remoteIP, t0)
+	mox.LimiterFailedAuth.Reset(clientIP, t0)
 
 	ct := r.Header.Get("Content-Type")
 	ct, _, err = mime.ParseMediaType(ct)
@@ -529,9 +529,9 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // loginAttempt initializes a store.LoginAttempt, for adding to the store after
 // filling in the results and other details.
-func loginAttempt(remoteIP string, r *http.Request, protocol, authMech string) store.LoginAttempt {
+func loginAttempt(clientIP string, r *http.Request, protocol, authMech string) store.LoginAttempt {
 	return store.LoginAttempt{
-		RemoteIP:  remoteIP,
+		RemoteIP:  clientIP,
 		TLS:       store.LoginAttemptTLS(r.TLS),
 		Protocol:  protocol,
 		AuthMech:  authMech,

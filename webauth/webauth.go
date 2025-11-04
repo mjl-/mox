@@ -80,9 +80,9 @@ type SessionAuth interface {
 }
 
 // loginAttempt initializes a loginAttempt, for adding to the store after filling in the results and other details.
-func loginAttempt(remoteIP string, r *http.Request, protocol, authMech string) store.LoginAttempt {
+func loginAttempt(clientIP string, r *http.Request, protocol, authMech string) store.LoginAttempt {
 	return store.LoginAttempt{
-		RemoteIP:  remoteIP,
+		RemoteIP:  clientIP,
 		TLS:       store.LoginAttemptTLS(r.TLS),
 		Protocol:  protocol,
 		AuthMech:  authMech,
@@ -146,7 +146,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 		return "", "", "", false
 	}
 
-	ip := RemoteIP(log, isForwarded, r)
+	ip := ClientIP(log, isForwarded, r)
 	if ip == nil {
 		respondAuthError("user:noAuth", "cannot find ip for rate limit check (missing x-forwarded-for header?)")
 		return "", "", "", false
@@ -201,7 +201,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	return accountName, sessionToken, loginAddress, true
 }
 
-func RemoteIP(log mlog.Log, isForwarded bool, r *http.Request) net.IP {
+func ClientIP(log mlog.Log, isForwarded bool, r *http.Request) net.IP {
 	if isForwarded {
 		s := r.Header.Get("X-Forwarded-For")
 		ipstr := strings.TrimSpace(strings.Split(s, ",")[0])
@@ -254,7 +254,7 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 		return "", &sherpa.Error{Code: "user:error", Message: msg}
 	}
 
-	ip := RemoteIP(log, isForwarded, r)
+	ip := ClientIP(log, isForwarded, r)
 	if ip == nil {
 		return "", fmt.Errorf("cannot find ip for rate limit check (missing x-forwarded-for header?)")
 	}

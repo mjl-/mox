@@ -497,6 +497,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# useful when the autoconfig domain is reverse proxied. (optional)
 				NonTLS: false
 
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and logging. (optional)
+				Forwarded: false
+
 			# Serve MTA-STS policies describing SMTP TLS requirements. Requires a TLS config.
 			# (optional)
 			MTASTSHTTPS:
@@ -511,6 +515,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# If set, plain HTTP instead of HTTPS is spoken on the configured port. Can be
 				# useful when the mta-sts domain is reverse proxied. (optional)
 				NonTLS: false
+
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and logging. (optional)
+				Forwarded: false
 
 			# All configured WebHandlers will serve on an enabled listener. (optional)
 			WebserverHTTP:

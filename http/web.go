@@ -112,6 +112,7 @@ type loggingWriter struct {
 	W                responseWriterFlusher // Calls are forwarded.
 	Start            time.Time
 	R                *http.Request
+	Forwarded        bool
 	WebsocketRequest bool // Whether request from was websocket.
 
 	// Set by router.
@@ -349,11 +350,19 @@ func (w *loggingWriter) Done() {
 		slog.Duration("duration", time.Since(w.Start)),
 		slog.Int("statuscode", w.StatusCode),
 		slog.String("proto", strings.ToLower(w.R.Proto)),
-		slog.Any("remoteaddr", w.R.RemoteAddr),
+		slog.String("remoteaddr", w.R.RemoteAddr),
 		slog.String("tlsinfo", tlsinfo),
 		slog.String("useragent", w.R.Header.Get("User-Agent")),
 		slog.String("referer", w.R.Header.Get("Referer")),
 	}
+	if w.Forwarded {
+		s := w.R.Header.Get("X-Forwarded-For")
+		ipstr := strings.TrimSpace(strings.Split(s, ",")[0])
+		attrs = append(attrs,
+			slog.String("clientip", ipstr),
+		)
+	}
+
 	if w.WebsocketRequest {
 		attrs = append(attrs,
 			slog.Bool("websocketrequest", true),
@@ -487,9 +496,10 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 	}
 
 	nw := &loggingWriter{
-		W:     wf,
-		Start: now,
-		R:     r,
+		W:         wf,
+		Start:     now,
+		R:         r,
+		Forwarded: s.Forwarded,
 	}
 	defer nw.Done()
 
@@ -805,7 +815,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 	if l.AutoconfigHTTPS.Enabled {
 		port := config.Port(l.AutoconfigHTTPS.Port, 443)
-		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, false, false, port, "autoconfig-https", false)
+		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, l.AutoconfigHTTPS.Forwarded, false, port, "autoconfig-https", false)
 		if l.AutoconfigHTTPS.NonTLS {
 			ensureACMEHTTP01(srv)
 		}
@@ -835,7 +845,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 	if l.MTASTSHTTPS.Enabled {
 		port := config.Port(l.MTASTSHTTPS.Port, 443)
-		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, false, false, port, "mtasts-https", false)
+		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, l.MTASTSHTTPS.Forwarded, false, port, "mtasts-https", false)
 		if l.MTASTSHTTPS.NonTLS {
 			ensureACMEHTTP01(srv)
 		}
