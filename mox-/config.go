@@ -2,6 +2,7 @@ package mox
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -261,6 +262,9 @@ func (c *Config) DomainConfigs() (doms []config.Domain) {
 		for _, d := range c.Dynamic.Domains {
 			doms = append(doms, d)
 		}
+	})
+	slices.SortFunc(doms, func(a, b config.Domain) int {
+		return cmp.Compare(a.Domain.Name(), b.Domain.Name())
 	})
 	return
 }
