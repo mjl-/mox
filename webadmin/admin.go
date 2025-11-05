@@ -1343,7 +1343,7 @@ HostTLSRPT:
 					continue
 				}
 				if _, ok := mxs[mx.Domain]; !ok {
-					addf(&r.MTASTS.Warnings, "MX %q in MTA-STS policy is not in MX record.", mx)
+					addf(&r.MTASTS.Warnings, "MX %q in MTA-STS policy is not in MX record.", mx.LogString())
 				}
 			}
 		}
