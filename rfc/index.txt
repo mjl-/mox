@@ -426,6 +426,7 @@ See implementation guide, https://jmap.io/server.html
 2181	-?	-	Clarifications to the DNS Specification
 2308	-?	-	Negative Caching of DNS Queries (DNS NCACHE)
 2672	-?	-	(obsoleted by RFC 6672) Non-Terminal DNS Name Redirection
+2782	-?	-	A DNS RR for specifying the location of services (DNS SRV)
 3226	-?	-	DNSSEC and IPv6 A6 aware server/resolver message size requirements
 3363	-?	-	Representing Internet Protocol version 6 (IPv6) Addresses in the Domain Name System (DNS)
 3596	-?	-	DNS Extensions to Support IP Version 6

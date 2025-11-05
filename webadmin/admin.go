@@ -1384,7 +1384,10 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		type srvReq struct {
 			name string
 			port uint16
-			host string
+			// First entry is host we suggest and prefer, but we won't complain if the current
+			// value is one of the later values, to account for historic values we suggested
+			// that aren't wrong and we don't want to bother admins with.
+			host []string
 			srvs []*net.SRV
 			err  error
 		}
@@ -1400,27 +1403,30 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 				imaps = true
 			}
 		}
-		srvhost := func(ok bool) string {
+		srvhost := func(ok bool) []string {
 			if !ok {
-				return "."
+				return []string{"."}
 			}
 			if domConf.ClientSettingsDomain != "" {
-				return domConf.ClientSettingsDNSDomain.ASCII + "."
+				return []string{
+					domConf.ClientSettingsDNSDomain.ASCII + ".",
+					mox.Conf.Static.HostnameDomain.ASCII + ".",
+				}
 			}
-			return mox.Conf.Static.HostnameDomain.ASCII + "."
+			return []string{mox.Conf.Static.HostnameDomain.ASCII + "."}
 		}
 		var reqs = []srvReq{
 			{name: "_submissions", port: 465, host: srvhost(submissions)},
 			{name: "_submission", port: 587, host: srvhost(!submissions)},
 			{name: "_imaps", port: 993, host: srvhost(imaps)},
 			{name: "_imap", port: 143, host: srvhost(!imaps)},
-			{name: "_pop3", port: 110, host: "."},
-			{name: "_pop3s", port: 995, host: "."},
+			{name: "_pop3", port: 110, host: []string{"."}},
+			{name: "_pop3s", port: 995, host: []string{"."}},
 		}
 		// Host "." indicates the service is not available. We suggested in the DNS records
 		// that the port be set to 0, so check for that. ../rfc/6186:242
 		for i := range reqs {
-			if reqs[i].host == "." {
+			if reqs[i].host[0] == "." {
 				reqs[i].port = 0
 			}
 		}
@@ -1439,20 +1445,20 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		for _, req := range reqs {
 			name := req.name + "._tcp." + domain.ASCII
 			weight := 1
-			if req.host == "." {
+			if req.host[0] == "." {
 				weight = 0
 			}
-			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 %d %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", weight, req.port, req.host)
+			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 %d %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", weight, req.port, req.host[0])
 			r.SRVConf.SRVs[req.name] = unptr(req.srvs)
 			if req.err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, req.err)
 			} else if len(req.srvs) == 0 {
-				if req.host == "." {
+				if req.host[0] == "." {
 					addf(&r.SRVConf.Warnings, "Missing optional SRV record %q", name)
 				} else {
 					addf(&r.SRVConf.Errors, "Missing SRV record %q", name)
 				}
-			} else if len(req.srvs) != 1 || req.srvs[0].Target != req.host || req.srvs[0].Port != req.port {
+			} else if len(req.srvs) != 1 || !slices.Contains(req.host, req.srvs[0].Target) || req.srvs[0].Port != req.port {
 				var srvs []string
 				for _, srv := range req.srvs {
 					srvs = append(srvs, fmt.Sprintf("%d %d %d %s", srv.Priority, srv.Weight, srv.Port, srv.Target))

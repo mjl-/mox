@@ -259,6 +259,11 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		"",
 
 		// ../rfc/6186:133 ../rfc/8314:692
+		// ../rfc/2782:202 says we MUST NOT have a CNAME as the target to a SRV record, but
+		// arnt says it's safe to ignore that statement, see
+		// https://github.com/mjl-/mox/pull/367#issuecomment-3486518824. Software isn't
+		// likely to actually update their configs to the targets of CNAMEs, and the
+		// additional lookups won't cause relevant delays or traffic.
 		"; For secure IMAP and submission autoconfig, point to mail host.",
 		fmt.Sprintf(`_imaps._tcp.%s.        SRV 0 1 993 %s.`, d, csd),
 		fmt.Sprintf(`_submissions._tcp.%s.  SRV 0 1 465 %s.`, d, csd),
