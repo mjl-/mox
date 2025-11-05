@@ -1,4 +1,4 @@
 FROM golang:1-alpine AS build
 WORKDIR /mox
 RUN apk add make bind-tools bash unbound curl
-env GOPROXY=off
+ENV GOPROXY=off
