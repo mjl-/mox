@@ -16,7 +16,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/textproto"
 	"net/url"
 	"os"
@@ -434,10 +433,10 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	if h.StripPath {
 		u := *r.URL
 		u.Path = r.URL.Path[len(path):]
-		if !strings.HasPrefix(u.Path, "/") {
+		if !strings.HasPrefix(u.Path, "/") && u.Path != "" {
 			u.Path = "/" + u.Path
 		}
-		u.RawPath = ""
+		u.RawPath = u.EscapedPath()
 		r.URL = &u
 	}
 
@@ -484,7 +483,7 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	}
 
 	// ReverseProxy will append any remaining path to the configured target URL.
-	proxy := httputil.NewSingleHostReverseProxy(h.TargetURL)
+	proxy := newSingleHostReverseProxy(h.TargetURL)
 	proxy.FlushInterval = time.Duration(-1) // Flush after each write.
 	proxy.ErrorLog = golog.New(mlog.LogWriter(mlog.New("net/http/httputil", nil).WithContext(r.Context()), mlog.LevelDebug, "reverseproxy error"), "", 0)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
