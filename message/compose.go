@@ -116,73 +116,62 @@ func (xc *Composer) Subject(subject string) {
 	}
 
 	var result strings.Builder
+	lineLen := len("Subject: ")
 	words := strings.Split(subject, " ")
-	subjectLineLen := len("Subject: ")
+
+	addSpace := func() {
+		if lineLen+1 > 77 {
+			result.WriteString("\r\n\t")
+			lineLen = 1
+		} else {
+			result.WriteString(" ")
+			lineLen++
+		}
+	}
+
+	addText := func(text string) {
+		if lineLen+len(text) > 77 {
+			result.WriteString("\r\n\t")
+			lineLen = 1
+		}
+		result.WriteString(text)
+		lineLen += len(text)
+	}
 
 	i := 0
 	for i < len(words) {
-		if words[i] == "" {
+		if i > 0 {
+			addSpace()
+		}
+
+		word := words[i]
+		if word == "" {
 			i++
 			continue
 		}
 
-		if isASCII(words[i]) {
-			wordLen := len(words[i])
-			spaceNeeded := 0
-			if result.Len() > 0 {
-				spaceNeeded = 1
-			}
-
-			if result.Len() > 0 && subjectLineLen+spaceNeeded+wordLen > 77 {
-				result.WriteString("\r\n\t")
-				subjectLineLen = 1
-				spaceNeeded = 0
-			}
-
-			if spaceNeeded > 0 {
-				result.WriteString(" ")
-				subjectLineLen++
-			}
-			result.WriteString(words[i])
-			subjectLineLen += wordLen
+		if isASCII(word) {
+			addText(word)
 			i++
 		} else {
-			// Group consecutive non-ASCII words to preserve spaces when encoded.
+			// Group consecutive non-ASCII words
 			var phrase strings.Builder
-			for i < len(words) && (words[i] == "" || !isASCII(words[i])) {
-				if words[i] != "" {
-					if phrase.Len() > 0 {
-						phrase.WriteString(" ")
-					}
-					phrase.WriteString(words[i])
-				}
+			phrase.WriteString(word)
+			i++
+
+			for i < len(words) && words[i] != "" && !isASCII(words[i]) {
+				phrase.WriteString(" ")
+				phrase.WriteString(words[i])
 				i++
 			}
 
+			// Encode and add with line folding
 			encoded := mime.BEncoding.Encode("utf-8", phrase.String())
-
-			// mime.BEncoding may create multiple space-separated encoded-words for long text.
-			// We need to handle line folding for each one.
-			encodedWords := strings.Split(encoded, " ")
-			for j, encWord := range encodedWords {
-				spaceNeeded := 0
-				if result.Len() > 0 || j > 0 {
-					spaceNeeded = 1
+			for j, encWord := range strings.Split(encoded, " ") {
+				if j > 0 {
+					addSpace()
 				}
-
-				// Check if adding this encoded-word would exceed 77 chars
-				if subjectLineLen+spaceNeeded+len(encWord) > 77 {
-					result.WriteString("\r\n\t")
-					subjectLineLen = 1
-					spaceNeeded = 0
-				}
-
-				if spaceNeeded > 0 {
-					result.WriteString(" ")
-					subjectLineLen++
-				}
-				result.WriteString(encWord)
-				subjectLineLen += len(encWord)
+				addText(encWord)
 			}
 		}
 	}
