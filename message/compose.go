@@ -110,26 +110,58 @@ func (xc *Composer) HeaderAddrs(k string, l []NameAddress) {
 
 // Subject writes a subject message header.
 func (xc *Composer) Subject(subject string) {
-	var subjectValue string
-	subjectLineLen := len("Subject: ")
-	subjectWord := false
-	for i, word := range strings.Split(subject, " ") {
-		if !xc.SMTPUTF8 && !isASCII(word) {
-			word = mime.QEncoding.Encode("utf-8", word)
-		}
-		if i > 0 {
-			subjectValue += " "
-			subjectLineLen++
-		}
-		if subjectWord && subjectLineLen+len(word) > 77 {
-			subjectValue += "\r\n\t"
-			subjectLineLen = 1
-		}
-		subjectValue += word
-		subjectLineLen += len(word)
-		subjectWord = true
+	if xc.SMTPUTF8 {
+		xc.Header("Subject", subject)
+		return
 	}
-	xc.Header("Subject", subjectValue)
+
+	var result strings.Builder
+	words := strings.Split(subject, " ")
+	subjectLineLen := len("Subject: ")
+
+	i := 0
+	for i < len(words) {
+		if words[i] == "" {
+			i++
+			continue
+		}
+
+		if isASCII(words[i]) {
+			if result.Len() > 0 {
+				result.WriteString(" ")
+				subjectLineLen++
+			}
+			result.WriteString(words[i])
+			subjectLineLen += len(words[i])
+			i++
+		} else {
+			// Group consecutive non-ASCII words to preserve spaces when encoded.
+			var phrase strings.Builder
+			for i < len(words) && (words[i] == "" || !isASCII(words[i])) {
+				if words[i] != "" {
+					if phrase.Len() > 0 {
+						phrase.WriteString(" ")
+					}
+					phrase.WriteString(words[i])
+				}
+				i++
+			}
+
+			encoded := mime.BEncoding.Encode("utf-8", phrase.String())
+			if result.Len() > 0 {
+				result.WriteString(" ")
+				subjectLineLen++
+			}
+			if subjectLineLen+len(encoded) > 77 {
+				result.WriteString("\r\n\t")
+				subjectLineLen = 1
+			}
+			result.WriteString(encoded)
+			subjectLineLen += len(encoded)
+		}
+	}
+
+	xc.Header("Subject", result.String())
 }
 
 // Line writes an empty line.
