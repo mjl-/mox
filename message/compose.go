@@ -127,12 +127,24 @@ func (xc *Composer) Subject(subject string) {
 		}
 
 		if isASCII(words[i]) {
+			wordLen := len(words[i])
+			spaceNeeded := 0
 			if result.Len() > 0 {
+				spaceNeeded = 1
+			}
+
+			if result.Len() > 0 && subjectLineLen+spaceNeeded+wordLen > 77 {
+				result.WriteString("\r\n\t")
+				subjectLineLen = 1
+				spaceNeeded = 0
+			}
+
+			if spaceNeeded > 0 {
 				result.WriteString(" ")
 				subjectLineLen++
 			}
 			result.WriteString(words[i])
-			subjectLineLen += len(words[i])
+			subjectLineLen += wordLen
 			i++
 		} else {
 			// Group consecutive non-ASCII words to preserve spaces when encoded.
@@ -148,16 +160,30 @@ func (xc *Composer) Subject(subject string) {
 			}
 
 			encoded := mime.BEncoding.Encode("utf-8", phrase.String())
-			if result.Len() > 0 {
-				result.WriteString(" ")
-				subjectLineLen++
+
+			// mime.BEncoding may create multiple space-separated encoded-words for long text.
+			// We need to handle line folding for each one.
+			encodedWords := strings.Split(encoded, " ")
+			for j, encWord := range encodedWords {
+				spaceNeeded := 0
+				if result.Len() > 0 || j > 0 {
+					spaceNeeded = 1
+				}
+
+				// Check if adding this encoded-word would exceed 77 chars
+				if subjectLineLen+spaceNeeded+len(encWord) > 77 {
+					result.WriteString("\r\n\t")
+					subjectLineLen = 1
+					spaceNeeded = 0
+				}
+
+				if spaceNeeded > 0 {
+					result.WriteString(" ")
+					subjectLineLen++
+				}
+				result.WriteString(encWord)
+				subjectLineLen += len(encWord)
 			}
-			if subjectLineLen+len(encoded) > 77 {
-				result.WriteString("\r\n\t")
-				subjectLineLen = 1
-			}
-			result.WriteString(encoded)
-			subjectLineLen += len(encoded)
 		}
 	}
 
