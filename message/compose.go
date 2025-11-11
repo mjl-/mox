@@ -9,6 +9,8 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/mjl-/mox/smtp"
 )
@@ -110,17 +112,21 @@ func (xc *Composer) HeaderAddrs(k string, l []NameAddress) {
 
 // Subject writes a subject message header.
 func (xc *Composer) Subject(subject string) {
-	if xc.SMTPUTF8 {
-		xc.Header("Subject", subject)
+	clean := sanitizeSubjectInput(subject)
+	if clean == "" {
+		xc.Header("Subject", "")
 		return
 	}
 
+	words := strings.Split(clean, " ")
+
+	const maxLineLen = 77
+
 	var result strings.Builder
 	lineLen := len("Subject: ")
-	words := strings.Split(subject, " ")
 
 	addSpace := func() {
-		if lineLen+1 > 77 {
+		if lineLen+1 > maxLineLen {
 			result.WriteString("\r\n\t")
 			lineLen = 1
 		} else {
@@ -130,7 +136,10 @@ func (xc *Composer) Subject(subject string) {
 	}
 
 	addText := func(text string) {
-		if lineLen+len(text) > 77 {
+		if text == "" {
+			return
+		}
+		if lineLen+len(text) > maxLineLen {
 			result.WriteString("\r\n\t")
 			lineLen = 1
 		}
@@ -143,36 +152,32 @@ func (xc *Composer) Subject(subject string) {
 		if i > 0 {
 			addSpace()
 		}
-
 		word := words[i]
 		if word == "" {
 			i++
 			continue
 		}
 
-		if isASCII(word) {
+		if xc.SMTPUTF8 || isASCII(word) {
 			addText(word)
 			i++
-		} else {
-			// Group consecutive non-ASCII words
-			var phrase strings.Builder
-			phrase.WriteString(word)
+			continue
+		}
+
+		var phrase strings.Builder
+		phrase.WriteString(word)
+		i++
+		for i < len(words) && words[i] != "" && !isASCII(words[i]) {
+			phrase.WriteByte(' ')
+			phrase.WriteString(words[i])
 			i++
+		}
 
-			for i < len(words) && words[i] != "" && !isASCII(words[i]) {
-				phrase.WriteString(" ")
-				phrase.WriteString(words[i])
-				i++
+		for j, encWord := range encodeSubjectPhrase(phrase.String()) {
+			if j > 0 {
+				addSpace()
 			}
-
-			// Encode and add with line folding
-			encoded := mime.BEncoding.Encode("utf-8", phrase.String())
-			for j, encWord := range strings.Split(encoded, " ") {
-				if j > 0 {
-					addSpace()
-				}
-				addText(encWord)
-			}
+			addText(encWord)
 		}
 	}
 
@@ -220,4 +225,62 @@ func isASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+func sanitizeSubjectInput(subject string) string {
+	if subject == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(subject))
+	lastSpace := true
+	for _, r := range subject {
+		switch {
+		case r == '\r' || r == '\n':
+			if !lastSpace && b.Len() > 0 {
+				b.WriteByte(' ')
+				lastSpace = true
+			}
+		case unicode.IsControl(r) || r == 0x7f:
+			if !lastSpace && b.Len() > 0 {
+				b.WriteByte(' ')
+				lastSpace = true
+			}
+		case r == ' ':
+			b.WriteByte(' ')
+			lastSpace = true
+		default:
+			b.WriteRune(r)
+			lastSpace = false
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func encodeSubjectPhrase(phrase string) []string {
+	if phrase == "" {
+		return nil
+	}
+	const maxChunkBytes = 45 // Keeps encoded-word length <= 75 characters (RFC 2047).
+	var encoded []string
+	data := []byte(phrase)
+	for len(data) > 0 {
+		chunkLen := maxChunkBytes
+		if len(data) < chunkLen {
+			chunkLen = len(data)
+		}
+		if chunkLen < len(data) {
+			for chunkLen > 0 && (data[chunkLen]&0xc0) == 0x80 {
+				chunkLen--
+			}
+		}
+		if chunkLen == 0 {
+			_, size := utf8.DecodeRune(data)
+			chunkLen = size
+		}
+		chunk := string(data[:chunkLen])
+		encoded = append(encoded, mime.BEncoding.Encode("utf-8", chunk))
+		data = data[chunkLen:]
+	}
+	return encoded
 }
