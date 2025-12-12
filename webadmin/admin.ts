@@ -4760,6 +4760,7 @@ const webserver = async () => {
 	let handlerRows: HandlerRow[] = []
 	let handlersTbody: HTMLElement
 	let nohandler: HTMLElement
+	let moveButtonsVisible = false
 
 	type WebStaticView = {
 		root: HTMLElement
@@ -5155,7 +5156,7 @@ const webserver = async () => {
 					' ',
 					// We show/hide the buttons to move when clicking the Move button.
 					moveButtons=dom.span(
-						style({display: 'none'}),
+						style({display: moveButtonsVisible ? '' : 'none'}),
 						dom.clickbutton('↑↑', attr.title('Move to top.'), function click() {
 							const index = handlerRows.findIndex(r => r === row)
 							if (index > 0) {
@@ -5266,8 +5267,9 @@ const webserver = async () => {
 			}),
 			' ',
 			dom.clickbutton('Move', function click() {
+				moveButtonsVisible = !moveButtonsVisible
 				for(const row of handlerRows) {
-					row.moveButtons.style.display = row.moveButtons.style.display === 'none' ? '' : 'none'
+					row.moveButtons.style.display = moveButtonsVisible ? '' : 'none'
 				}
 			}),
 		]
