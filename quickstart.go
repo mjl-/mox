@@ -45,6 +45,9 @@ import (
 //go:embed mox.service
 var moxService string
 
+//go:embed mox.freebsd.rc
+var moxFreebsdRc string
+
 func cmdQuickstart(c *cmd) {
 	c.params = "[-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
@@ -1078,7 +1081,7 @@ You can now start the mox container.
 	}
 	fmt.Printf(`
 File ownership and permissions are automatically set correctly by mox when
-starting up. On linux, you may want to enable mox as a systemd service.
+starting up. On Linux or FreeBSD, you may want to enable mox as a service.
 
 `)
 
@@ -1098,6 +1101,19 @@ starting up. On linux, you may want to enable mox as a systemd service.
 	sudo systemctl enable $PWD/mox.service
 	sudo systemctl start mox.service
 	sudo journalctl -f -u mox.service # See logs
+`)
+	} else if runtime.GOOS == "freebsd" {
+		xwritefile("mox.freebsd.rc", []byte(moxFreebsdRc), 0555)
+		cleanupPaths = append(cleanupPaths, "mox.freebsd.rc")
+		fmt.Printf(`See mox.freebsd.rc for a FreeBSD rc file. To enable and start as root:
+
+	mkdir -p /usr/local/etc/rc.d/
+	cp -a mox.freebsd.rc /usr/local/etc/rc.d/mox
+	sysrc mox_workdir=$PWD # Only needed if not /home/mox
+	service mox enable
+	service mox start
+	service mox status
+	tail -f /var/log/mox.log # See logs
 `)
 	}
 
