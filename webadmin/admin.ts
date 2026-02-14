@@ -1976,6 +1976,57 @@ const domain = async (d: string) => {
 		})(),
 		dom.br(),
 
+		dom.h2('ARC', attr.title('ARC (Authenticated Received Chain, RFC 8617) allows preserving authentication results across mail forwarding hops. Configure trusted sealers to override DMARC failures from those sealers, and optionally enable ARC sealing for messages forwarded through this domain.')),
+		(() => {
+			let fieldset: HTMLFieldSetElement
+			let sealEnabled: HTMLInputElement
+			let sealSelector: HTMLSelectElement
+			let trustedSealers: HTMLTextAreaElement
+
+			const arcConf = domainConfig.ARC
+			const selectorNames = Object.keys(domainConfig.DKIM.Selectors || {}).sort()
+
+			return dom.form(
+				async function submit(e: SubmitEvent) {
+					e.preventDefault()
+					e.stopPropagation()
+					const sealers = trustedSealers.value.split('\n').map(s => s.trim()).filter(s => s)
+					await check(fieldset, client.DomainARCSave(d, sealEnabled.checked, sealSelector.value, sealers))
+					window.alert('ARC configuration saved.')
+				},
+				fieldset=dom.fieldset(
+					dom.div(style({marginBottom: '1ex', fontStyle: 'italic'}), 'ARC allows trusted intermediaries (spam filters, forwarders) to preserve authentication results across hops, preventing DMARC failures caused by message modifications during forwarding.'),
+					dom.div(
+						style({display: 'flex', gap: '2em', flexWrap: 'wrap'}),
+						dom.label(
+							style({display: 'block', marginBottom: '1ex'}),
+							dom.div('Enable ARC sealing', attr.title('When enabled, messages forwarded through this domain will have ARC headers added.')),
+							dom.div(sealEnabled=dom.input(attr.type('checkbox'), arcConf?.SealEnabled ? attr.checked('') : [])),
+						),
+						dom.label(
+							style({display: 'block', marginBottom: '1ex'}),
+							dom.div('Seal selector', attr.title('DKIM selector to use for ARC sealing. Must be a selector configured in the DKIM section.')),
+							dom.div(sealSelector=dom.select(
+								dom.option(''),
+								...selectorNames.map(name => dom.option(name, arcConf?.SealSelector === name ? attr.selected('') : [])),
+							)),
+						),
+					),
+					dom.label(
+						style({display: 'block', marginBottom: '1ex'}),
+						dom.div('Trusted ARC sealers', attr.title('Domains whose ARC seals are trusted for overriding DMARC failures. One domain per line.')),
+						dom.div(trustedSealers=dom.textarea(
+							attr.rows('4'),
+							style({width: '100%', maxWidth: '30em'}),
+							(arcConf?.TrustedSealers || []).join('\n'),
+						)),
+					),
+					dom.div(dom.submitbutton('Save ARC configuration')),
+				),
+			)
+		})(),
+		dom.br(),
+
 		dom.h2('External checks'),
 		dom.ul(
 			dom.li(link('https://internet.nl/mail/'+dnsdomain.ASCII+'/', 'Check configuration at internet.nl')),
@@ -2303,6 +2354,7 @@ const domainDNSCheck = async (d: string) => {
 		resultSection('SPF', checks.SPF, detailsSPF),
 		resultSection('DKIM', checks.DKIM, detailsDKIM),
 		resultSection('DMARC', checks.DMARC, detailsDMARC),
+		resultSection('ARC', checks.ARC, checks.ARC.SealEnabled ? [dom.div('Sealing enabled with selector: '+checks.ARC.SealSelector), (checks.ARC.TrustedSealers || []).length > 0 ? dom.div('Trusted sealers: '+(checks.ARC.TrustedSealers || []).join(', ')) : []] : []),
 		resultSection('Host TLSRPT', checks.HostTLSRPT, detailsTLSRPT(checks.HostTLSRPT)),
 		resultSection('Domain TLSRPT', checks.DomainTLSRPT, detailsTLSRPT(checks.DomainTLSRPT)),
 		resultSection('MTA-STS', checks.MTASTS, detailsMTASTS),

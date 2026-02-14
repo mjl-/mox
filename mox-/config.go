@@ -1396,6 +1396,24 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			domain.DKIM.Selectors[name] = sel
 		}
 
+		if domain.ARC != nil {
+			if domain.ARC.SealEnabled {
+				if domain.ARC.SealSelector == "" {
+					addDomainErrorf("ARC seal enabled but no seal selector configured")
+				} else if _, ok := domain.DKIM.Selectors[domain.ARC.SealSelector]; !ok {
+					addDomainErrorf("ARC seal selector %q not found in DKIM selectors", domain.ARC.SealSelector)
+				}
+			}
+			for i, s := range domain.ARC.TrustedSealers {
+				td, err := dns.ParseDomain(s)
+				if err != nil {
+					addDomainErrorf("ARC trusted sealer %d %q: parsing domain: %s", i+1, s, err)
+					continue
+				}
+				domain.ARC.TrustedSealerDomains = append(domain.ARC.TrustedSealerDomains, td)
+			}
+		}
+
 		if domain.MTASTS != nil {
 			if !haveSTSListener {
 				addDomainErrorf("MTA-STS enabled, but there is no listener for MTASTS")

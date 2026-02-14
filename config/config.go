@@ -304,6 +304,7 @@ type Domain struct {
 	DMARC                       *DMARC           `sconf:"optional" sconf-doc:"With DMARC, a domain publishes, in DNS, a policy on how other mail servers should handle incoming messages with the From-header matching this domain and/or subdomain (depending on the configured alignment). Receiving mail servers use this to build up a reputation of this domain, which can help with mail delivery. A domain can also publish an email address to which reports about DMARC verification results can be sent by verifying mail servers, useful for monitoring. Incoming DMARC reports are automatically parsed, validated, added to metrics and stored in the reporting database for later display in the admin web pages."`
 	MTASTS                      *MTASTS          `sconf:"optional" sconf-doc:"MTA-STS is a mechanism that allows publishing a policy with requirements for WebPKI-verified SMTP STARTTLS connections for email delivered to a domain. Existence of a policy is announced in a DNS TXT record (often unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched with a WebPKI-verified HTTPS request. The policy can indicate that WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS (again, not necessarily protected/verified), but messages will only be delivered to domains matching the MX hosts from the published policy. Mail servers look up the MTA-STS policy when first delivering to a domain, then keep a cached copy, periodically checking the DNS record if a new policy is available, and fetching and caching it if so. To update a policy, first serve a new policy with an updated policy ID, then update the DNS record (not the other way around). To remove an enforced policy, publish an updated policy with mode \"none\" for a long enough period so all cached policies have been refreshed (taking DNS TTL and policy max age into account), then remove the policy from DNS, wait for TTL to expire, and stop serving the policy."`
 	TLSRPT                      *TLSRPT          `sconf:"optional" sconf-doc:"With TLSRPT a domain specifies in DNS where reports about encountered SMTP TLS behaviour should be sent. Useful for monitoring. Incoming TLS reports are automatically parsed, validated, added to metrics and stored in the reporting database for later display in the admin web pages."`
+	ARC                         *ARC             `sconf:"optional" sconf-doc:"ARC (Authenticated Received Chain, RFC 8617) configuration. ARC allows mail intermediaries to preserve authentication results across hops. When a message is forwarded, DKIM signatures often break. ARC provides a chain of custody so downstream receivers can trust the authentication performed by upstream intermediaries."`
 	Routes                      []Route          `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates account routes, these domain routes and finally global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
 	Aliases                     map[string]Alias `sconf:"optional" sconf-doc:"Aliases that cause messages to be delivered to one or more locally configured addresses. Keys are localparts (encoded, as they appear in email addresses)."`
 
@@ -346,6 +347,15 @@ type DMARC struct {
 
 	ParsedLocalpart smtp.Localpart `sconf:"-"` // Lower-case if case-sensitivity is not configured for domain. Not "canonical" for catchall separators for backwards compatibility.
 	DNSDomain       dns.Domain     `sconf:"-"` // Effective domain, always set based on Domain field or Domain where this is configured.
+}
+
+// ARC is the configuration for ARC (Authenticated Received Chain, RFC 8617).
+type ARC struct {
+	SealEnabled    bool     `sconf:"optional" sconf-doc:"If true, messages forwarded through this domain will have ARC headers added, preserving authentication results across hops."`
+	SealSelector   string   `sconf:"optional" sconf-doc:"DKIM selector to use for ARC sealing. Must reference a selector configured in the DKIM section of this domain."`
+	TrustedSealers []string `sconf:"optional" sconf-doc:"List of domains whose ARC seals are trusted for overriding DMARC failures. When a message fails DMARC but has a passing ARC chain sealed by one of these domains, the DMARC failure may be overridden. Unicode names."`
+
+	TrustedSealerDomains []dns.Domain `sconf:"-" json:"-"` // Parsed form of TrustedSealers.
 }
 
 type MTASTS struct {
