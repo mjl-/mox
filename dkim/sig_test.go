@@ -20,7 +20,7 @@ func TestSig(t *testing.T) {
 			return ok
 		}
 
-		sig, _, err := parseSignature([]byte(s), smtputf8)
+		sig, _, err := ParseSignature([]byte(s), smtputf8)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) && !(isParseErr(err) && isParseErr(expErr)) {
 			t.Fatalf("got err %v, expected %v", err, expErr)
 		}
@@ -35,7 +35,7 @@ func TestSig(t *testing.T) {
 		if err != nil {
 			t.Fatalf("making signature header: %v", err)
 		}
-		nsig, _, err := parseSignature([]byte(h), smtputf8)
+		nsig, _, err := ParseSignature([]byte(h), smtputf8)
 		if err != nil {
 			t.Fatalf("parse signature again: %v", err)
 		}
@@ -164,7 +164,7 @@ func TestCopiedHeadersSig(t *testing.T) {
 	b=dzdVyOfAKCdLXdJOc9G2q8LoXSlEniSbav+yuU4zGeeruD00lszZVoG4ZHRNiYzR
 `, "\n", "\r\n")
 
-	sig, _, err := parseSignature([]byte(sigHeader), false)
+	sig, _, err := ParseSignature([]byte(sigHeader), false)
 	if err != nil {
 		t.Fatalf("parsing dkim signature with copied headers: %v", err)
 	}

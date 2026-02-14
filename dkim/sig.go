@@ -182,13 +182,13 @@ var (
 	errSigBodyHash       = errors.New("bad body hash size given algorithm")
 )
 
-// parseSignatures returns the parsed form of a DKIM-Signature header.
+// ParseSignature returns the parsed form of a DKIM-Signature header.
 //
 // buf must end in crlf, as it should have occurred in the mail message.
 //
 // The dkim signature with signature left empty ("b=") and without trailing
 // crlf is returned, for use in verification.
-func parseSignature(buf []byte, smtputf8 bool) (sig *Sig, verifySig []byte, err error) {
+func ParseSignature(buf []byte, smtputf8 bool) (sig *Sig, verifySig []byte, err error) {
 	defer func() {
 		if x := recover(); x == nil {
 			return

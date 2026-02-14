@@ -353,6 +353,14 @@ type DMARCCheckResult struct {
 	Result
 }
 
+// ARCCheckResult has ARC configuration status for a domain.
+type ARCCheckResult struct {
+	SealEnabled    bool
+	SealSelector   string
+	TrustedSealers []string
+	Result
+}
+
 type TLSRPTRecord struct {
 	tlsrpt.Record
 }
@@ -408,6 +416,7 @@ type CheckResult struct {
 	SPF          SPFCheckResult
 	DKIM         DKIMCheckResult
 	DMARC        DMARCCheckResult
+	ARC          ARCCheckResult
 	HostTLSRPT   TLSRPTCheckResult
 	DomainTLSRPT TLSRPTCheckResult
 	MTASTS       MTASTSCheckResult
@@ -1117,6 +1126,23 @@ EOF
 			addf(&r.DKIM.Instructions, "%s", instr)
 		}
 	}()
+
+	// ARC
+	if domConf.ARC != nil {
+		r.ARC.SealEnabled = domConf.ARC.SealEnabled
+		r.ARC.SealSelector = domConf.ARC.SealSelector
+		r.ARC.TrustedSealers = domConf.ARC.TrustedSealers
+		if domConf.ARC.SealEnabled {
+			if domConf.ARC.SealSelector == "" {
+				addf(&r.ARC.Errors, "ARC sealing enabled but no selector configured.")
+			} else if _, ok := domConf.DKIM.Selectors[domConf.ARC.SealSelector]; !ok {
+				addf(&r.ARC.Errors, "ARC seal selector %q not found in DKIM selectors.", domConf.ARC.SealSelector)
+			}
+		}
+		if len(domConf.ARC.TrustedSealers) > 0 {
+			addf(&r.ARC.Instructions, "ARC trusted sealers are configured. Messages failing DMARC from these sealers with a passing ARC chain will not be rejected.")
+		}
+	}
 
 	// DMARC
 	wg.Add(1)
@@ -2726,6 +2752,34 @@ func (Admin) DomainDKIMSave(ctx context.Context, domainName string, selectors ma
 		return nil
 	})
 	xcheckf(ctx, err, "saving dkim selector for domain")
+}
+
+// DomainARCSave saves the ARC configuration for a domain. ARC (Authenticated
+// Received Chain) allows preserving authentication results across mail forwarding
+// hops and optionally overriding DMARC failures from trusted sealers.
+func (Admin) DomainARCSave(ctx context.Context, domainName string, sealEnabled bool, sealSelector string, trustedSealers []string) {
+	if sealEnabled && sealSelector == "" {
+		xcheckuserf(ctx, fmt.Errorf("seal selector is required when sealing is enabled"), "saving arc configuration")
+	}
+
+	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
+		if !sealEnabled && sealSelector == "" && len(trustedSealers) == 0 {
+			d.ARC = nil
+			return nil
+		}
+		if sealEnabled {
+			if _, ok := d.DKIM.Selectors[sealSelector]; !ok {
+				xcheckuserf(ctx, fmt.Errorf("seal selector %q not found in DKIM selectors", sealSelector), "saving arc configuration")
+			}
+		}
+		d.ARC = &config.ARC{
+			SealEnabled:    sealEnabled,
+			SealSelector:   sealSelector,
+			TrustedSealers: trustedSealers,
+		}
+		return nil
+	})
+	xcheckf(ctx, err, "saving arc configuration for domain")
 }
 
 // DomainDisabledSave saves the Disabled field of a domain. A disabled domain

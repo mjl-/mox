@@ -1971,6 +1971,38 @@
 			"Returns": []
 		},
 		{
+			"Name": "DomainARCSave",
+			"Docs": "DomainARCSave saves the ARC configuration for a domain. ARC (Authenticated\nReceived Chain) allows preserving authentication results across mail forwarding\nhops and optionally overriding DMARC failures from trusted sealers.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "sealEnabled",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "sealSelector",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "trustedSealers",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "DomainDisabledSave",
 			"Docs": "DomainDisabledSave saves the Disabled field of a domain. A disabled domain\nrejects incoming/outgoing messages involving the domain and does not request new\nTLS certificats with ACME.",
 			"Params": [
@@ -2238,6 +2270,13 @@
 					"Docs": "",
 					"Typewords": [
 						"DMARCCheckResult"
+					]
+				},
+				{
+					"Name": "ARC",
+					"Docs": "",
+					"Typewords": [
+						"ARCCheckResult"
 					]
 				},
 				{
@@ -2971,6 +3010,58 @@
 			]
 		},
 		{
+			"Name": "ARCCheckResult",
+			"Docs": "ARCCheckResult has ARC configuration status for a domain.",
+			"Fields": [
+				{
+					"Name": "SealEnabled",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "SealSelector",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "TrustedSealers",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Errors",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Warnings",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Instructions",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "TLSRPTCheckResult",
 			"Docs": "",
 			"Fields": [
@@ -3514,6 +3605,14 @@
 					]
 				},
 				{
+					"Name": "ARC",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"ARC"
+					]
+				},
+				{
 					"Name": "Routes",
 					"Docs": "",
 					"Typewords": [
@@ -3786,6 +3885,34 @@
 					"Docs": "Effective domain, always set based on Domain field or Domain where this is configured.",
 					"Typewords": [
 						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ARC",
+			"Docs": "ARC is the configuration for ARC (Authenticated Received Chain, RFC 8617).",
+			"Fields": [
+				{
+					"Name": "SealEnabled",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "SealSelector",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "TrustedSealers",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
 					]
 				}
 			]

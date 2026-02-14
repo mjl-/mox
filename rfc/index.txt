@@ -138,7 +138,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 9091	Roadmap	-	Experimental Domain-Based Message Authentication, Reporting, and Conformance (DMARC) Extension for Public Suffix Domains
 
 # ARC
-8617	Roadmap	-	The Authenticated Received Chain (ARC) Protocol
+8617	Yes	-	The Authenticated Received Chain (ARC) Protocol
 
 # DANE
 6394	-Yes	-	Use Cases and Requirements for DNS-Based Authentication of Named Entities (DANE)
