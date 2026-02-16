@@ -1976,7 +1976,7 @@ QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
 			msgs, _ := queue.List(ctxbg, queue.Filter{}, queue.Sort{Field: "Queued", Asc: false})
 			queuedMsg := msgs[0]
 			if queuedMsg.SMTPUTF8 != expectedSmtputf8 {
-				t.Fatalf("[%s / %s / %s / %s] got SMTPUTF8 %t, expected %t", mailFrom, rcptTo, headerValue, filename, queuedMsg.SMTPUTF8, expectedSmtputf8)
+				t.Fatalf("[%s / %s / %s / %s] got SMTPUTF8 %v, expected %t", mailFrom, rcptTo, headerValue, filename, queuedMsg.SMTPUTF8, expectedSmtputf8)
 			}
 		})
 	}
@@ -1992,6 +1992,48 @@ QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
 	test(`mjl@mox.example`, `remote@example.org`, "header-ascii", "utf8-🫠️.txt", true, true, nil)
 	test(`Ω@mox.example`, `🙂@example.org`, "header-utf8-😍", "utf8-🫠️.txt", true, true, nil)
 	test(`mjl@mox.example`, `remote@xn--vg8h.example.org`, "header-ascii", "ascii.txt", true, false, nil)
+
+	// Verify that UTF-8 body content does NOT trigger SMTPUTF8. Body encoding is
+	// an 8BITMIME concern, not SMTPUTF8. A message with ASCII headers/envelope
+	// but non-ASCII body (e.g. smart quotes, CJK text) should not require
+	// SMTPUTF8 for delivery.
+	utf8BodyTest := func(body string, clientSmtputf8 bool) {
+		t.Helper()
+
+		ts.run(func(client *smtpclient.Client) {
+			t.Helper()
+			msg := strings.ReplaceAll(fmt.Sprintf(`From: <mjl@mox.example>
+To: <remote@example.org>
+Subject: test
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+%s
+`, body), "\n", "\r\n")
+
+			err := client.Deliver(ctxbg, "mjl@mox.example", "remote@example.org", int64(len(msg)), strings.NewReader(msg), true, clientSmtputf8, false)
+			ts.smtpErr(err, nil)
+			if err != nil {
+				return
+			}
+
+			msgs, _ := queue.List(ctxbg, queue.Filter{}, queue.Sort{Field: "Queued", Asc: false})
+			queuedMsg := msgs[0]
+			if queuedMsg.SMTPUTF8 {
+				t.Fatalf("UTF-8 body %q should not trigger SMTPUTF8, got %v", body, queuedMsg.SMTPUTF8)
+			}
+		})
+	}
+
+	// Smart/curly quote (U+2019) — common in word-processor output.
+	utf8BodyTest("Welcome to Fo\u2019s Daycare, where kids have fun!", false)
+	utf8BodyTest("Welcome to Fo\u2019s Daycare, where kids have fun!", true)
+	// CJK text.
+	utf8BodyTest("가장 높은 산, 가장 긴 강", false)
+	utf8BodyTest("가장 높은 산, 가장 긴 강", true)
+	// Emoji body.
+	utf8BodyTest("Hello World 🎉🌍", false)
+	utf8BodyTest("Hello World 🎉🌍", true)
 }
 
 // TestExtra checks whether submission of messages with "X-Mox-Extra-<key>: value"

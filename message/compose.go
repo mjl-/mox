@@ -109,14 +109,19 @@ func (xc *Composer) HeaderAddrs(k string, l []NameAddress) {
 }
 
 // Subject writes a subject message header.
+// When SMTPUTF8 is not available and the subject contains non-ASCII, the entire
+// value is encoded as a single Q-encoded word. Encoding individual words
+// separately would lose inter-word spaces: RFC 2047 §6.2 says whitespace
+// between adjacent encoded-words is ignored during decoding.
 func (xc *Composer) Subject(subject string) {
+	if !xc.SMTPUTF8 && !isASCII(subject) {
+		xc.Header("Subject", qencode(subject))
+		return
+	}
 	var subjectValue string
 	subjectLineLen := len("Subject: ")
 	subjectWord := false
 	for i, word := range strings.Split(subject, " ") {
-		if !xc.SMTPUTF8 && !isASCII(word) {
-			word = mime.QEncoding.Encode("utf-8", word)
-		}
 		if i > 0 {
 			subjectValue += " "
 			subjectLineLen++
@@ -173,4 +178,13 @@ func isASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+// qencode encodes a non-ASCII string as a single RFC 2047 Q-encoded word.
+// Encoding the entire value as one word preserves internal spaces (as
+// underscores). Splitting into per-word encoded-words would lose spaces:
+// RFC 2047 §6.2 says whitespace between adjacent encoded-words is ignored
+// during decoding.
+func qencode(value string) string {
+	return mime.QEncoding.Encode("utf-8", value)
 }
