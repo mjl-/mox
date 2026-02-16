@@ -49,12 +49,11 @@ func queueDSN(ctx context.Context, log mlog.Log, c *conn, rcptTo smtp.Path, m ds
 	// message instead of causing delivery loops.
 	// ../rfc/3464:433
 	const has8bit = false
-	const smtputf8 = false
 	var reqTLS *bool
 	if requireTLS {
 		reqTLS = &requireTLS
 	}
-	qm := queue.MakeMsg(smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, reqTLS, time.Now(), m.Subject)
+	qm := queue.MakeMsg(smtp.Path{}, rcptTo, has8bit, false, false, int64(len(buf)), m.MessageID, nil, reqTLS, time.Now(), m.Subject)
 	qm.DSNUTF8 = bufUTF8
 	if err := queue.Add(ctx, c.log, mox.Conf.Static.Postmaster.Account, f, qm); err != nil {
 		return err
