@@ -152,7 +152,7 @@ const defaultSettings = {
 	msglistflagsWidth: 40, // Width in pixels of flags column in message list.
 	msglistageWidth: 70, // Width in pixels of age column.
 	msglistfromPct: 30, // Percentage of remaining width in message list to use for "from" column. The remainder is for the subject.
-	refine: '', // Refine filters, e.g. '', 'attachments', 'read', 'unread', 'label:...'.
+	refine: '', // Refine filters, e.g. '', 'attachments', 'read', 'unread', 'flagged', 'label:...'.
 	orderAsc: false, // Order from most recent to least recent by default.
 	ignoreErrorsUntil: 0, // For unhandled javascript errors/rejected promises, we normally show a popup for details, but users can ignore them for a week at a time.
 	mailboxCollapsed: {} as {[mailboxID: number]: boolean}, // Mailboxes that are collapsed.
@@ -802,6 +802,9 @@ const refineFilters = (f: api.Filter, notf: api.NotFilter): [api.Filter, api.Not
 			f.Labels = (f.Labels || []).concat(['\\Seen'])
 		} else if (refine === 'attachments') {
 			f.Attachments = 'any' as api.AttachmentType
+		} else if (refine === 'flagged') {
+			f.Labels = [...(f.Labels || [])]
+			f.Labels = (f.Labels || []).concat(['\\Flagged'])
 		} else if (refine.startsWith('label:')) {
 			f.Labels = [...(f.Labels || [])]
 			f.Labels = (f.Labels || []).concat([refine.substring('label:'.length)])
@@ -6522,9 +6525,9 @@ const init = async () => {
 	const msglistView = newMsglistView(msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, () => msglistscrollElem ? msglistscrollElem.getBoundingClientRect().height : 0, refineKeyword, viewportEnsureMessages)
 	const mailboxlistView = newMailboxlistView(msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox)
 
-	let refineUnreadBtn: HTMLButtonElement, refineReadBtn: HTMLButtonElement, refineAttachmentsBtn: HTMLButtonElement, refineLabelBtn: HTMLButtonElement
+	let refineUnreadBtn: HTMLButtonElement, refineReadBtn: HTMLButtonElement, refineAttachmentsBtn: HTMLButtonElement, refineFlaggedBtn: HTMLButtonElement, refineLabelBtn: HTMLButtonElement
 	const refineToggleActive = (btn: HTMLButtonElement | null): void => {
-		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineLabelBtn]) {
+		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineFlaggedBtn, refineLabelBtn]) {
 			e.classList.toggle('active', e === btn)
 		}
 		if (btn !== null && btn !== refineLabelBtn) {
@@ -6567,6 +6570,15 @@ const init = async () => {
 						attr.title('Only show messages with attachments.'),
 						async function click(e: MouseEvent) {
 							settingsPut({...settings, refine: 'attachments'})
+							refineToggleActive(e.target! as HTMLButtonElement)
+							await withStatus('Requesting messages', requestNewView(false))
+						},
+					),
+					refineFlaggedBtn=dom.clickbutton(settings.refine === 'flagged' ? dom._class('active') : [],
+						'Flagged',
+						attr.title('Only show flagged/starred messages.'),
+						async function click(e: MouseEvent) {
+							settingsPut({...settings, refine: 'flagged'})
 							refineToggleActive(e.target! as HTMLButtonElement)
 							await withStatus('Requesting messages', requestNewView(false))
 						},
