@@ -802,6 +802,9 @@ const refineFilters = (f: api.Filter, notf: api.NotFilter): [api.Filter, api.Not
 			f.Labels = (f.Labels || []).concat(['\\Seen'])
 		} else if (refine === 'attachments') {
 			f.Attachments = 'any' as api.AttachmentType
+		} else if (refine === 'flagged') {
+			f.Labels = [...(f.Labels || [])]
+			f.Labels = (f.Labels || []).concat(['\\Flagged'])
 		} else if (refine.startsWith('label:')) {
 			f.Labels = [...(f.Labels || [])]
 			f.Labels = (f.Labels || []).concat([refine.substring('label:'.length)])
@@ -6522,9 +6525,9 @@ const init = async () => {
 	const msglistView = newMsglistView(msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, () => msglistscrollElem ? msglistscrollElem.getBoundingClientRect().height : 0, refineKeyword, viewportEnsureMessages)
 	const mailboxlistView = newMailboxlistView(msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox)
 
-	let refineUnreadBtn: HTMLButtonElement, refineReadBtn: HTMLButtonElement, refineAttachmentsBtn: HTMLButtonElement, refineLabelBtn: HTMLButtonElement
+	let refineUnreadBtn: HTMLButtonElement, refineReadBtn: HTMLButtonElement, refineAttachmentsBtn: HTMLButtonElement, refineFlaggedBtn: HTMLButtonElement, refineLabelBtn: HTMLButtonElement
 	const refineToggleActive = (btn: HTMLButtonElement | null): void => {
-		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineLabelBtn]) {
+		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineFlaggedBtn, refineLabelBtn]) {
 			e.classList.toggle('active', e === btn)
 		}
 		if (btn !== null && btn !== refineLabelBtn) {
@@ -6571,7 +6574,16 @@ const init = async () => {
 							await withStatus('Requesting messages', requestNewView(false))
 						},
 					),
-					refineLabelBtn=dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: '+settings.refine.substring('label:'.length)] : 'Label',
+					refineFlaggedBtn=dom.clickbutton(settings.refine === 'flagged' ? dom._class('active') : [],
+						'Flagged',
+						attr.title('Only show flagged/starred messages.'),
+						async function click(e: MouseEvent) {
+							settingsPut({...settings, refine: 'flagged'})
+							refineToggleActive(e.target! as HTMLButtonElement)
+							await withStatus('Requesting messages', requestNewView(false))
+						},
+					),
+				refineLabelBtn=dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: '+settings.refine.substring('label:'.length)] : 'Label',
 						attr.title('Only show messages with the selected label.'),
 						async function click(e: MouseEvent) {
 							const labels = possibleLabels()
