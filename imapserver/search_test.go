@@ -854,3 +854,32 @@ func testSearchMulti(t *testing.T, selected, uidonly bool) {
 		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:8")},
 	)
 }
+
+// Red test for issue #389: mox must return a single untagged "* SEARCH ..."
+// response per (UID) SEARCH command, even when there are more than 100 matches.
+// RFC 3501 (../rfc/3501:2737) defines the untagged SEARCH response as one line
+// listing all matching numbers; clients like emersion/go-imap (used by aerc)
+// only retain the last response, so splitting truncates the visible mailbox.
+func TestSearchSingleResponse(t *testing.T) {
+	tc := start(t, false)
+	defer tc.close()
+	tc.login("mjl@mox.example", password0)
+	tc.client.Select("inbox")
+
+	// Append more than 100 messages to cross the chunking boundary in
+	// imapserver/search.go where results are emitted in groups of 100.
+	const n = 101
+	msgs := make([]imapclient.Append, n)
+	for i := range msgs {
+		msgs[i] = makeAppend(exampleMsg)
+	}
+	tc.client.MultiAppend("inbox", msgs[0], msgs[1:]...)
+
+	tc.transactf("ok", "uid search all")
+
+	expected := make([]uint32, n)
+	for i := range expected {
+		expected[i] = uint32(i + 1)
+	}
+	tc.xsearch(expected...)
+}
