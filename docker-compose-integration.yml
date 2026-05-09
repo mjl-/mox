@@ -51,7 +51,7 @@ services:
       dns:
         condition: service_healthy
       acmepebble:
-        condition: service_healthy
+        condition: service_started
     networks:
       mailnet1:
         ipv4_address: 172.28.1.10
@@ -76,7 +76,7 @@ services:
       dns:
         condition: service_healthy
       acmepebble:
-        condition: service_healthy
+        condition: service_started
       # moxacmepebble creates tmp-pebble-ca.pem, needed by moxmail2 to trust the certificates offered by moxacmepebble.
       moxacmepebble:
         condition: service_healthy
@@ -104,7 +104,7 @@ services:
       dns:
         condition: service_healthy
       acmepebble:
-        condition: service_healthy
+        condition: service_started
     networks:
       mailnet1:
         ipv4_address: 172.28.1.80
@@ -180,19 +180,16 @@ services:
   # certificate in moxacmepebble and moxmail2.
   acmepebble:
     hostname: acmepebble.example
-    image: docker.io/letsencrypt/pebble:v2.3.1@sha256:fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258
+    image: ghcr.io/letsencrypt/pebble:v2.6.0@sha256:18f6e3326ef8b307ce3e97a8c6f00613e318178450a684415e053507ed1f740f
     volumes:
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
-    command: ["sh", "-c", "set -ex; mount; ls -l /etc/resolv.conf; chmod o+r /etc/resolv.conf; pebble -config /integration/pebble-config.json"]
+    command: ["-config", "/integration/pebble-config.json"]
     ports:
       - 14000:14000  # ACME port
       - 15000:15000  # Management port
-    healthcheck:
-      test: netstat -nlt | grep ':14000 '
-      interval: 1s
-      timeout: 1s
-      retries: 10
+    # The distroless pebble image has no shell or netstat, so we can't run a
+    # netstat-based healthcheck. Dependents use service_started instead.
     depends_on:
       dns:
         condition: service_healthy
