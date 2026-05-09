@@ -1,6 +1,6 @@
 module github.com/mjl-/mox
 
-go 1.24.0
+go 1.26.3
 
 require (
 	github.com/mjl-/adns v0.0.0-20250321173553-ab04b05bdfea

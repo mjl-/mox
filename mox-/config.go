@@ -837,14 +837,29 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 				}
 				minVersion = v
 			}
+			// Only allow GCM and CHACHA20-POLY1305 cipher suites for TLS 1.2, excluding
+			// CBC-SHA suites that are considered insufficient by internet.nl/NCSC-NL
+			// guidelines. TLS 1.3 cipher suites are not configurable and always secure.
+			cipherSuites := []uint16{
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+			}
+
 			if l.TLS.Config != nil {
 				l.TLS.Config.MinVersion = minVersion
+				l.TLS.Config.CipherSuites = cipherSuites
 			}
 			if l.TLS.ConfigFallback != nil {
 				l.TLS.ConfigFallback.MinVersion = minVersion
+				l.TLS.ConfigFallback.CipherSuites = cipherSuites
 			}
 			if l.TLS.ACMEConfig != nil {
 				l.TLS.ACMEConfig.MinVersion = minVersion
+				l.TLS.ACMEConfig.CipherSuites = cipherSuites
 			}
 		} else {
 			var needsTLS []string
