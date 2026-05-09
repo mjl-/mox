@@ -493,38 +493,28 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		// We'll only have a result for the one selected mailbox.
 		result := results[0]
 
-		// In IMAP4rev1, an untagged SEARCH response is required. ../rfc/3501:2728
-		if len(result.UIDs) == 0 {
-			c.xbwritelinef("* SEARCH")
+		// Old-style SEARCH response: a single untagged line listing all matching
+		// numbers. RFC 3501 specifies one response; clients like emersion/go-imap
+		// (used by aerc) only retain the last untagged SEARCH response, so any
+		// split truncates the visible result set. See issue #389.
+		// ../rfc/3501:2728 ../rfc/3501:4833 ../rfc/9051:6809
+		var s strings.Builder
+		for _, v := range result.UIDs {
+			if !isUID {
+				v = store.UID(c.xsequence(v))
+			}
+			fmt.Fprintf(&s, " %d", v)
 		}
 
-		// Old-style SEARCH response. We must spell out each number. So we may be splitting
-		// into multiple responses. ../rfc/9051:6809 ../rfc/3501:4833
-		for len(result.UIDs) > 0 {
-			n := min(100, len(result.UIDs))
-			s := ""
-			for _, v := range result.UIDs[:n] {
-				if !isUID {
-					v = store.UID(c.xsequence(v))
-				}
-				s += " " + fmt.Sprintf("%d", v)
-			}
-
-			// Since we don't have the max modseq for the possibly partial uid range we're
-			// writing here within hand reach, we conveniently interpret the ambiguous "for all
-			// messages being returned" in ../rfc/7162:1107 as meaning over all lines that we
-			// write. And that clients only commit this value after they have seen the tagged
-			// end of the command. Appears to be recommended behaviour, ../rfc/7162:2323.
-			// ../rfc/7162:1077 ../rfc/7162:1101
-			var modseq string
-			if sk.hasModseq() {
-				// ../rfc/7162:2557
-				modseq = fmt.Sprintf(" (MODSEQ %d)", result.MaxModSeq.Client())
-			}
-
-			c.xbwritelinef("* SEARCH%s%s", s, modseq)
-			result.UIDs = result.UIDs[n:]
+		// MODSEQ is only attached when there were matches: RFC 7162 ties the
+		// returned modseq to "all messages being returned", so an empty result
+		// has nothing to attach it to. ../rfc/7162:1077 ../rfc/7162:1101
+		// ../rfc/7162:2323 ../rfc/7162:2557
+		var modseq string
+		if sk.hasModseq() && len(result.UIDs) > 0 {
+			modseq = fmt.Sprintf(" (MODSEQ %d)", result.MaxModSeq.Client())
 		}
+		c.xbwritelinef("* SEARCH%s%s", s.String(), modseq)
 	} else {
 		// New-style ESEARCH response syntax: ../rfc/9051:6546 ../rfc/4466:522
 
