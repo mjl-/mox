@@ -399,7 +399,7 @@ const index = async () => {
 				dom.label(
 					disabled=dom.input(attr.type('checkbox')),
 					' Disabled',
-					attr.title('Disabled domains do fetch new certificates with ACME and do not accept incoming or outgoing messages involving the domain. Accounts and addresses referencing a disabled domain can be created. USeful during/before migrations.'),
+					attr.title('Disabled domains do fetch new certificates with ACME and do not accept incoming or outgoing messages involving the domain. Accounts and addresses referencing a disabled domain can be created. Useful during/before migrations.'),
 				),
 				' ',
 				dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. Add the required DNS records after adding the domain.')),
