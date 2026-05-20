@@ -3,6 +3,8 @@ name: Docker Release
 on:
   push:
     tags: ['v*']
+  schedule:
+    - cron: '0 3 1 * *' # 1st of each month at 03:00 UTC
   workflow_dispatch:
 
 env:
@@ -39,6 +41,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=schedule,pattern=monthly-{{date 'YYYYMMDD'}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - uses: docker/build-push-action@v6
