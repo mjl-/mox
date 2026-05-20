@@ -1,8 +1,7 @@
 name: Docker Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_call:
   schedule:
     - cron: '0 3 1 * *' # 1st of each month at 03:00 UTC
   workflow_dispatch:

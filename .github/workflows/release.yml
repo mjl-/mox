@@ -1,0 +1,28 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  security-scan:
+    uses: ./.github/workflows/security-scan.yml
+
+  binary-release:
+    needs: [security-scan]
+    uses: ./.github/workflows/binary-release.yml
+    permissions:
+      contents: write
+    secrets: inherit
+
+  docker-release:
+    needs: [security-scan]
+    uses: ./.github/workflows/docker-release.yml
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
