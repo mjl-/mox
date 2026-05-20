@@ -1,7 +1,10 @@
 #!/bin/sh
 set -e
 
-prevversion=$(go list -mod=readonly -m -f '{{ .Version }}' github.com/mjl-/mox@latest)
+# Accept module path as argument; fall back to reading from go.mod.
+module=${1:-$(go list -m -f '{{ .Path }}')}
+
+prevversion=$(go list -mod=readonly -m -f '{{ .Version }}' "${module}@latest")
 if ! test -d tmp/mox-$prevversion; then
 	mkdir -p tmp/mox-$prevversion
 	git archive --format=tar $prevversion | tar -C tmp/mox-$prevversion -xf -

@@ -85,7 +85,7 @@ jobs:
         run: CGO_ENABLED=0 go install golang.org/x/exp/cmd/apidiff@latest
 
       - name: Generate API diff
-        run: ./apidiff.sh
+        run: ./apidiff.sh "github.com/${{ github.repository }}"
 
       - uses: actions/upload-artifact@v4
         with:
