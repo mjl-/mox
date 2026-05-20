@@ -146,15 +146,13 @@ jobs:
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           output="mox-${version}-${GOOS}-${GOARCH}${ext}"
-          go build -trimpath -o "$output"
-          echo "$output" > binary-name.txt
+          mkdir -p dist
+          go build -trimpath -o "dist/$output"
 
       - uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            mox-*
-            binary-name.txt
+          path: dist/mox-*
 
   release:
     name: Create Release
@@ -179,8 +177,7 @@ jobs:
       - name: Generate checksums
         working-directory: artifacts
         run: |
-          rm -f binary-name.txt
-          sha256sum mox-* > checksums-sha256.txt
+          find . -maxdepth 1 -type f -name 'mox-*' -exec sha256sum {} + > checksums-sha256.txt
 
       - name: Generate release notes
         id: notes
