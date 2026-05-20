@@ -1,0 +1,8 @@
+/mox
+/testdata/
+/node_modules/
+/local/
+/rfc/
+/cover.*
+/.go/
+/tmp/
