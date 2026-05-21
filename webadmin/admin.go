@@ -1,7 +1,3 @@
-// Package webadmin is a web app for the mox administrator for viewing and changing
-// the configuration, like creating/removing accounts, viewing DMARC and TLS
-// reports, check DNS records for a domain, change the webserver configuration,
-// etc.
 package webadmin
 
 import (
@@ -188,11 +184,18 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 	// All other URLs, except the login endpoint require some authentication.
 	var sessionToken store.SessionToken
 	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
-		var ok bool
-		_, sessionToken, _, ok = webauth.Check(ctx, log, webauth.Admin, "webadmin", isForwarded, w, r, isAPI, isAPI, false)
-		if !ok {
-			// Response has been written already.
-			return
+		// Check for HTTP Basic Auth for programmatic access (no cookie/CSRF needed).
+		if _, _, ok := r.BasicAuth(); ok {
+			if !webauth.CheckBasicAuth(ctx, log, webauth.Admin, "webadmin", isForwarded, w, r) {
+				return
+			}
+		} else {
+			var authOK bool
+			_, sessionToken, _, authOK = webauth.Check(ctx, log, webauth.Admin, "webadmin", isForwarded, w, r, isAPI, isAPI, false)
+			if !authOK {
+				// Response has been written already.
+				return
+			}
 		}
 	}
 

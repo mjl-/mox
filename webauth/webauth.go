@@ -79,6 +79,51 @@ type SessionAuth interface {
 	remove(ctx context.Context, log mlog.Log, accountName string, sessionToken store.SessionToken) error
 }
 
+// CheckBasicAuth checks HTTP Basic Auth credentials for a request, performing
+// rate limiting and returning appropriate HTTP error responses on failure.
+//
+// If the returned boolean is true, the request is authenticated. If false, an HTTP
+// error response has already been written (401, 429, or 500).
+//
+// kind is used for logging/metrics.
+func CheckBasicAuth(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind string, isForwarded bool, w http.ResponseWriter, r *http.Request) (ok bool) {
+	_, password, aok := r.BasicAuth()
+	if !aok {
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=%q", kind))
+		http.Error(w, "401 - unauthorized - use http basic auth", http.StatusUnauthorized)
+		return false
+	}
+
+	clientIP := ClientIP(log, isForwarded, r)
+	if clientIP == nil {
+		http.Error(w, "500 - internal server error - cannot find remote ip", http.StatusInternalServerError)
+		return false
+	}
+
+	start := time.Now()
+	if !mox.LimiterFailedAuth.CanAdd(clientIP, start, 1) {
+		metrics.AuthenticationRatelimitedInc(kind)
+		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
+		return false
+	}
+
+	valid, _, _, err := sessionAuth.login(ctx, log, "", password)
+	if err != nil {
+		log.Errorx("verifying credentials", err)
+		http.Error(w, "500 - internal server error", http.StatusInternalServerError)
+		return false
+	}
+	if !valid {
+		mox.LimiterFailedAuth.Add(clientIP, start, 1)
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=%q", kind))
+		http.Error(w, "401 - unauthorized", http.StatusUnauthorized)
+		return false
+	}
+
+	mox.LimiterFailedAuth.Reset(clientIP, start)
+	return true
+}
+
 // loginAttempt initializes a loginAttempt, for adding to the store after filling in the results and other details.
 func loginAttempt(clientIP string, r *http.Request, protocol, authMech string) store.LoginAttempt {
 	return store.LoginAttempt{

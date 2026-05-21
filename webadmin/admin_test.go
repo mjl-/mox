@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -209,6 +210,13 @@ func TestAdminAuth(t *testing.T) {
 	testHTTP("POST", "/api/Bogus", httpHeaders{hdrCSRFOK, hdrSessionBad}, http.StatusOK, nil, badAuth)
 	testHTTPAuthAPI("GET", "/api/Transports", http.StatusMethodNotAllowed, nil, nil)
 	testHTTPAuthAPI("POST", "/api/Transports", http.StatusOK, httpHeaders{ctJSON}, nil)
+
+	// HTTP Basic Auth: valid credentials should allow API access without cookies/CSRF.
+	hdrBasicOK := [2]string{"Authorization", "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:moxtest123"))}
+	hdrBasicBad := [2]string{"Authorization", "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:wrongpassword"))}
+
+	testHTTP("POST", "/api/Transports", httpHeaders{hdrBasicOK}, http.StatusOK, httpHeaders{ctJSON}, nil)
+	testHTTP("POST", "/api/Transports", httpHeaders{hdrBasicBad}, http.StatusUnauthorized, nil, nil)
 
 	// Logout needs session token.
 	reqInfo.SessionToken = store.SessionToken(strings.SplitN(sessionCookie.Value, " ", 2)[0])
