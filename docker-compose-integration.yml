@@ -6,7 +6,12 @@ services:
     # We add our cfssl-generated CA (which is in the repo) and acme pebble CA
     # (generated each time pebble starts) to the list of trusted CA's, so the TLS
     # dials in integration_test.go succeed.
-    command: ["sh", "-c", "set -ex; cat /integration/tmp-pebble-ca.pem /integration/tls/ca.pem >>/etc/ssl/certs/ca-certificates.crt; go test -tags integration"]
+    command:
+      [
+        "sh",
+        "-c",
+        "set -ex; cat /integration/tmp-pebble-ca.pem /integration/tls/ca.pem >>/etc/ssl/certs/ca-certificates.crt; go test -tags integration",
+      ]
     volumes:
       - ./.go:/.go:z
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
@@ -51,7 +56,7 @@ services:
       dns:
         condition: service_healthy
       acmepebble:
-        condition: service_healthy
+        condition: service_started
     networks:
       mailnet1:
         ipv4_address: 172.28.1.10
@@ -76,7 +81,7 @@ services:
       dns:
         condition: service_healthy
       acmepebble:
-        condition: service_healthy
+        condition: service_started
       # moxacmepebble creates tmp-pebble-ca.pem, needed by moxmail2 to trust the certificates offered by moxacmepebble.
       moxacmepebble:
         condition: service_healthy
@@ -104,7 +109,7 @@ services:
       dns:
         condition: service_healthy
       acmepebble:
-        condition: service_healthy
+        condition: service_started
     networks:
       mailnet1:
         ipv4_address: 172.28.1.80
@@ -113,7 +118,12 @@ services:
     hostname: localserve.mox1.example
     domainname: mox1.example
     image: mox_integration_moxmail
-    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; mox -checkconsistency localserve -ip 172.28.1.60"]
+    command:
+      [
+        "sh",
+        "-c",
+        "set -e; chmod o+r /etc/resolv.conf; mox -checkconsistency localserve -ip 172.28.1.60",
+      ]
     volumes:
       - ./.go:/.go:z
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
@@ -141,7 +151,12 @@ services:
     volumes:
       # todo: figure out how to mount files with a uid that the process in the container can read...
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
-    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; (echo 'maillog_file = /dev/stdout'; echo 'mydestination = $$myhostname, localhost.$$mydomain, localhost, $$mydomain'; echo 'smtp_tls_security_level = may') >>/etc/postfix/main.cf; echo 'root: postfix@mox1.example' >>/etc/postfix/aliases; newaliases; postfix start-fg"]
+    command:
+      [
+        "sh",
+        "-c",
+        "set -e; chmod o+r /etc/resolv.conf; (echo 'maillog_file = /dev/stdout'; echo 'mydestination = $$myhostname, localhost.$$mydomain, localhost, $$mydomain'; echo 'smtp_tls_security_level = may') >>/etc/postfix/main.cf; echo 'root: postfix@mox1.example' >>/etc/postfix/aliases; newaliases; postfix start-fg",
+      ]
     healthcheck:
       test: netstat -nlt | grep ':25 '
       interval: 1s
@@ -165,7 +180,12 @@ services:
       - ./testdata/integration:/integration:z
     # We start with a base example.zone, but moxacmepebble appends its records,
     # followed by moxmail2. They restart unbound after appending records.
-    command: ["sh", "-c", "set -ex; ls -l /etc/resolv.conf; chmod o+r /etc/resolv.conf; install -m 640 -o unbound /integration/unbound.conf /etc/unbound/; chmod 755 /integration; chmod 644 /integration/*.zone; cp /integration/example.zone /integration/example-integration.zone; ls -ld /integration /integration/reverse.zone; unbound -d -p -v"]
+    command:
+      [
+        "sh",
+        "-c",
+        "set -ex; ls -l /etc/resolv.conf; chmod o+r /etc/resolv.conf; install -m 640 -o unbound /integration/unbound.conf /etc/unbound/; chmod 755 /integration; chmod 644 /integration/*.zone; cp /integration/example.zone /integration/example-integration.zone; ls -ld /integration /integration/reverse.zone; unbound -d -p -v",
+      ]
     healthcheck:
       test: netstat -nlu | grep '172.28.1.30:53 '
       interval: 1s
@@ -180,19 +200,32 @@ services:
   # certificate in moxacmepebble and moxmail2.
   acmepebble:
     hostname: acmepebble.example
-    image: docker.io/letsencrypt/pebble:v2.3.1@sha256:fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258
+    # Pin to pebble v2.8.0. Newer versions (v2.9+) stopped setting a Location
+    # header on the finalize-order response, which is incompatible with the
+    # vendored golang.org/x/crypto/acme client used by mox: it then POSTs to
+    # an empty URL ("Post \"\": unsupported protocol scheme \"\"").
+    image: ghcr.io/letsencrypt/pebble:sha-d52948c
     volumes:
-      - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
-    command: ["sh", "-c", "set -ex; mount; ls -l /etc/resolv.conf; chmod o+r /etc/resolv.conf; pebble -config /integration/pebble-config.json"]
+    # The pebble image is distroless (no shell), so we pass args directly to
+    # the /app entrypoint. Use -dnsserver to point at the integration dns
+    # container instead of mounting a custom /etc/resolv.conf. No healthcheck
+    # is possible because the image has no utilities; dependents use
+    # service_started and retry connecting to :14000 in their startup scripts.
+    command:
+      [
+        "-config",
+        "/integration/pebble-config.json",
+        "-dnsserver",
+        "172.28.1.30:53",
+      ]
+    environment:
+      PEBBLE_VA_NOSLEEP: "1"
+      PEBBLE_WFE_NONCEREJECT: "0"
+      PEBBLE_AUTHZREUSE: "0"
     ports:
-      - 14000:14000  # ACME port
-      - 15000:15000  # Management port
-    healthcheck:
-      test: netstat -nlt | grep ':14000 '
-      interval: 1s
-      timeout: 1s
-      retries: 10
+      - 14000:14000 # ACME port
+      - 15000:15000 # Management port
     depends_on:
       dns:
         condition: service_healthy
