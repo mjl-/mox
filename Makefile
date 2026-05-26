@@ -101,7 +101,7 @@ modernize:
 test-integration:
 	-docker compose -f docker-compose-integration.yml kill
 	-docker compose -f docker-compose-integration.yml down
-	docker image build --pull --no-cache -f Dockerfile -t mox_integration_moxmail .
+	docker image build --pull --no-cache --build-arg EXTRA_PACKAGES="curl unbound" -f Dockerfile -t mox_integration_moxmail .
 	docker image build --pull --no-cache -f testdata/integration/Dockerfile.test -t mox_integration_test testdata/integration
 	-rm -rf testdata/integration/moxacmepebble/data
 	-rm -rf testdata/integration/moxmail2/data
