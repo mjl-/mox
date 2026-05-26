@@ -31,7 +31,7 @@ sed -i -e 's/moxtest1@mox1.example: nil/moxtest1@mox1.example: nil\n\t\t\tpostfi
 ) >/integration/example-integration.zone
 unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 
-CURL_CA_BUNDLE=/integration/tls/ca.pem curl -o /integration/tmp-pebble-ca.pem https://acmepebble.example:15000/roots/0
+CURL_CA_BUNDLE=/integration/tls/ca.pem curl --retry 30 --retry-delay 1 --retry-connrefused -o /integration/tmp-pebble-ca.pem https://acmepebble.example:15000/roots/0
 
 mox -checkconsistency serve &
 while true; do
