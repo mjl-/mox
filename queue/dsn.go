@@ -191,10 +191,10 @@ func failMsgsTx(qlog mlog.Log, tx *bstore.Tx, msgs []*Msg, dialedIPs map[string]
 			return nil
 		}
 
-		hooks := make([]Hook, len(msgs))
-		for i, m := range msgs {
+		hooks := make([]Hook, len(umsgs))
+		for i, m := range umsgs {
 			var err error
-			hooks[i], err = hookCompose(*m, accConf.OutgoingWebhook.URL, accConf.OutgoingWebhook.Authorization, webhook.EventDelayed, false, code, secodeOpt)
+			hooks[i], err = hookCompose(m, accConf.OutgoingWebhook.URL, accConf.OutgoingWebhook.Authorization, webhook.EventDelayed, false, code, secodeOpt)
 			if err != nil {
 				return fmt.Errorf("composing webhook for failed delivery attempt for msg id %d: %v", m.ID, err)
 			}
