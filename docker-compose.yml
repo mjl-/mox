@@ -46,7 +46,7 @@ services:
     working_dir: /mox
     restart: on-failure
     healthcheck:
-      test: netstat -nlt | grep ':25 '
+      test: wget -q -O- http://localhost:80/healthz || exit 1
       interval: 1s
       timeout: 1s
       retries: 10
