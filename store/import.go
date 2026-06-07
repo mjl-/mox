@@ -202,14 +202,47 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 	return m, mf, mr.Position(), nil
 }
 
+type FileInfo struct {
+	path string
+	time time.Time
+}
+
 type MaildirReader struct {
 	log          mlog.Log
 	createTemp   func(log mlog.Log, pattern string) (*os.File, error)
 	newf, curf   *os.File
-	f            *os.File // File we are currently reading from. We first read newf, then curf.
-	dir          string   // Name of directory for f. Can be empty on first call.
-	entries      []os.DirEntry
+	files        []FileInfo
 	dovecotFlags []string // Lower-case flags/keywords.
+}
+
+// Take received time from filename, falling back to mtime for maildirs
+// reconstructed some other sources of message files.
+func messageTime(f os.DirEntry) time.Time {
+	var t time.Time
+	parts := strings.SplitN(filepath.Base(f.Name()), ".", 3)
+	if v, err := strconv.ParseInt(parts[0], 10, 64); len(parts) == 3 && err == nil {
+		t = time.Unix(v, 0)
+	} else if fi, err := f.Info(); err == nil {
+		t = fi.ModTime()
+	}
+	return t
+}
+
+func readDir(dir *os.File) ([]FileInfo, error) {
+	dn := dir.Name()
+	entries, err := dir.ReadDir(0)
+	if err != nil {
+		return nil, err
+	}
+	var files []FileInfo
+	for _, e := range entries {
+		info := FileInfo{
+			path: filepath.Join(dn, e.Name()),
+			time: messageTime(e),
+		}
+		files = append(files, info)
+	}
+	return files, nil
 }
 
 func NewMaildirReader(log mlog.Log, createTemp func(log mlog.Log, pattern string) (*os.File, error), newf, curf *os.File) *MaildirReader {
@@ -218,7 +251,6 @@ func NewMaildirReader(log mlog.Log, createTemp func(log mlog.Log, pattern string
 		createTemp: createTemp,
 		newf:       newf,
 		curf:       curf,
-		f:          newf,
 	}
 
 	// Best-effort parsing of dovecot keywords.
@@ -230,43 +262,42 @@ func NewMaildirReader(log mlog.Log, createTemp func(log mlog.Log, pattern string
 		log.Check(err, "closing dovecot-keywords file")
 	}
 
+	files, err := readDir(mr.newf)
+	log.Check(err, "reading new/ directory")
+	files1, err := readDir(mr.curf)
+	log.Check(err, "reading cur/ directory")
+
+	mr.files = append(files, files1...)
+
+	if len(mr.files) == 0 {
+		return mr
+	}
+	slices.SortFunc(mr.files,
+		func(a, b FileInfo) int {
+			return a.time.Compare(b.time)
+		})
 	return mr
 }
 
 func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
-	if mr.dir == "" {
-		mr.dir = mr.f.Name()
+	if len(mr.files) == 0 {
+		return nil, nil, "", io.EOF
 	}
+	fileinfo := mr.files[0]
+	mr.files = mr.files[1:]
 
-	if len(mr.entries) == 0 {
-		var err error
-		mr.entries, err = mr.f.ReadDir(100)
-		if err != nil && err != io.EOF {
-			return nil, nil, "", err
-		}
-		if len(mr.entries) == 0 {
-			if mr.f == mr.curf {
-				return nil, nil, "", io.EOF
-			}
-			mr.f = mr.curf
-			mr.dir = ""
-			return mr.Next()
-		}
-	}
-
-	p := filepath.Join(mr.dir, mr.entries[0].Name())
-	mr.entries = mr.entries[1:]
-	sf, err := os.Open(p)
+	sf, err := os.Open(fileinfo.path)
 	if err != nil {
-		return nil, nil, p, fmt.Errorf("open message in maildir: %s", err)
+		return nil, nil, fileinfo.path, fmt.Errorf("open message in maildir: %s", err)
 	}
 	defer func() {
 		err := sf.Close()
 		mr.log.Check(err, "closing message file after error")
 	}()
+
 	f, err := mr.createTemp(mr.log, "maildirreader")
 	if err != nil {
-		return nil, nil, p, err
+		return nil, nil, fileinfo.path, err
 	}
 	defer func() {
 		if f != nil {
@@ -281,7 +312,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 	for {
 		line, err := r.ReadBytes('\n')
 		if err != nil && err != io.EOF {
-			return nil, nil, p, fmt.Errorf("reading message: %v", err)
+			return nil, nil, fileinfo.path, fmt.Errorf("reading message: %v", err)
 		}
 		if len(line) > 0 {
 			if !bytes.HasSuffix(line, []byte("\r\n")) {
@@ -289,7 +320,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 			}
 
 			if n, err := w.Write(line); err != nil {
-				return nil, nil, p, fmt.Errorf("writing message: %v", err)
+				return nil, nil, fileinfo.path, fmt.Errorf("writing message: %v", err)
 			} else {
 				size += int64(n)
 			}
@@ -299,23 +330,15 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 		}
 	}
 	if err := w.Flush(); err != nil {
-		return nil, nil, p, fmt.Errorf("writing message: %v", err)
+		return nil, nil, fileinfo.path, fmt.Errorf("writing message: %v", err)
 	}
 
-	// Take received time from filename, falling back to mtime for maildirs
-	// reconstructed some other sources of message files.
-	var received time.Time
-	t := strings.SplitN(filepath.Base(sf.Name()), ".", 3)
-	if v, err := strconv.ParseInt(t[0], 10, 64); len(t) == 3 && err == nil {
-		received = time.Unix(v, 0)
-	} else if fi, err := sf.Stat(); err == nil {
-		received = fi.ModTime()
-	}
+	received := fileinfo.time
 
 	// Parse flags. See https://cr.yp.to/proto/maildir.html.
 	flags := Flags{}
 	keywords := map[string]bool{}
-	t = strings.SplitN(filepath.Base(sf.Name()), ":2,", 2)
+	t := strings.SplitN(filepath.Base(fileinfo.path), ":2,", 2)
 	if len(t) == 2 {
 		for _, c := range t[1] {
 			switch c {
@@ -363,7 +386,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 	mf := f
 	f = nil
 
-	return m, mf, p, nil
+	return m, mf, fileinfo.path, nil
 }
 
 // ParseDovecotKeywordsFlags attempts to parse a dovecot-keywords file. It only
