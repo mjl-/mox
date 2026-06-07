@@ -135,15 +135,15 @@ func TestQueue(t *testing.T) {
 
 	var qm Msg
 
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm = MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm = MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm = MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
@@ -567,7 +567,7 @@ func TestQueue(t *testing.T) {
 
 	// Single delivery to two recipients at same domain, expecting single connection
 	// and single transaction.
-	qm0 := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm0 := MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	qml := []Msg{qm0, qm0} // Same NextAttempt.
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add messages to queue for delivery")
@@ -578,8 +578,8 @@ func TestQueue(t *testing.T) {
 	otherpath := otheraddr.Path()
 	t0 := time.Now()
 	qml = []Msg{
-		MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, t0, "test"),
-		MakeMsg(path, otherpath, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, t0, "test"),
+		MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, t0, "test"),
+		MakeMsg(path, otherpath, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, t0, "test"),
 	}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add messages to queue for delivery")
@@ -606,7 +606,7 @@ func TestQueue(t *testing.T) {
 
 	// Add a message to be delivered with submit because of its route.
 	topath := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "submit.example"}}}
-	qm = MakeMsg(path, topath, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm = MakeMsg(path, topath, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 	wasNetDialer = testDeliver(fakeSubmitServer)
@@ -624,7 +624,7 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add a message to be delivered with submit because of explicitly configured transport, that uses TLS.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSubmitTLS := "submittls"
@@ -673,7 +673,7 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add a message to be delivered with socks.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, nil, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<socks@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = TransportSet(ctxbg, idfilter(qml[0].ID), "socks")
@@ -689,7 +689,7 @@ func TestQueue(t *testing.T) {
 
 	// Add message to be delivered with opportunistic TLS verification.
 	clearTLSResults(t)
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, nil, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -699,7 +699,7 @@ func TestQueue(t *testing.T) {
 
 	// Test fallback to plain text with TLS handshake fails.
 	clearTLSResults(t)
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, nil, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -715,7 +715,7 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: moxCert.Leaf.RawSubjectPublicKeyInfo},
 		},
 	}
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, nil, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<dane@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -731,7 +731,7 @@ func TestQueue(t *testing.T) {
 	tcompare(t, rdt.RequireTLS, true)
 
 	// Add message to be delivered with verified TLS and REQUIRETLS.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, &yes, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, &yes, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -744,7 +744,7 @@ func TestQueue(t *testing.T) {
 			{},
 		},
 	}
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, nil, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -761,7 +761,7 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: make([]byte, sha256.Size)},
 		},
 	}
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, nil, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -778,21 +778,21 @@ func TestQueue(t *testing.T) {
 	tcompare(t, rdt.RequireTLS, false)
 
 	// Check that message is delivered with TLS-Required: No and non-matching DANE record.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednostarttls@localhost>", nil, &no, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<tlsrequirednostarttls@localhost>", nil, &no, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
 	testDeliver(fakeSMTPSTARTTLSServer)
 
 	// Check that message is delivered with TLS-Required: No and bad TLS, falling back to plain text.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednoplaintext@localhost>", nil, &no, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<tlsrequirednoplaintext@localhost>", nil, &no, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
 	testDeliver(makeBadFakeSMTPSTARTTLSServer(true))
 
 	// Add message with requiretls that fails immediately due to no REQUIRETLS support in all servers.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequiredunsupported@localhost>", nil, &yes, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<tlsrequiredunsupported@localhost>", nil, &yes, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -803,7 +803,7 @@ func TestQueue(t *testing.T) {
 	resolver.TLSA = nil
 
 	// Add message with requiretls that fails immediately due to no verification policy for recipient domain.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednopolicy@localhost>", nil, &yes, time.Now(), "test")}
+	qml = []Msg{MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<tlsrequirednopolicy@localhost>", nil, &yes, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	kick(1, qml[0].ID)
@@ -811,7 +811,7 @@ func TestQueue(t *testing.T) {
 	testDSN(func(conn net.Conn) {})
 
 	// Add another message that we'll fail to deliver entirely.
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm = MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
@@ -984,7 +984,7 @@ func TestRetiredHooks(t *testing.T) {
 		_, err = bstore.QueryDB[Hook](ctxbg, DB).Delete()
 		tcheck(t, err, "clearing hooks")
 
-		qm := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+		qm := MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 		qm.Extra = map[string]string{"a": "123"}
 		err = Add(ctxbg, pkglog, account, mf, qm)
 		tcheck(t, err, "add to queue")
@@ -1247,7 +1247,7 @@ func TestQueueStart(t *testing.T) {
 	mf := prepareFile(t)
 	defer os.Remove(mf.Name())
 	defer mf.Close()
-	qm := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm := MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 	checkDialed(false) // No delivery attempt yet.
@@ -1289,7 +1289,7 @@ func TestQueueStart(t *testing.T) {
 	mf = prepareFile(t)
 	defer os.Remove(mf.Name())
 	defer mf.Close()
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
+	qm = MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 	checkDialed(true) // Immediate.
@@ -1307,7 +1307,7 @@ func TestListFilterSort(t *testing.T) {
 	defer mf.Close()
 
 	now := time.Now().Round(0)
-	qm := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, now, "test")
+	qm := MakeMsg(path, path, false, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, now, "test")
 	qm.Queued = now
 	qm1 := qm
 	qm1.Queued = now.Add(-time.Second)
