@@ -2186,6 +2186,10 @@ const refineFilters = (f, notf) => {
 		else if (refine === 'attachments') {
 			f.Attachments = 'any';
 		}
+		else if (refine === 'flagged') {
+			f.Labels = [...(f.Labels || [])];
+			f.Labels = (f.Labels || []).concat(['\\Flagged']);
+		}
 		else if (refine.startsWith('label:')) {
 			f.Labels = [...(f.Labels || [])];
 			f.Labels = (f.Labels || []).concat([refine.substring('label:'.length)]);
@@ -6503,9 +6507,9 @@ const init = async () => {
 	const activeMailbox = () => mailboxlistView.activeMailbox();
 	const msglistView = newMsglistView(msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, () => msglistscrollElem ? msglistscrollElem.getBoundingClientRect().height : 0, refineKeyword, viewportEnsureMessages);
 	const mailboxlistView = newMailboxlistView(msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox);
-	let refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineLabelBtn;
+	let refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineFlaggedBtn, refineLabelBtn;
 	const refineToggleActive = (btn) => {
-		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineLabelBtn]) {
+		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineFlaggedBtn, refineLabelBtn]) {
 			e.classList.toggle('active', e === btn);
 		}
 		if (btn !== null && btn !== refineLabelBtn) {
@@ -6524,6 +6528,10 @@ const init = async () => {
 		await withStatus('Requesting messages', requestNewView(false));
 	}), refineAttachmentsBtn = dom.clickbutton(settings.refine === 'attachments' ? dom._class('active') : [], 'Attachments', attr.title('Only show messages with attachments.'), async function click(e) {
 		settingsPut({ ...settings, refine: 'attachments' });
+		refineToggleActive(e.target);
+		await withStatus('Requesting messages', requestNewView(false));
+	}), refineFlaggedBtn = dom.clickbutton(settings.refine === 'flagged' ? dom._class('active') : [], 'Flagged', attr.title('Only show flagged/starred messages.'), async function click(e) {
+		settingsPut({ ...settings, refine: 'flagged' });
 		refineToggleActive(e.target);
 		await withStatus('Requesting messages', requestNewView(false));
 	}), refineLabelBtn = dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: ' + settings.refine.substring('label:'.length)] : 'Label', attr.title('Only show messages with the selected label.'), async function click(e) {
