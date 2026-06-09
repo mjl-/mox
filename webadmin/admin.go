@@ -2577,6 +2577,16 @@ func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName string, l
 	xcheckf(ctx, err, "saving localpart settings for domain")
 }
 
+// DomainVoidSenderDomainsSave saves the list of sender domains that are silently
+// accepted but diverted to the void mailbox.
+func (Admin) DomainVoidSenderDomainsSave(ctx context.Context, domainName string, voidSenderDomains []string) {
+	err := admin.DomainSave(ctx, domainName, func(domain *config.Domain) error {
+		domain.VoidSenderDomains = voidSenderDomains
+		return nil
+	})
+	xcheckf(ctx, err, "saving void sender domains for domain")
+}
+
 // DomainDMARCAddressSave saves the DMARC reporting address/processing
 // configuration for a domain. If localpart is empty, processing reports is
 // disabled.

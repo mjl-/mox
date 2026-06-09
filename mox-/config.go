@@ -1298,6 +1298,35 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			sepSeen[sep] = true
 		}
 
+		voidSeen := map[string]bool{}
+		domain.VoidSenderDomainsParsed = domain.VoidSenderDomainsParsed[:0]
+		for _, s := range domain.VoidSenderDomains {
+			includeSub := strings.HasPrefix(s, ".")
+			name := s
+			if includeSub {
+				name = s[1:]
+			}
+			if name == "" {
+				addDomainErrorf("invalid empty void sender domain")
+				continue
+			}
+			dd, err := dns.ParseDomain(name)
+			if err != nil {
+				addDomainErrorf("invalid void sender domain %q: %v", s, err)
+				continue
+			}
+			key := dd.ASCII
+			if includeSub {
+				key = "." + key
+			}
+			if voidSeen[key] {
+				addDomainErrorf("duplicate void sender domain %q", s)
+				continue
+			}
+			voidSeen[key] = true
+			domain.VoidSenderDomainsParsed = append(domain.VoidSenderDomainsParsed, config.VoidSenderDomain{Domain: dd, IncludeSubdomains: includeSub})
+		}
+
 		for _, sign := range domain.DKIM.Sign {
 			if _, ok := domain.DKIM.Selectors[sign]; !ok {
 				addDomainErrorf("unknown selector %s for signing", sign)

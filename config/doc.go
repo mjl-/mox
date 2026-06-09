@@ -837,6 +837,12 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# If set, upper/lower case is relevant for email delivery. (optional)
 			LocalpartCaseSensitive: false
 
+			# Domains whose messages should be silently accepted during SMTP but diverted to
+			# the void mailbox. Prefix with '.' to match the domain and its subdomains.
+			# Matching is done against the envelope MAIL FROM domain. (optional)
+			VoidSenderDomains:
+				-
+
 			# With DKIM signing, a domain is taking responsibility for (content of) emails it
 			# sends, letting receiving mail servers build up a (hopefully positive) reputation
 			# of the domain, which can help with mail delivery. (optional)

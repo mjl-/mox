@@ -1751,6 +1751,26 @@
 			"Returns": []
 		},
 		{
+			"Name": "DomainVoidSenderDomainsSave",
+			"Docs": "DomainVoidSenderDomainsSave saves the list of sender domains that are silently\naccepted but diverted to the void mailbox.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "voidSenderDomains",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "DomainDMARCAddressSave",
 			"Docs": "DomainDMARCAddressSave saves the DMARC reporting address/processing\nconfiguration for a domain. If localpart is empty, processing reports is\ndisabled.",
 			"Params": [
@@ -3480,6 +3500,14 @@
 					"Docs": "",
 					"Typewords": [
 						"bool"
+					]
+				},
+				{
+					"Name": "VoidSenderDomains",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
 					]
 				},
 				{

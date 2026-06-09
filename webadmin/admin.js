@@ -298,7 +298,7 @@ var api;
 		"AutoconfCheckResult": { "Name": "AutoconfCheckResult", "Docs": "", "Fields": [{ "Name": "ClientSettingsDomainIPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverCheckResult": { "Name": "AutodiscoverCheckResult", "Docs": "", "Fields": [{ "Name": "Records", "Docs": "", "Typewords": ["[]", "AutodiscoverSRV"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverSRV": { "Name": "AutodiscoverSRV", "Docs": "", "Fields": [{ "Name": "Target", "Docs": "", "Typewords": ["string"] }, { "Name": "Port", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Priority", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Weight", "Docs": "", "Typewords": ["uint16"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }] },
-		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Disabled", "Docs": "", "Typewords": ["bool"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparators", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["{}", "Alias"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "LocalpartCatchallSeparatorsEffective", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Disabled", "Docs": "", "Typewords": ["bool"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparators", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "VoidSenderDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["{}", "Alias"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "LocalpartCatchallSeparatorsEffective", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"DKIM": { "Name": "DKIM", "Docs": "", "Fields": [{ "Name": "Selectors", "Docs": "", "Typewords": ["{}", "Selector"] }, { "Name": "Sign", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Selector": { "Name": "Selector", "Docs": "", "Fields": [{ "Name": "Hash", "Docs": "", "Typewords": ["string"] }, { "Name": "HashEffective", "Docs": "", "Typewords": ["string"] }, { "Name": "Canonicalization", "Docs": "", "Typewords": ["Canonicalization"] }, { "Name": "Headers", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HeadersEffective", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "DontSealHeaders", "Docs": "", "Typewords": ["bool"] }, { "Name": "Expiration", "Docs": "", "Typewords": ["string"] }, { "Name": "PrivateKeyFile", "Docs": "", "Typewords": ["string"] }, { "Name": "Algorithm", "Docs": "", "Typewords": ["string"] }] },
 		"Canonicalization": { "Name": "Canonicalization", "Docs": "", "Fields": [{ "Name": "HeaderRelaxed", "Docs": "", "Typewords": ["bool"] }, { "Name": "BodyRelaxed", "Docs": "", "Typewords": ["bool"] }] },
@@ -1235,6 +1235,15 @@ var api;
 			const paramTypes = [["string"], ["[]", "string"], ["bool"]];
 			const returnTypes = [];
 			const params = [domainName, localpartCatchallSeparators, localpartCaseSensitive];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainVoidSenderDomainsSave saves the list of sender domains that are silently
+		// accepted but diverted to the void mailbox.
+		async DomainVoidSenderDomainsSave(domainName, voidSenderDomains) {
+			const fn = "DomainVoidSenderDomainsSave";
+			const paramTypes = [["string"], ["[]", "string"]];
+			const returnTypes = [];
+			const params = [domainName, voidSenderDomains];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// DomainDMARCAddressSave saves the DMARC reporting address/processing
@@ -2512,6 +2521,17 @@ const domain = async (d) => {
 		for (const sep of (domainConfig.LocalpartCatchallSeparatorsEffective || [])) {
 			addSeparatorView(sep);
 		}
+		return elem;
+	})(), dom.br(), dom.h2('Void sender domains'), (() => {
+		let voidSenderDomains;
+		let voidSenderFieldset;
+		const elem = dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			const domains = voidSenderDomains.value.split('\n').map(s => s.trim()).filter(s => !!s);
+			await check(voidSenderFieldset, client.DomainVoidSenderDomainsSave(d, domains));
+			domainConfig.VoidSenderDomains = domains;
+		}, voidSenderFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Envelope MAIL FROM domains listed here are silently accepted but delivered to the void mailbox instead of to user mailboxes. Prefix an entry with "." to match the domain and all of its subdomains.'), dom.div('Domains'), voidSenderDomains = dom.textarea(new String((domainConfig.VoidSenderDomains || []).join('\n')), attr.rows('3'), style({ width: '30em' }))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))));
 		return elem;
 	})(), dom.br(), dom.h2('DMARC reporting address'), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
 		e.preventDefault();

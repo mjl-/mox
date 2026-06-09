@@ -1653,6 +1653,33 @@ const domain = async (d: string) => {
 		})(),
 		dom.br(),
 
+		dom.h2('Void sender domains'),
+		(() => {
+			let voidSenderDomains: HTMLTextAreaElement
+			let voidSenderFieldset: HTMLFieldSetElement
+			const elem = dom.form(
+				style({marginTop: '1ex'}),
+				async function submit(e: SubmitEvent) {
+					e.preventDefault()
+					e.stopPropagation()
+					const domains = voidSenderDomains.value.split('\n').map(s => s.trim()).filter(s => !!s)
+					await check(voidSenderFieldset, client.DomainVoidSenderDomainsSave(d, domains))
+					domainConfig.VoidSenderDomains = domains
+				},
+				voidSenderFieldset=dom.fieldset(
+					style({display: 'flex', gap: '1em'}),
+					dom.label(
+						attr.title('Envelope MAIL FROM domains listed here are silently accepted but delivered to the void mailbox instead of to user mailboxes. Prefix an entry with "." to match the domain and all of its subdomains.'),
+						dom.div('Domains'),
+						voidSenderDomains=dom.textarea(new String((domainConfig.VoidSenderDomains || []).join('\n')), attr.rows('3'), style({width: '30em'})),
+					),
+					dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
+				),
+			)
+			return elem
+		})(),
+		dom.br(),
+
 		dom.h2('DMARC reporting address'),
 		dom.form(
 			style({marginTop: '1ex'}),
