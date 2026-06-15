@@ -271,8 +271,9 @@ type ComposeMessage struct {
 	ReplyTo           string // If non-empty, Reply-To header to add to message.
 	Subject           string
 	TextBody          string
-	ResponseMessageID int64 // If set, this was a reply or forward, based on IsForward.
-	DraftMessageID    int64 // If set, previous draft message that will be removed after composing new message.
+	HTMLBody          string // If non-empty, draft is stored as multipart/alternative.
+	ResponseMessageID int64  // If set, this was a reply or forward, based on IsForward.
+	DraftMessageID    int64  // If set, previous draft message that will be removed after composing new message.
 }
 
 // MessageCompose composes a message and saves it to the mailbox. Used for
@@ -414,11 +415,23 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 		})
 	}
 	xc.Header("MIME-Version", "1.0")
-	textBody, ct, cte := xc.TextPart("plain", m.TextBody)
-	xc.Header("Content-Type", ct)
-	xc.Header("Content-Transfer-Encoding", cte)
-	xc.Line()
-	xc.Write([]byte(textBody))
+	if m.HTMLBody != "" {
+		h, err := sanitizeOutgoingHTML(m.HTMLBody)
+		xcheckuserf(ctx, err, "sanitizing html body")
+		t, err := message.HTMLToText(strings.NewReader(h))
+		xcheckf(ctx, err, "deriving text from html")
+		boundary := newAltBoundary()
+		xc.Header("Content-Type", fmt.Sprintf(`multipart/alternative; boundary="%s"`, boundary))
+		xc.Line()
+		err = writeAltBody(xc, boundary, t, h, xc)
+		xcheckf(ctx, err, "writing alternative body")
+	} else {
+		textBody, ct, cte := xc.TextPart("plain", m.TextBody)
+		xc.Header("Content-Type", ct)
+		xc.Header("Content-Transfer-Encoding", cte)
+		xc.Line()
+		xc.Write([]byte(textBody))
+	}
 	xc.Flush()
 
 	var nm store.Message
@@ -481,6 +494,56 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 	return nm.ID
 }
 
+// MessageComposeQuoteHTML returns the first text/html part of the message with
+// the given ID, cleaned to the safe "Balanced" HTML subset, for use as a quote
+// when replying or forwarding. Returns an empty string if the message has no
+// HTML part.
+func (w Webmail) MessageComposeQuoteHTML(ctx context.Context, messageID int64) (htmlBody string) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc := reqInfo.Account
+	log := reqInfo.Log
+
+	var rawHTML string
+	xdbread(ctx, acc, func(tx *bstore.Tx) {
+		m := xmessageID(ctx, tx, messageID)
+		msgr := acc.MessageReader(m)
+		defer func() {
+			err := msgr.Close()
+			log.Check(err, "closing message reader")
+		}()
+		p, err := m.LoadPart(msgr)
+		xcheckf(ctx, err, "load parsed message")
+		hp := findHTMLPart(&p)
+		if hp == nil {
+			return
+		}
+		// Bound the amount we read, like inlineSanitizeHTML, to avoid excessive memory
+		// use on a crafted/large stored message.
+		buf, err := io.ReadAll(io.LimitReader(hp.ReaderUTF8OrBinary(), 10*1024*1024))
+		xcheckf(ctx, err, "reading html part")
+		rawHTML = string(buf)
+	})
+	if rawHTML == "" {
+		return ""
+	}
+	cleaned, err := sanitizeHTML(rawHTML)
+	xcheckf(ctx, err, "sanitizing html for quote")
+	return cleaned
+}
+
+// findHTMLPart returns the first text/html part in p (depth-first), or nil.
+func findHTMLPart(p *message.Part) *message.Part {
+	if p.MediaType == "TEXT" && p.MediaSubType == "HTML" {
+		return p
+	}
+	for i := range p.Parts {
+		if hp := findHTMLPart(&p.Parts[i]); hp != nil {
+			return hp
+		}
+	}
+	return nil
+}
+
 // Attachment is a MIME part is an existing message that is not intended as
 // viewable text or HTML part.
 type Attachment struct {
@@ -504,6 +567,7 @@ type SubmitMessage struct {
 	ReplyTo                   string // If non-empty, Reply-To header to add to message.
 	Subject                   string
 	TextBody                  string
+	HTMLBody                  string // If non-empty, message is sent as multipart/alternative with a server-derived text/plain part.
 	Attachments               []File
 	ForwardAttachments        ForwardAttachments
 	IsForward                 bool
@@ -794,20 +858,41 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	}
 	xc.Header("MIME-Version", "1.0")
 
+	// If composing HTML, sanitize it and derive the text/plain alternative.
+	var htmlBody, htmlTextAlt string
+	if m.HTMLBody != "" {
+		h, err := sanitizeOutgoingHTML(m.HTMLBody)
+		xcheckuserf(ctx, err, "sanitizing html body")
+		htmlBody = h
+		t, err := message.HTMLToText(strings.NewReader(h))
+		xcheckf(ctx, err, "deriving text from html")
+		htmlTextAlt = t
+	}
+
 	if len(m.Attachments) > 0 || len(m.ForwardAttachments.Paths) > 0 {
 		mp := multipart.NewWriter(xc)
 		xc.Header("Content-Type", fmt.Sprintf(`multipart/mixed; boundary="%s"`, mp.Boundary()))
 		xc.Line()
 
-		textBody, ct, cte := xc.TextPart("plain", m.TextBody)
-		textHdr := textproto.MIMEHeader{}
-		textHdr.Set("Content-Type", ct)
-		textHdr.Set("Content-Transfer-Encoding", cte)
+		if htmlBody != "" {
+			boundary := newAltBoundary()
+			bh := textproto.MIMEHeader{}
+			bh.Set("Content-Type", fmt.Sprintf(`multipart/alternative; boundary="%s"`, boundary))
+			bodyPart, err := mp.CreatePart(bh)
+			xcheckf(ctx, err, "adding alternative body part to message")
+			err = writeAltBody(bodyPart, boundary, htmlTextAlt, htmlBody, xc)
+			xcheckf(ctx, err, "writing alternative body")
+		} else {
+			textBody, ct, cte := xc.TextPart("plain", m.TextBody)
+			textHdr := textproto.MIMEHeader{}
+			textHdr.Set("Content-Type", ct)
+			textHdr.Set("Content-Transfer-Encoding", cte)
 
-		textp, err := mp.CreatePart(textHdr)
-		xcheckf(ctx, err, "adding text part to message")
-		_, err = textp.Write(textBody)
-		xcheckf(ctx, err, "writing text part")
+			textp, err := mp.CreatePart(textHdr)
+			xcheckf(ctx, err, "adding text part to message")
+			_, err = textp.Write(textBody)
+			xcheckf(ctx, err, "writing text part")
+		}
 
 		xaddPart := func(ct, filename string) io.Writer {
 			ahdr := textproto.MIMEHeader{}
@@ -921,6 +1006,12 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 		err = mp.Close()
 		xcheckf(ctx, err, "writing mime multipart")
+	} else if htmlBody != "" {
+		boundary := newAltBoundary()
+		xc.Header("Content-Type", fmt.Sprintf(`multipart/alternative; boundary="%s"`, boundary))
+		xc.Line()
+		err := writeAltBody(xc, boundary, htmlTextAlt, htmlBody, xc)
+		xcheckf(ctx, err, "writing alternative body")
 	} else {
 		textBody, ct, cte := xc.TextPart("plain", m.TextBody)
 		xc.Header("Content-Type", ct)

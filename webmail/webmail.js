@@ -305,13 +305,13 @@ var api;
 		"MessageAddress": { "Name": "MessageAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
 		"FromAddressSettings": { "Name": "FromAddressSettings", "Docs": "", "Fields": [{ "Name": "FromAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "ViewMode", "Docs": "", "Typewords": ["ViewMode"] }] },
-		"ComposeMessage": { "Name": "ComposeMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
-		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "ArchiveThread", "Docs": "", "Typewords": ["bool"] }, { "Name": "ArchiveReferenceMailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
+		"ComposeMessage": { "Name": "ComposeMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "HTMLBody", "Docs": "", "Typewords": ["string"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
+		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "HTMLBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "ArchiveThread", "Docs": "", "Typewords": ["bool"] }, { "Name": "ArchiveReferenceMailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
 		"File": { "Name": "File", "Docs": "", "Fields": [{ "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "DataURI", "Docs": "", "Typewords": ["string"] }] },
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "CreateSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "Expunged", "Docs": "", "Typewords": ["bool"] }, { "Name": "ParentID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
 		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
-		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "NoShowShortcuts", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHeaders", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "ComposeHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "NoShowShortcuts", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHeaders", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Settings", "Docs": "", "Typewords": ["Settings"] }, { "Name": "AccountPath", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparators", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
@@ -514,6 +514,17 @@ var api;
 			const paramTypes = [["ComposeMessage"], ["int64"]];
 			const returnTypes = [["int64"]];
 			const params = [m, mailboxID];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// MessageComposeQuoteHTML returns the first text/html part of the message with
+		// the given ID, cleaned to the safe "Balanced" HTML subset, for use as a quote
+		// when replying or forwarding. Returns an empty string if the message has no
+		// HTML part.
+		async MessageComposeQuoteHTML(messageID) {
+			const fn = "MessageComposeQuoteHTML";
+			const paramTypes = [["int64"]];
+			const returnTypes = [["string"]];
+			const params = [messageID];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MessageSubmit sends a message by submitting it the outgoing email queue. The
@@ -1579,6 +1590,15 @@ const yscrollAutoStyle = css('yscrollAuto', { overflowY: 'auto', position: 'abso
 const autosizeStyle = css('autosize', { display: 'inline-grid', maxWidth: '90vw' });
 ensureCSS('.autosize.input', { gridArea: '1 / 2' });
 ensureCSS('.autosize::after', { content: 'attr(data-value)', marginRight: '1em', lineHeight: 0, visibility: 'hidden', whiteSpace: 'pre-wrap', overflowX: 'hidden' });
+// Content styling for the HTML compose editor (.htmleditor). The global reset
+// strips list markers/indentation and blockquote spacing, so restore them here
+// (descendant selectors override the reset) — otherwise lists and quotes look
+// like plain text in the editor.
+ensureCSS('.htmleditor ul', { listStyle: 'disc', margin: '.5em 0', paddingLeft: '2em' });
+ensureCSS('.htmleditor ol', { listStyle: 'decimal', margin: '.5em 0', paddingLeft: '2em' });
+ensureCSS('.htmleditor li', { margin: '.15em 0' });
+ensureCSS('.htmleditor p', { margin: '.5em 0' });
+ensureCSS('.htmleditor blockquote', { margin: '.5em 0', paddingLeft: '1ex', borderLeft: '2px solid #ccc' });
 let moxversion;
 let moxgoos;
 let moxgoarch;
@@ -2457,6 +2477,7 @@ const cmdSettings = async () => {
 	let quoting;
 	let showAddressSecurity;
 	let showHTML;
+	let composeHTML;
 	let showShortcuts;
 	let showHeaders;
 	if (!accountSettings) {
@@ -2471,13 +2492,14 @@ const cmdSettings = async () => {
 			Quoting: quoting.value,
 			ShowAddressSecurity: showAddressSecurity.checked,
 			ShowHTML: showHTML.checked,
+			ComposeHTML: composeHTML.checked,
 			NoShowShortcuts: !showShortcuts.checked,
 			ShowHeaders: showHeaders.value.split('\n').map(s => s.trim()).filter(s => !!s),
 		};
 		await withDisabled(fieldset, client.SettingsSave(accSet));
 		accountSettings = accSet;
 		remove();
-	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show email as HTML instead of text by default for first-time senders', attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showShortcuts = dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')), ' Show shortcut keys in bottom left after interaction with mouse'), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Show additional headers'), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join('\n')), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: 'italic' }), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.')), dom.div(style({ marginTop: '2ex' }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
+	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show email as HTML instead of text by default for first-time senders', attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.')), dom.label(style({ margin: '1ex 0', display: 'block' }), composeHTML = dom.input(attr.type('checkbox'), accountSettings.ComposeHTML ? attr.checked('') : []), ' Compose new messages in HTML by default'), dom.label(style({ margin: '1ex 0', display: 'block' }), showShortcuts = dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')), ' Show shortcut keys in bottom left after interaction with mouse'), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Show additional headers'), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join('\n')), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: 'italic' }), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.')), dom.div(style({ marginTop: '2ex' }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
 		if (!window.navigator.registerProtocolHandler) {
 			window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
 			return;
@@ -2616,6 +2638,51 @@ const cmdTooltip = async () => {
 	}));
 };
 let composeView = null;
+// plainToHTML converts plain text to simple HTML for the editor: escapes special
+// characters and turns newlines into <br>.
+const plainToHTML = (s) => {
+	const esc = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	return esc.split('\n').join('<br>');
+};
+// htmlToPlain converts editor HTML to plain text for the textarea, inserting
+// newlines for <br> and block elements and prefixing <blockquote> lines with
+// "> ", roughly mirroring the server's HTMLToText. Used for the editing buffer
+// when switching to plain text; the text/plain part actually sent is derived
+// server-side.
+const blockTags = {
+	P: true, DIV: true, LI: true, TR: true, PRE: true, HR: true,
+	H1: true, H2: true, H3: true, H4: true, H5: true, H6: true,
+	UL: true, OL: true, TABLE: true, DL: true, DD: true, DT: true,
+};
+const htmlToPlain = (s) => {
+	const render = (node) => {
+		let out = '';
+		for (let c = node.firstChild; c; c = c.nextSibling) {
+			if (c.nodeType === Node.TEXT_NODE) {
+				out += (c.textContent || '').replace(/\u00a0/g, ' ');
+			}
+			else if (c.nodeType === Node.ELEMENT_NODE) {
+				const el = c;
+				if (el.tagName === 'BR') {
+					out += '\n';
+					continue;
+				}
+				if (el.tagName === 'BLOCKQUOTE') {
+					const inner = render(el).replace(/\n+$/, '').split('\n').map(l => '> ' + l).join('\n');
+					out += (out && !out.endsWith('\n') ? '\n' : '') + inner + '\n';
+					continue;
+				}
+				out += render(el);
+				if (blockTags[el.tagName] && !out.endsWith('\n')) {
+					out += '\n';
+				}
+			}
+		}
+		return out;
+	};
+	const doc = new window.DOMParser().parseFromString(s, 'text/html');
+	return render(doc.body).replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim();
+};
 const compose = (opts, listMailboxes) => {
 	log('compose', opts);
 	if (composeView) {
@@ -2629,6 +2696,11 @@ const compose = (opts, listMailboxes) => {
 	let subjectAutosize;
 	let subject;
 	let body;
+	let bodyhtml; // contenteditable host for Squire in HTML mode.
+	let htmltoolbar; // formatting toolbar, shown only in HTML mode.
+	let fontFamily, fontSize, fontColor;
+	let editor = null;
+	let modeHTML = opts.modeHTML || !!opts.htmlBody || (accountSettings?.ComposeHTML ?? false);
 	let attachments;
 	let requiretls;
 	let toBtn, ccBtn, bccBtn, replyToBtn, customFromBtn;
@@ -2642,15 +2714,69 @@ const compose = (opts, listMailboxes) => {
 	let draftMessageID = opts.draftMessageID || 0;
 	let draftSaveTimer = 0;
 	let draftSavePromise = Promise.resolve(0);
-	let draftLastText = opts.body;
+	let draftLastText = (opts.body || '') + '\x00' + (opts.htmlBody || '');
 	const draftCancelSaveTimer = () => {
 		if (draftSaveTimer) {
 			window.clearTimeout(draftSaveTimer);
 			draftSaveTimer = 0;
 		}
 	};
+	// Current body as plain text, regardless of mode.
+	const bodyText = () => modeHTML && editor ? htmlToPlain(editor.getHTML()) : body.value;
+	// Current body as HTML when in HTML mode, else empty.
+	const bodyHTML = () => modeHTML && editor ? editor.getHTML() : '';
+	const ensureEditor = () => {
+		if (!editor) {
+			editor = new Squire(bodyhtml);
+			if (listMailboxes().find(mb => mb.Draft)) {
+				editor.getRoot().addEventListener('input', () => draftScheduleSave());
+			}
+		}
+	};
+	// A toolbar button that runs an editor command. The mousedown preventDefault is
+	// essential: a button click would otherwise move focus out of the contenteditable
+	// and collapse the selection, so block commands (lists, quote) would operate on
+	// nothing. With focus kept, the command runs on the live selection.
+	const fmtButton = (label, title, action) => dom.clickbutton(label, attr.title(title), function mousedown(e) { e.preventDefault(); }, function click() { ensureEditor(); action(); editor.focus(); });
+	// <select>/<input> controls (font, size, colour) take focus from the editor,
+	// unlike buttons (which can preventDefault on mousedown). So we capture the
+	// editor selection when the control is touched and restore it before applying.
+	let savedRange = null;
+	const captureRange = () => { ensureEditor(); savedRange = editor.getSelection(); };
+	const fmtApply = (action) => {
+		ensureEditor();
+		if (savedRange) {
+			editor.setSelection(savedRange);
+		}
+		action();
+		editor.focus();
+	};
+	const setModeHTML = (on) => {
+		if (on === modeHTML) {
+			return;
+		}
+		if (on) {
+			ensureEditor();
+			editor.setHTML(plainToHTML(body.value));
+			body.style.display = 'none';
+			bodyhtml.style.display = '';
+			htmltoolbar.style.display = '';
+		}
+		else {
+			if (editor && !window.confirm('Switch to plain text? HTML formatting will be lost.')) {
+				return;
+			}
+			body.value = editor ? htmlToPlain(editor.getHTML()) : body.value;
+			bodyhtml.style.display = 'none';
+			htmltoolbar.style.display = 'none';
+			body.style.display = '';
+		}
+		modeHTML = on;
+	};
+	// Snapshot of the body used for unsaved-change detection across both modes.
+	const bodySnapshot = () => bodyText() + '\x00' + bodyHTML();
 	const draftScheduleSave = () => {
-		if (draftSaveTimer || body.value === draftLastText) {
+		if (draftSaveTimer || bodySnapshot() === draftLastText) {
 			return;
 		}
 		draftSaveTimer = window.setTimeout(async () => {
@@ -2672,7 +2798,8 @@ const compose = (opts, listMailboxes) => {
 			Bcc: bccViews.map(v => v.input.value).filter(s => s),
 			ReplyTo: replyTo,
 			Subject: subject.value,
-			TextBody: body.value,
+			TextBody: bodyText(),
+			HTMLBody: bodyHTML(),
 			ResponseMessageID: opts.responseMessageID || 0,
 			DraftMessageID: draftMessageID,
 		};
@@ -2687,11 +2814,11 @@ const compose = (opts, listMailboxes) => {
 		finally {
 			draftSavePromise = Promise.resolve(0);
 		}
-		draftLastText = cm.TextBody;
+		draftLastText = cm.TextBody + '\x00' + (cm.HTMLBody || '');
 	};
 	// todo future: on visibilitychange with visibilityState "hidden", use navigator.sendBeacon to save latest modified draft message?
 	// When window is closed, ask user to cancel due to unsaved changes.
-	const unsavedChanges = () => opts.body !== body.value && (!draftMessageID || draftLastText !== body.value);
+	const unsavedChanges = () => ((opts.body || '') + '\x00' + (opts.htmlBody || '')) !== bodySnapshot() && (!draftMessageID || draftLastText !== bodySnapshot());
 	// In Firefox, ctrl-w doesn't seem interceptable when focus is on a button. It is
 	// when focus is on a textarea or not any specific UI element. So this isn't always
 	// triggered. But we still have the beforeunload handler that checks for
@@ -2771,7 +2898,8 @@ const compose = (opts, listMailboxes) => {
 			ReplyTo: replyTo,
 			UserAgent: 'moxwebmail/' + moxversion,
 			Subject: subject.value,
-			TextBody: body.value,
+			TextBody: bodyText(),
+			HTMLBody: bodyHTML(),
 			Attachments: files,
 			ForwardAttachments: forwardAttachmentPaths.length === 0 ? { MessageID: 0, Paths: [] } : { MessageID: opts.attachmentsMessageItem.Message.ID, Paths: forwardAttachmentPaths },
 			IsForward: opts.isForward || false,
@@ -3107,6 +3235,7 @@ const compose = (opts, listMailboxes) => {
 	}))))), body = dom.textarea(dom._class('mono'), style({
 		flexGrow: '1',
 		width: '100%',
+		display: modeHTML ? 'none' : '',
 	}), initHeight === 0 ? attr.rows('15') : [], // Drives default size, removed on compose window resize.
 	// Explicit string object so it doesn't get the highlight-unicode-block-changes
 	// treatment, which would cause characters to disappear.
@@ -3116,7 +3245,23 @@ const compose = (opts, listMailboxes) => {
 		}
 	}, !listMailboxes().find(mb => mb.Draft) ? [] : function input() {
 		draftScheduleSave();
-	}), !(opts.attachmentsMessageItem && opts.attachmentsMessageItem.Attachments && opts.attachmentsMessageItem.Attachments.length > 0) ? [] : dom.div(style({ margin: '.5em 0' }), 'Forward attachments: ', forwardAttachmentViews = (opts.attachmentsMessageItem?.Attachments || []).map(a => {
+	}), htmltoolbar = dom.div(style({ display: modeHTML ? '' : 'none', margin: '.25em 0' }), fmtButton('B', 'Bold (Ctrl/Cmd+B). Toggles on the selection.', () => editor.hasFormat('B') ? editor.removeBold() : editor.bold()), ' ', fmtButton('I', 'Italic (Ctrl/Cmd+I).', () => editor.hasFormat('I') ? editor.removeItalic() : editor.italic()), ' ', fmtButton('U', 'Underline (Ctrl/Cmd+U).', () => editor.hasFormat('U') ? editor.removeUnderline() : editor.underline()), ' ', fmtButton('• List', 'Bulleted list (toggle).', () => editor.hasFormat('UL') ? editor.removeList() : editor.makeUnorderedList()), ' ', fmtButton('1. List', 'Numbered list (toggle).', () => editor.hasFormat('OL') ? editor.removeList() : editor.makeOrderedList()), ' ', fmtButton('Quote +', 'Increase quote level.', () => editor.increaseQuoteLevel()), ' ', fmtButton('Quote −', 'Decrease quote level.', () => editor.decreaseQuoteLevel()), ' ', fmtButton('Link', 'Insert link.', () => { const url = window.prompt('Link URL:', 'https://'); if (url) {
+		editor.makeLink(url);
+	} }), ' ', fontFamily = dom.select(attr.title('Font family.'), function mousedown() { captureRange(); }, function focus() { captureRange(); }, function change() { fmtApply(() => editor.setFontFace(fontFamily.value || null)); }, dom.option('Font', attr.value('')), dom.option('Sans-serif', attr.value('sans-serif')), dom.option('Serif', attr.value('serif')), dom.option('Monospace', attr.value('monospace')), dom.option('Arial', attr.value('Arial')), dom.option('Georgia', attr.value('Georgia')), dom.option('Verdana', attr.value('Verdana')), dom.option('Tahoma', attr.value('Tahoma'))), ' ', fontSize = dom.select(attr.title('Font size.'), function mousedown() { captureRange(); }, function focus() { captureRange(); }, function change() { fmtApply(() => editor.setFontSize(fontSize.value || null)); }, dom.option('Size', attr.value('')), dom.option('Small', attr.value('0.85em')), dom.option('Normal', attr.value('1em')), dom.option('Large', attr.value('1.35em')), dom.option('Huge', attr.value('2em'))), ' ', fontColor = dom.input(attr.type('color'), attr.title('Text colour.'), function mousedown() { captureRange(); }, function focus() { captureRange(); }, function change() { fmtApply(() => editor.setTextColor(fontColor.value)); })), bodyhtml = dom.div(dom._class('htmleditor'), style({
+		flexGrow: '1',
+		// A contenteditable div, unlike <textarea>, has no intrinsic height and
+		// doesn't scroll its own content. Without a bounded height it grows with
+		// the (possibly huge quoted) content and pushes the form off-screen. So
+		// we give it a default height when the compose window hasn't been resized
+		// yet (mirroring the textarea's rows=15) and scroll the overflow; once
+		// the window is resized, flex-grow + min-height:0 size it to the window.
+		minHeight: '0',
+		width: '100%',
+		display: modeHTML ? '' : 'none',
+		overflow: 'auto',
+		border: '1px solid #ccc',
+		padding: '0 .25em',
+	}), initHeight === 0 ? style({ height: '15em' }) : []), !(opts.attachmentsMessageItem && opts.attachmentsMessageItem.Attachments && opts.attachmentsMessageItem.Attachments.length > 0) ? [] : dom.div(style({ margin: '.5em 0' }), 'Forward attachments: ', forwardAttachmentViews = (opts.attachmentsMessageItem?.Attachments || []).map(a => {
 		const filename = a.Filename || '(unnamed)';
 		const size = formatSize(a.Part.DecodedSize);
 		const checkbox = dom.input(attr.type('checkbox'), function change() { checkAttachments(); });
@@ -3164,7 +3309,9 @@ const compose = (opts, listMailboxes) => {
 		scheduleTime.value = '';
 	}), dom.div(style({ marginTop: '1ex' }), scheduleTime = dom.input(attr.type('datetime-local'), function change() {
 		scheduleTimeChanged();
-	}), ' in local timezone ' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '') + ', ', scheduleWeekday = dom.span()))), dom.div(style({ margin: '3ex 0 1ex 0', display: 'block' }), dom.submitbutton('Send'), ' ', opts.responseMessageID && listMailboxes().find(mb => mb.Archive) ? dom.clickbutton('Send and archive thread', clickCmd(cmdSendArchive, shortcuts)) : [])), async function submit(e) {
+	}), ' in local timezone ' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '') + ', ', scheduleWeekday = dom.span()))), dom.div(style({ margin: '3ex 0 1ex 0', display: 'block' }), dom.submitbutton('Send'), ' ', opts.responseMessageID && listMailboxes().find(mb => mb.Archive) ? dom.clickbutton('Send and archive thread', clickCmd(cmdSendArchive, shortcuts)) : [], ' ', dom.clickbutton('Plain/HTML', attr.title('Toggle between plain text and HTML editing.'), function click() {
+		setModeHTML(!modeHTML);
+	}))), async function submit(e) {
 		e.preventDefault();
 		shortcutCmd(cmdSend, shortcuts);
 	}));
@@ -3184,9 +3331,16 @@ const compose = (opts, listMailboxes) => {
 	if (!opts.replyto) {
 		replyToRow.style.display = 'none';
 	}
+	if (modeHTML) {
+		ensureEditor();
+		editor.setHTML(opts.htmlBody || plainToHTML(opts.body || ''));
+	}
 	document.body.appendChild(composeElem);
 	if (toViews.length > 0 && !toViews[0].input.value) {
 		toViews[0].input.focus();
+	}
+	else if (modeHTML) {
+		editor.focus();
 	}
 	else {
 		body.focus();
@@ -3696,6 +3850,27 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			body = pm.Texts[0];
 		}
 		body = body.replace(/\r/g, '').replace(/\n\n\n\n*/g, '\n\n').trim();
+		// HTML mode if the account prefers it or the original has HTML we can quote.
+		const wantHTML = (accountSettings?.ComposeHTML ?? false) || pm.HasHTML;
+		let htmlBody = '';
+		let savedQuoteHTML = '';
+		if (wantHTML) {
+			if (pm.HasHTML) {
+				savedQuoteHTML = await withStatus('Loading quote', client.MessageComposeQuoteHTML(m.ID));
+			}
+			if (!savedQuoteHTML) {
+				savedQuoteHTML = plainToHTML(body);
+			}
+			let attribution = '';
+			if (!forward && mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
+				const fa = mi.Envelope.From[0];
+				const name = fa.Name || formatEmail(fa);
+				const datetime = mi.Envelope.Date.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" }) + ' at ' + mi.Envelope.Date.toLocaleTimeString();
+				attribution = plainToHTML('On ' + datetime + ', ' + name + ' wrote:');
+			}
+			const sig = accountSettings?.Signature ? plainToHTML(accountSettings.Signature) : '';
+			htmlBody = '<p><br></p>' + (sig ? sig + '<br>' : '') + (attribution ? attribution + '<br>' : '') + '<blockquote>' + savedQuoteHTML + '</blockquote>';
+		}
 		let editOffset = 0;
 		if (forward) {
 			const env = mi.Envelope;
@@ -3727,6 +3902,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			add('Reply-To:', replyTo);
 			add('To:', to);
 			add('Cc:', cc);
+			if (wantHTML) {
+				const sig = accountSettings?.Signature ? plainToHTML(accountSettings.Signature) : '';
+				htmlBody = '<p><br></p>' + (sig ? sig + '<br>' : '') + plainToHTML(prefix) + '<blockquote>' + savedQuoteHTML + '</blockquote>';
+			}
 			body = prefix + '\n' + body;
 		}
 		else {
@@ -3758,6 +3937,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			bcc: bcc.map(a => formatAddress(a)),
 			subject: subject,
 			body: body,
+			htmlBody: htmlBody || undefined,
+			modeHTML: wantHTML,
 			isForward: forward,
 			attachmentsMessageItem: forward ? mi : undefined,
 			responseMessageID: m.ID,
@@ -3857,6 +4038,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo));
 		}
 		const pm = await parsedMessagePromise;
+		let htmlBody = '';
+		if (pm.HasHTML) {
+			htmlBody = await withStatus('Loading draft body', client.MessageComposeQuoteHTML(m.ID));
+		}
 		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i);
 		const opts = {
 			from: (env.From || []),
@@ -3867,6 +4052,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			subject: env.Subject,
 			isForward: isForward,
 			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+			htmlBody: htmlBody || undefined,
+			modeHTML: !!htmlBody,
 			responseMessageID: refMsgID,
 			draftMessageID: m.ID,
 		};

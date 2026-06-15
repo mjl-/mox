@@ -184,6 +184,26 @@
 			]
 		},
 		{
+			"Name": "MessageComposeQuoteHTML",
+			"Docs": "MessageComposeQuoteHTML returns the first text/html part of the message with\nthe given ID, cleaned to the safe \"Balanced\" HTML subset, for use as a quote\nwhen replying or forwarding. Returns an empty string if the message has no\nHTML part.",
+			"Params": [
+				{
+					"Name": "messageID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "htmlBody",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "MessageSubmit",
 			"Docs": "MessageSubmit sends a message by submitting it the outgoing email queue. The\nmessage is sent to all addresses listed in the To, Cc and Bcc addresses, without\nBcc message header.\n\nIf a Sent mailbox is configured, messages are added to it after submitting\nto the delivery queue. If Bcc addresses were present, a header is prepended\nto the message stored in the Sent mailbox.",
 			"Params": [
@@ -1462,6 +1482,13 @@
 					]
 				},
 				{
+					"Name": "HTMLBody",
+					"Docs": "If non-empty, draft is stored as multipart/alternative.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "ResponseMessageID",
 					"Docs": "If set, this was a reply or forward, based on IsForward.",
 					"Typewords": [
@@ -1529,6 +1556,13 @@
 				{
 					"Name": "TextBody",
 					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HTMLBody",
+					"Docs": "If non-empty, message is sent as multipart/alternative with a server-derived text/plain part.",
 					"Typewords": [
 						"string"
 					]
@@ -1873,6 +1907,13 @@
 				{
 					"Name": "ShowHTML",
 					"Docs": "Show HTML version of message by default, instead of plain text.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ComposeHTML",
+					"Docs": "Compose new messages in HTML by default, instead of plain text.",
 					"Typewords": [
 						"bool"
 					]

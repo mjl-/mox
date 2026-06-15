@@ -840,6 +840,9 @@ type Settings struct {
 	// Show HTML version of message by default, instead of plain text.
 	ShowHTML bool
 
+	// Compose new messages in HTML by default, instead of plain text.
+	ComposeHTML bool
+
 	// If true, don't show shortcuts in webmail after mouse interaction.
 	NoShowShortcuts bool
 
