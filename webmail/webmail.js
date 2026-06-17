@@ -311,7 +311,7 @@ var api;
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "CreateSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "Expunged", "Docs": "", "Typewords": ["bool"] }, { "Name": "ParentID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
 		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
-		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "NoShowShortcuts", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHeaders", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "WebmailTheme", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailScheme", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailAccent", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListScale", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailSubjectScale", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListFromStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListSubjectStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListPreviewStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListDateStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailViewSenderStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailUnreadStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "NoShowShortcuts", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHeaders", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Settings", "Docs": "", "Typewords": ["Settings"] }, { "Name": "AccountPath", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparators", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
@@ -1133,7 +1133,10 @@ const css = (className, styles, important) => {
 // todo: reduce number of colors. hopefully we can derive some colors from a few base colors (making them brighter/darker, or shifting hue, etc). then make them configurable through settings.
 // todo: add the standard padding and border-radius, perhaps more.
 // We define css variables, making them easy to override.
-ensureCSS(':root', {
+// Base colour tokens. Each value is [light, dark]. These drive the automatic
+// light/dark behaviour (:root + prefers-color-scheme) AND the forced-scheme
+// rules (html.scheme-light / html.scheme-dark) added below.
+const baseTokens = {
 	'--color': ['black', '#ddd'],
 	'--colorMild': ['#555', '#bbb'],
 	'--colorMilder': ['#666', '#aaa'],
@@ -1165,18 +1168,208 @@ ensureCSS(':root', {
 	'--warningBackgroundColor': ['#ffca91', '#a85700'],
 	'--successBackground': ['#d2f791', '#1fa204'],
 	'--emphasisBackground': ['#666', '#aaa'],
-	// For authentication/security results.
-	'--underlineGreen': '#50c40f',
-	'--underlineRed': '#e15d1c',
-	'--underlineBlue': '#09f',
-	'--underlineGrey': '#888',
+	'--underlineGreen': ['#50c40f', '#50c40f'],
+	'--underlineRed': ['#e15d1c', '#e15d1c'],
+	'--underlineBlue': ['#09f', '#09f'],
+	'--underlineGrey': ['#888', '#888'],
 	'--quoted1Color': ['#03828f', '#71f2ff'],
 	'--quoted2Color': ['#c7445c', '#ec4c4c'],
 	'--quoted3Color': ['#417c10', '#73e614'],
 	'--scriptSwitchUnderlineColor': ['#dca053', '#e88f1e'],
 	'--linkColor': ['#096bc2', '#63b6ff'],
 	'--linkVisitedColor': ['#0704c1', '#c763ff'],
+	// New in phase 2. Accent is unused by the classic look (so adds no visual
+	// change); the modern theme (stage 2) routes accented elements through it.
+	'--accent': ['#2b6cff', '#2b6cff'],
+	'--accentText': ['#ffffff', '#ffffff'],
+	'--radius': ['.4em', '.4em'],
+};
+ensureCSS(':root', baseTokens);
+// pickScheme returns a single-valued token map (light=index 0, dark=index 1)
+// for use in a forced-scheme rule.
+const pickScheme = (i) => {
+	const m = {};
+	for (const [k, v] of Object.entries(baseTokens)) {
+		m[k] = v[i];
+	}
+	return m;
+};
+// High-contrast token maps: maximal contrast, solid borders, no faint tints.
+const hcLightTokens = {
+	'--color': '#000000', '--colorMild': '#000000', '--colorMilder': '#1a1a1a',
+	'--backgroundColor': '#ffffff', '--backgroundColorMild': '#ffffff', '--backgroundColorMilder': '#000000',
+	'--borderColor': '#000000', '--mailboxesTopBackgroundColor': '#ffffff', '--msglistBackgroundColor': '#ffffff',
+	'--boxShadow': '0 0 0 1px #000',
+	'--buttonBackground': '#ffffff', '--buttonBorderColor': '#000000', '--buttonHoverBackground': '#e6e6e6',
+	'--overlayOpaqueBackgroundColor': '#ffffff', '--overlayBackgroundColor': 'rgba(0,0,0,0.5)',
+	'--popupColor': '#000000', '--popupBackgroundColor': '#ffffff', '--popupBorderColor': '#000000',
+	'--highlightBackground': '#0044cc', '--highlightBorderColor': '#000000', '--highlightBackgroundHover': '#0033aa',
+	'--mailboxActiveBackground': '#0044cc', '--mailboxHoverBackgroundColor': '#d6e4ff',
+	'--msgItemActiveBackground': '#0044cc', '--msgItemHoverBackgroundColor': '#d6e4ff', '--msgItemFocusBorderColor': '#0044cc',
+	'--buttonTristateOnBackground': '#006600', '--buttonTristateOffBackground': '#990000',
+	'--warningBackgroundColor': '#ffdd00', '--successBackground': '#006600', '--emphasisBackground': '#000000',
+	'--underlineGreen': '#006600', '--underlineRed': '#990000', '--underlineBlue': '#0044cc', '--underlineGrey': '#000000',
+	'--quoted1Color': '#000000', '--quoted2Color': '#000000', '--quoted3Color': '#000000',
+	'--scriptSwitchUnderlineColor': '#990000',
+	'--linkColor': '#0000ee', '--linkVisitedColor': '#551a8b',
+	'--accent': '#0044cc', '--accentText': '#ffffff', '--radius': '.4em',
+};
+const hcDarkTokens = {
+	'--color': '#ffffff', '--colorMild': '#ffffff', '--colorMilder': '#e6e6e6',
+	'--backgroundColor': '#000000', '--backgroundColorMild': '#000000', '--backgroundColorMilder': '#ffffff',
+	'--borderColor': '#ffffff', '--mailboxesTopBackgroundColor': '#000000', '--msglistBackgroundColor': '#000000',
+	'--boxShadow': '0 0 0 1px #fff',
+	'--buttonBackground': '#000000', '--buttonBorderColor': '#ffffff', '--buttonHoverBackground': '#1a1a1a',
+	'--overlayOpaqueBackgroundColor': '#000000', '--overlayBackgroundColor': 'rgba(0,0,0,0.7)',
+	'--popupColor': '#ffffff', '--popupBackgroundColor': '#000000', '--popupBorderColor': '#ffffff',
+	'--highlightBackground': '#66aaff', '--highlightBorderColor': '#ffffff', '--highlightBackgroundHover': '#3388ff',
+	'--mailboxActiveBackground': '#0066ff', '--mailboxHoverBackgroundColor': '#003366',
+	'--msgItemActiveBackground': '#0066ff', '--msgItemHoverBackgroundColor': '#003366', '--msgItemFocusBorderColor': '#66aaff',
+	'--buttonTristateOnBackground': '#00cc00', '--buttonTristateOffBackground': '#ff5555',
+	'--warningBackgroundColor': '#ffdd00', '--successBackground': '#00cc00', '--emphasisBackground': '#ffffff',
+	'--underlineGreen': '#00ff00', '--underlineRed': '#ff5555', '--underlineBlue': '#66aaff', '--underlineGrey': '#ffffff',
+	'--quoted1Color': '#ffffff', '--quoted2Color': '#ffffff', '--quoted3Color': '#ffffff',
+	'--scriptSwitchUnderlineColor': '#ffaa00',
+	'--linkColor': '#66aaff', '--linkVisitedColor': '#cc99ff',
+	'--accent': '#66aaff', '--accentText': '#000000', '--radius': '.4em',
+};
+// Forced schemes: a class on <html> overrides the auto (:root + media query)
+// tokens. Specificity of html.scheme-* (0,1,1) beats :root (0,1,0).
+ensureCSS('html.scheme-light', pickScheme(0));
+ensureCSS('html.scheme-dark', pickScheme(1));
+ensureCSS('html.scheme-hclight', hcLightTokens);
+ensureCSS('html.scheme-hcdark', hcDarkTokens);
+// Modern message list: 2-line layout with avatar, subject line and preview line.
+ensureCSS('.theme-modern .msgItem', {
+	display: 'grid',
+	// Far-left "flags" column holds the thread expand/collapse control (the flag
+	// letters themselves are hidden); it is ~0 wide when there is no control.
+	gridTemplateColumns: 'auto auto minmax(0, 1fr) auto',
+	gridTemplateAreas: '"flags avatar from age" "flags avatar subject subject"',
+	columnGap: '.5em',
+	alignItems: 'center',
+	padding: '.45em .6em',
+	border: '1px solid transparent',
+	borderRadius: 'var(--radius)',
+	// Positioning context for the full-height thread connector bar.
+	position: 'relative',
+	// Configurable list text size (1 = 100%); set via --ml-scale by applyAppearance.
+	fontSize: 'calc(1em * var(--ml-scale, 1))',
 });
+ensureCSS('.theme-modern .msgItemCell', { padding: 0, width: 'auto' });
+// Override the runtime column widths set by updateMsglistWidths.
+// Keep the flags cell (it holds the thread expand/collapse control); hide only the
+// flag letters.
+ensureCSS('.theme-modern .msgItemFlags', { gridArea: 'flags', display: 'flex', alignItems: 'center', padding: 0, width: 'auto' });
+ensureCSS('.theme-modern .msgItemFlag', { display: 'none' });
+// Thread connector: a full-height vertical line on the left, anchored to the whole
+// item (not the from cell). The first/last/middle variant classes still set
+// top/bottom for the half-bars at thread ends.
+ensureCSS('.theme-modern .msgItemFrom', { gridArea: 'from', width: 'auto', position: 'static' });
+// Configurable per-element weight/style (defaults: sender bold, the rest normal).
+ensureCSS('.theme-modern .msgItemFromText', { fontWeight: 'var(--ml-from-weight, bold)', fontStyle: 'var(--ml-from-style, normal)' });
+ensureCSS('.theme-modern .msgItemThreadBar', { left: '.55em', right: 'auto', borderLeft: '2px solid var(--colorMild)', borderRight: 'none' });
+// The bar is anchored to the full item (which has .45em vertical padding), so the
+// default ±1px end offsets fall short of the row edges and leave seams between
+// rows. Overshoot by half an em so consecutive segments overlap into one solid
+// line, and shape the thread ends: the root gets a short tail reaching up toward
+// the collapse control, the last message a short stub marking the end.
+ensureCSS('.theme-modern .msgItemThreadBarMiddle', { top: '-.5em', bottom: '-.5em' });
+ensureCSS('.theme-modern .msgItemThreadBarFirst', { top: '40%', bottom: '-.5em' });
+ensureCSS('.theme-modern .msgItemThreadBarLast', { top: '-.5em', bottom: '50%' });
+ensureCSS('.theme-modern .msgItemSubject', { gridArea: 'subject', width: 'auto' });
+ensureCSS('.theme-modern .msgItemAge', { gridArea: 'age', width: 'auto', color: 'var(--colorMilder)', fontWeight: 'var(--ml-date-weight, normal)', fontStyle: 'var(--ml-date-style, normal)' });
+ensureCSS('.theme-modern .msgItemAvatar', {
+	display: 'flex',
+	gridArea: 'avatar',
+	alignItems: 'center',
+	justifyContent: 'center',
+	width: '34px',
+	height: '34px',
+	borderRadius: '50%',
+	color: '#fff',
+	fontWeight: 'bold',
+	alignSelf: 'center',
+});
+// Subject and preview flow inline within a 2-line clamped box: the subject takes
+// priority (a long subject wraps to the second line), and the muted preview fills
+// whatever room is left.
+ensureCSS('.theme-modern .msgItemSubjectText', { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: '2', overflow: 'hidden', whiteSpace: 'normal' });
+ensureCSS('.theme-modern .msgItemSubjectTitle', { display: 'inline', fontWeight: 'var(--ml-subj-weight, normal)', fontStyle: 'var(--ml-subj-style, normal)' });
+ensureCSS('.theme-modern .msgItemSubjectSnippet', { display: 'inline', margin: 0, fontWeight: 'var(--ml-prev-weight, normal)', fontStyle: 'var(--ml-prev-style, normal)' });
+// Unread emphasis, selected in Settings and reflected as an html.unread-* class:
+// accent bar on the left (default and "barbold"), bold sender/subject ("bold" and
+// "barbold"), an accent-tinted row ("tint"), or a left dot ("dot"). All modern-only.
+ensureCSS('.theme-modern.unread-bar .msgItem.msgItemUnread, .theme-modern.unread-barbold .msgItem.msgItemUnread', { boxShadow: 'inset .2em 0 0 var(--accent)' });
+ensureCSS('.theme-modern.unread-bold .msgItem.msgItemUnread .msgItemFromText, .theme-modern.unread-bold .msgItem.msgItemUnread .msgItemSubjectTitle, .theme-modern.unread-barbold .msgItem.msgItemUnread .msgItemFromText, .theme-modern.unread-barbold .msgItem.msgItemUnread .msgItemSubjectTitle', { fontWeight: 'bold' });
+ensureCSS('.theme-modern.unread-tint .msgItem.msgItemUnread', { background: 'color-mix(in srgb, var(--accent) 10%, transparent)' });
+ensureCSS('.theme-modern.unread-dot .msgItem.msgItemUnread::after', { content: '""', position: 'absolute', left: '.2em', top: '50%', transform: 'translateY(-50%)', width: '.5em', height: '.5em', borderRadius: '50%', background: 'var(--accent)' });
+// Selection and hover use the accent tint and rounded corners (override classic).
+ensureCSS('.theme-modern .msgItem.active', { background: 'color-mix(in srgb, var(--accent) 18%, transparent)' }, true);
+ensureCSS('.theme-modern .msgItem:hover', { backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)' }, true);
+// Modern top bar: pill search, accent Compose button.
+ensureCSS('.theme-modern .searchbarElem', { borderRadius: '1em', padding: '.2em .8em' });
+ensureCSS('.theme-modern .composeButton', { background: 'var(--accent)', color: 'var(--accentText)', borderColor: 'transparent' }, true);
+ensureCSS('.theme-modern .composeButton:hover:not(:disabled)', { background: 'color-mix(in srgb, var(--accent) 85%, var(--color))' }, true);
+// Modern folder list: icons, rounded accent-tinted active row, hover, count badge.
+ensureCSS('.theme-modern .mailboxItem', { borderRadius: 'var(--radius)' });
+ensureCSS('.theme-modern .mailboxItem.active', { background: 'color-mix(in srgb, var(--accent) 18%, transparent)' }, true);
+ensureCSS('.theme-modern .mailboxItem:hover', { backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)' }, true);
+ensureCSS('.theme-modern .mailboxIcon', { display: 'inline-block', width: '1.3em', marginRight: '.3em', textAlign: 'center', flex: 'none' });
+ensureCSS('.theme-modern .mailboxUnread:not(:empty)', { background: 'var(--accent)', color: 'var(--accentText)', borderRadius: '1em', padding: '0 .5em', fontSize: '.85em', fontWeight: 'normal' });
+// Modern reading pane: reorder the header into a flex column — large subject, then
+// avatar+sender (with a Details disclosure), then the action pills, then the detail
+// block (the classic header table is collapsed by default). Classic is untouched
+// because the modern elements are display:none there.
+ensureCSS('.theme-modern .msgmeta', { display: 'flex', flexDirection: 'column', padding: '.6em .8em', gap: '.15em' });
+ensureCSS('.theme-modern .msgModernSubject', { display: 'block', order: '1', margin: '.1em 0 .2em', fontSize: 'calc(1.5em * var(--mv-subj-scale, 1))', fontWeight: '600', lineHeight: '1.25' });
+ensureCSS('.theme-modern .msgModernSender', { display: 'flex', order: '2', alignItems: 'center', gap: '.6em', marginBottom: '.35em' });
+ensureCSS('.theme-modern .msgButtons', { order: '3' });
+ensureCSS('.theme-modern .msgDetails', { order: '4' });
+ensureCSS('.theme-modern .headerBodySeparator', { order: '5' });
+// Avatar + sender identity line.
+ensureCSS('.theme-modern .msgModernAvatar', { display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', width: '40px', height: '40px', borderRadius: '50%', color: '#fff', fontWeight: 'bold' });
+ensureCSS('.theme-modern .msgModernSenderText', { display: 'flex', flexDirection: 'column', minWidth: '0' });
+ensureCSS('.theme-modern .msgModernSenderName', { fontWeight: 'var(--mv-sender-weight, 600)', fontStyle: 'var(--mv-sender-style, normal)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+ensureCSS('.theme-modern .msgModernSenderTime', { color: 'var(--colorMild)', fontSize: '.9em' });
+// Header actions live at the right end of the sender line: the mode dropdown
+// (Text/HTML) and the Details disclosure, both small rounded pills like the other
+// modern buttons. The classic inline Text/HTML row is hidden here.
+ensureCSS('.theme-modern .msgModernSenderActions', { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.4em', flex: 'none' });
+ensureCSS('.theme-modern .msgModernSenderActions button', { borderRadius: '1em', padding: '.15em .7em', fontSize: '.85em' }, true);
+ensureCSS('.theme-modern .msgMode', { display: 'none' });
+// Details (recipients + date) collapsed by default; the Details toggle reveals the
+// classic header table.
+ensureCSS('.theme-modern .msgmeta .msgHeaders', { display: 'none' });
+ensureCSS('.theme-modern .msgmeta.detailsExpanded .msgHeaders', { display: 'table' });
+// Action buttons as pills, with an accent Reply. (important to beat the generic
+// button rules, which tie on specificity by source order.)
+ensureCSS('.theme-modern .msgmeta .msgButtons button', { borderRadius: '1em', padding: '.25em .9em' }, true);
+ensureCSS('.theme-modern .msgmeta .msgReplyButton', { background: 'var(--accent)', color: 'var(--accentText)', borderColor: 'transparent' }, true);
+ensureCSS('.theme-modern .msgmeta .msgReplyButton:hover:not(:disabled)', { background: 'color-mix(in srgb, var(--accent) 85%, var(--color))' }, true);
+// Comfortable body padding.
+ensureCSS('.theme-modern .msgscroll', { padding: '1em 1.2em' });
+// Modern message-list filter/sort toolbar: drop the "Refine:" label, keep both
+// groups on a single nowrap row, render the quick filters as compact rounded
+// icon pills so it fits even at narrow widths.
+ensureCSS('.theme-modern .refineTitle', { display: 'none' });
+ensureCSS('.theme-modern .msgListFilterSorting', { padding: '.3em .5em', gap: '.5em', alignItems: 'center' });
+ensureCSS('.theme-modern .msgListFilterSorting > div', { display: 'flex', alignItems: 'center', gap: '.35em', flexWrap: 'nowrap' });
+ensureCSS('.theme-modern .msgListFilterSorting .btngroup', { display: 'inline-flex', alignItems: 'center', gap: '.3em' });
+// Textual toolbar controls (Label, ↑↓) are compact rounded pills.
+ensureCSS('.theme-modern .msgListFilterSorting button', { borderRadius: '1em', padding: '.2em .7em', fontSize: '.85em', lineHeight: '1.3', border: '1px solid transparent' }, true);
+ensureCSS('.theme-modern .msgListFilterSorting select', { borderRadius: '1em', fontSize: '.85em', padding: '.15em .5em' });
+// Active filter / inverted sort takes the accent.
+ensureCSS('.theme-modern .msgListFilterSorting button.active, .theme-modern .msgListFilterSorting button.invert', { background: 'var(--accent)', color: 'var(--accentText)', borderColor: 'transparent' }, true);
+// Quick filters render as equal, borderless circular icon buttons (text collapsed via
+// font-size:0; the glyph comes from a centred ::before), tinted on hover.
+ensureCSS('.theme-modern .msgListFilterSorting .refineIcon', { fontSize: '0', width: '1.9rem', height: '1.9rem', padding: '0', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid transparent' }, true);
+ensureCSS('.theme-modern .msgListFilterSorting .refineIcon:hover', { background: 'color-mix(in srgb, var(--accent) 14%, transparent)' }, true);
+ensureCSS('.theme-modern .refineUnread::before', { content: '"\u{1F4E9}"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineRead::before', { content: '"\u{1F4D6}"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineAttachments::before', { content: '"\u{1F4CE}"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineClear::before', { content: '"✕"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineLabel::before', { content: '"\u{1F3F7}"', fontSize: '1rem', lineHeight: '1' });
 // Typed way to reference a css variables. Kept from before used variables.
 const styles = {
 	color: 'var(--color)',
@@ -1591,6 +1784,131 @@ try {
 }
 catch (err) { }
 let accountSettings;
+// Accent presets mapped to colours. A value starting with "#" is used directly.
+const accentColors = {
+	'': '#2b6cff',
+	indigo: '#6c5cff',
+	teal: '#11a3a3',
+	graphite: '#8a8f98',
+};
+// Accent buttons use white text. (Computing black/white by contrast was tried but
+// black text on the accent looked worse, so we keep white across all accents.)
+const accentTextFor = (_color) => '#ffffff';
+const applyAppearance = (a) => {
+	const el = document.documentElement;
+	for (const c of ['scheme-light', 'scheme-dark', 'scheme-hclight', 'scheme-hcdark']) {
+		el.classList.remove(c);
+	}
+	if (a.scheme === 'light' || a.scheme === 'dark' || a.scheme === 'hclight' || a.scheme === 'hcdark') {
+		el.classList.add('scheme-' + a.scheme);
+	}
+	el.classList.toggle('theme-modern', a.theme === 'modern');
+	// How unread messages are emphasized in the modern list.
+	for (const c of ['unread-bar', 'unread-bold', 'unread-barbold', 'unread-tint', 'unread-dot']) {
+		el.classList.remove(c);
+	}
+	el.classList.add('unread-' + (a.unreadStyle || 'bar'));
+	// High-contrast schemes carry their own accessible accent; don't override it
+	// with the user's accent choice. Otherwise apply the chosen accent.
+	if (a.scheme === 'hclight' || a.scheme === 'hcdark') {
+		el.style.removeProperty('--accent');
+		el.style.removeProperty('--accentText');
+	}
+	else {
+		const color = a.accent.startsWith('#') ? a.accent : (accentColors[a.accent] || accentColors['']);
+		el.style.setProperty('--accent', color);
+		el.style.setProperty('--accentText', accentTextFor(color));
+	}
+	// Modern typography. An empty value removes the property so the CSS default
+	// (a var() fallback in lib.ts) applies.
+	const setVar = (name, value) => {
+		if (value) {
+			el.style.setProperty(name, value);
+		}
+		else {
+			el.style.removeProperty(name);
+		}
+	};
+	setVar('--ml-scale', a.listScale);
+	setVar('--mv-subj-scale', a.subjectScale);
+	const setStyle = (style, weightVar, styleVar) => {
+		if (!style) {
+			el.style.removeProperty(weightVar);
+			el.style.removeProperty(styleVar);
+			return;
+		}
+		el.style.setProperty(weightVar, style === 'bold' || style === 'bolditalic' ? 'bold' : 'normal');
+		el.style.setProperty(styleVar, style === 'italic' || style === 'bolditalic' ? 'italic' : 'normal');
+	};
+	setStyle(a.fromStyle, '--ml-from-weight', '--ml-from-style');
+	setStyle(a.subjectStyle, '--ml-subj-weight', '--ml-subj-style');
+	setStyle(a.previewStyle, '--ml-prev-weight', '--ml-prev-style');
+	setStyle(a.dateStyle, '--ml-date-weight', '--ml-date-style');
+	setStyle(a.viewSenderStyle, '--mv-sender-weight', '--mv-sender-style');
+	try {
+		window.localStorage.setItem('appearance', JSON.stringify(a));
+	}
+	catch (e) { }
+};
+const settingsAppearance = (s) => ({
+	theme: s?.WebmailTheme || '',
+	scheme: s?.WebmailScheme || '',
+	accent: s?.WebmailAccent || '',
+	listScale: s?.WebmailListScale || '',
+	subjectScale: s?.WebmailSubjectScale || '',
+	fromStyle: s?.WebmailListFromStyle || '',
+	subjectStyle: s?.WebmailListSubjectStyle || '',
+	previewStyle: s?.WebmailListPreviewStyle || '',
+	dateStyle: s?.WebmailListDateStyle || '',
+	viewSenderStyle: s?.WebmailViewSenderStyle || '',
+	unreadStyle: s?.WebmailUnreadStyle || '',
+});
+const applyTheme = (s) => {
+	applyAppearance(settingsAppearance(s));
+};
+// Apply the last-known appearance immediately on load, before the account settings
+// arrive, to avoid a flash of the default (classic/auto) theme.
+try {
+	const stored = window.localStorage.getItem('appearance');
+	if (stored) {
+		const o = JSON.parse(stored);
+		applyAppearance({
+			theme: o.theme || '', scheme: o.scheme || '', accent: o.accent || '',
+			listScale: o.listScale || '', subjectScale: o.subjectScale || '',
+			fromStyle: o.fromStyle || '', subjectStyle: o.subjectStyle || '', previewStyle: o.previewStyle || '',
+			dateStyle: o.dateStyle || '', viewSenderStyle: o.viewSenderStyle || '', unreadStyle: o.unreadStyle || '',
+		});
+	}
+}
+catch (e) { }
+// Avatar helpers for the modern message list. Initials and a stable colour are
+// derived from the correspondent's address/name (no contact photos in mox).
+const avatarText = (a) => {
+	if (!a) {
+		return '?';
+	}
+	const s = (a.Name || a.User || '').trim();
+	const ch = s ? s[0] : '?';
+	return ch.toUpperCase();
+};
+const avatarColor = (a) => {
+	const key = a ? (a.User + '@' + (a.Domain ? a.Domain.ASCII : '')) : '';
+	let h = 0;
+	for (let i = 0; i < key.length; i++) {
+		h = (h * 31 + key.charCodeAt(i)) >>> 0;
+	}
+	// Lightness kept low enough that the white initial stays legible across all
+	// hues (white on hsl(*,45%,38%) clears the large-text contrast floor).
+	return 'hsl(' + (h % 360) + ', 45%, 38%)';
+};
+// Emoji icon for a mailbox, by special-use, for the modern theme's folder list.
+const mailboxIcon = (mb) => mb.Sent ? '\u{1F4E4}' : // outbox tray
+	mb.Draft ? '\u{1F4DD}' : // memo
+		mb.Archive ? '\u{1F5C4}' : // file cabinet
+			mb.Trash ? '\u{1F5D1}' : // wastebasket
+				mb.Junk ? '⚠️' : // warning (with emoji variation selector)
+					mb.Name === 'Inbox' ? '\u{1F4E5}' : // inbox tray
+						'\u{1F4C1}'; // folder
 const defaultSettings = {
 	mailboxesWidth: 240,
 	layout: 'auto',
@@ -2459,9 +2777,17 @@ const cmdSettings = async () => {
 	let showHTML;
 	let showShortcuts;
 	let showHeaders;
+	let webmailTheme, webmailScheme, webmailAccent;
+	let webmailListScale, webmailSubjectScale;
+	let webmailListFromStyle, webmailListSubjectStyle, webmailListPreviewStyle, webmailListDateStyle, webmailViewSenderStyle;
+	let webmailUnreadStyle;
 	if (!accountSettings) {
 		throw new Error('No account settings fetched yet.');
 	}
+	// Build a font-style picker (weight/italic) and a size picker for the modern
+	// theme typography settings.
+	const styleSelect = (cur) => dom.select(dom.option('Default', attr.value(''), cur === '' ? attr.selected('') : []), dom.option('Normal', attr.value('normal'), cur === 'normal' ? attr.selected('') : []), dom.option('Bold', attr.value('bold'), cur === 'bold' ? attr.selected('') : []), dom.option('Italic', attr.value('italic'), cur === 'italic' ? attr.selected('') : []), dom.option('Bold italic', attr.value('bolditalic'), cur === 'bolditalic' ? attr.selected('') : []));
+	const scaleSelect = (cur, big) => dom.select(dom.option('80%', attr.value('0.8'), cur === '0.8' ? attr.selected('') : []), dom.option('85%', attr.value('0.85'), cur === '0.85' ? attr.selected('') : []), dom.option('90%', attr.value('0.9'), cur === '0.9' ? attr.selected('') : []), dom.option('95%', attr.value('0.95'), cur === '0.95' ? attr.selected('') : []), dom.option('100% (default)', attr.value(''), cur === '' ? attr.selected('') : []), dom.option('110%', attr.value('1.1'), cur === '1.1' ? attr.selected('') : []), dom.option('120%', attr.value('1.2'), cur === '1.2' ? attr.selected('') : []), big ? dom.option('130%', attr.value('1.3'), cur === '1.3' ? attr.selected('') : []) : [], big ? dom.option('140%', attr.value('1.4'), cur === '1.4' ? attr.selected('') : []) : []);
 	const remove = popup(css('popupSettings', { minWidth: '30em' }), style({ maxWidth: '50em' }), dom.h1('Settings'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
@@ -2473,11 +2799,23 @@ const cmdSettings = async () => {
 			ShowHTML: showHTML.checked,
 			NoShowShortcuts: !showShortcuts.checked,
 			ShowHeaders: showHeaders.value.split('\n').map(s => s.trim()).filter(s => !!s),
+			WebmailTheme: webmailTheme.value,
+			WebmailScheme: webmailScheme.value,
+			WebmailAccent: webmailAccent.value,
+			WebmailListScale: webmailListScale.value,
+			WebmailSubjectScale: webmailSubjectScale.value,
+			WebmailListFromStyle: webmailListFromStyle.value,
+			WebmailListSubjectStyle: webmailListSubjectStyle.value,
+			WebmailListPreviewStyle: webmailListPreviewStyle.value,
+			WebmailListDateStyle: webmailListDateStyle.value,
+			WebmailViewSenderStyle: webmailViewSenderStyle.value,
+			WebmailUnreadStyle: webmailUnreadStyle.value,
 		};
 		await withDisabled(fieldset, client.SettingsSave(accSet));
 		accountSettings = accSet;
+		applyTheme(accountSettings);
 		remove();
-	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show email as HTML instead of text by default for first-time senders', attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showShortcuts = dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')), ' Show shortcut keys in bottom left after interaction with mouse'), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Show additional headers'), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join('\n')), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: 'italic' }), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.')), dom.div(style({ marginTop: '2ex' }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
+	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show email as HTML instead of text by default for first-time senders', attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showShortcuts = dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')), ' Show shortcut keys in bottom left after interaction with mouse'), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Show additional headers'), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join('\n')), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: 'italic' }), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.')), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Appearance theme'), webmailTheme = dom.select(dom.option('Classic', attr.value(''), accountSettings.WebmailTheme === '' ? attr.selected('') : []), dom.option('Modern', attr.value('modern'), accountSettings.WebmailTheme === 'modern' ? attr.selected('') : [])), attr.title('Modern is an alternative, more compact visual theme. Classic is the default look.')), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Colour scheme'), webmailScheme = dom.select(dom.option('Auto (follow system)', attr.value(''), accountSettings.WebmailScheme === '' ? attr.selected('') : []), dom.option('Light', attr.value('light'), accountSettings.WebmailScheme === 'light' ? attr.selected('') : []), dom.option('Dark', attr.value('dark'), accountSettings.WebmailScheme === 'dark' ? attr.selected('') : []), dom.option('High contrast light', attr.value('hclight'), accountSettings.WebmailScheme === 'hclight' ? attr.selected('') : []), dom.option('High contrast dark', attr.value('hcdark'), accountSettings.WebmailScheme === 'hcdark' ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Accent colour'), webmailAccent = dom.select(dom.option('Blue', attr.value(''), accountSettings.WebmailAccent === '' ? attr.selected('') : []), dom.option('Indigo', attr.value('indigo'), accountSettings.WebmailAccent === 'indigo' ? attr.selected('') : []), dom.option('Teal', attr.value('teal'), accountSettings.WebmailAccent === 'teal' ? attr.selected('') : []), dom.option('Graphite', attr.value('graphite'), accountSettings.WebmailAccent === 'graphite' ? attr.selected('') : []))), dom.div(style({ margin: '1ex 0' }), dom.div(style({ fontStyle: 'italic', color: styles.colorMild }), 'Modern theme typography (no effect on the classic theme)'), dom.div(style({ display: 'flex', flexWrap: 'wrap', gap: '1ex 2ex', marginTop: '.5ex' }), dom.label(dom.div('Message list size'), webmailListScale = scaleSelect(accountSettings.WebmailListScale, false)), dom.label(dom.div('Reading subject size'), webmailSubjectScale = scaleSelect(accountSettings.WebmailSubjectScale, true)), dom.label(dom.div('List: sender'), webmailListFromStyle = styleSelect(accountSettings.WebmailListFromStyle)), dom.label(dom.div('List: subject'), webmailListSubjectStyle = styleSelect(accountSettings.WebmailListSubjectStyle)), dom.label(dom.div('List: preview'), webmailListPreviewStyle = styleSelect(accountSettings.WebmailListPreviewStyle)), dom.label(dom.div('List: date'), webmailListDateStyle = styleSelect(accountSettings.WebmailListDateStyle)), dom.label(dom.div('Reading: sender'), webmailViewSenderStyle = styleSelect(accountSettings.WebmailViewSenderStyle)), dom.label(dom.div('Unread emphasis'), webmailUnreadStyle = dom.select(dom.option('Accent bar (default)', attr.value(''), accountSettings.WebmailUnreadStyle === '' ? attr.selected('') : []), dom.option('Bold', attr.value('bold'), accountSettings.WebmailUnreadStyle === 'bold' ? attr.selected('') : []), dom.option('Accent bar + bold', attr.value('barbold'), accountSettings.WebmailUnreadStyle === 'barbold' ? attr.selected('') : []), dom.option('Background tint', attr.value('tint'), accountSettings.WebmailUnreadStyle === 'tint' ? attr.selected('') : []), dom.option('Dot', attr.value('dot'), accountSettings.WebmailUnreadStyle === 'dot' ? attr.selected('') : []))))), dom.div(style({ marginTop: '2ex' }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
 		if (!window.navigator.registerProtocolHandler) {
 			window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
 			return;
@@ -3541,6 +3879,7 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 		ensureCSS('.msgItem.focus', { borderColor: styles.msgItemFocusBorderColor, border: '1px solid' });
 		ensureCSS('.msgItem:hover', { backgroundColor: styles.msgItemHoverBackgroundColor });
 		ensureCSS('.msgItem.active', { background: styles.msgItemActiveBackground });
+		ensureCSS('.msgItemAvatar', { display: 'none' });
 		// When rerendering, we remember active & focus states. So we don't have to make
 		// the caller also call redraw on MsglistView.
 		const active = msgitemView.root && msgitemView.root.classList.contains('active');
@@ -3574,7 +3913,10 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 				}
 			} : [], isUnread() ? css('msgItemUnread', { fontWeight: 'bold' }) : [], 
 		// Relevant means not muted and matching the query.
-		isRelevant() ? [] : css('msgItemNotRelevant', { opacity: '.4' }), dom.div(msgItemCellStyle, dom._class('msgItemFlags'), dom.div(css('msgItemFlagsSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(flagList(msgitemView)), !msgitemView.parent && msgitemView.kids.length > 0 && msgitemView.collapsed ?
+		isRelevant() ? [] : css('msgItemNotRelevant', { opacity: '.4' }), (() => {
+			const a = (mi.Envelope.From && mi.Envelope.From[0]) || (mi.Envelope.To && mi.Envelope.To[0]) || undefined;
+			return dom.div(dom._class('msgItemAvatar'), style({ backgroundColor: avatarColor(a) }), avatarText(a));
+		})(), dom.div(msgItemCellStyle, dom._class('msgItemFlags'), dom.div(css('msgItemFlagsSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(flagList(msgitemView)), !msgitemView.parent && msgitemView.kids.length > 0 && msgitemView.collapsed ?
 			dom.clickbutton('' + (1 + msgitemView.descendants().length), attr.tabindex('-1'), attr.title('Expand thread.'), attr.arialabel('Expand thread.'), function click(e) {
 				e.stopPropagation(); // Prevent selection.
 				if (settings.threading === api.ThreadMode.ThreadOn) {
@@ -3594,9 +3936,13 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 		// only half the height of the item, to indicate start/end, and so it stands out
 		// from any thread above/below.
 		((msgitemView.parent || msgitemView.kids.length > 0) && !msgitemView.threadRoot().collapsed) ?
-			dom.div(css('msgItemThreadBar', { position: 'absolute', right: 0, top: 0, bottom: 0, borderRight: '2px solid', borderRightColor: styles.colorMilder }), !msgitemView.parent ? css('msgItemThreadBarFirst', { top: '50%', bottom: '-1px' }) : (isThreadLast() ?
-				css('msgItemThreadBarLast', { top: '-1px', bottom: '50%' }) :
-				css('msgItemThreadBarMiddle', { top: '-1px', bottom: '-1px' }))) : []), dom.div(msgItemCellStyle, css('msgItemSubject', { position: 'relative' }), dom.div(css('msgItemSubjectSpread', { display: 'flex', justifyContent: 'space-between', position: 'relative' }), dom.div(css('msgItemSubjectText', { whiteSpace: 'nowrap', overflow: 'hidden' }), threadIndent > 0 ? dom.span(threadChar, style({ paddingLeft: (threadIndent / 2) + 'em' }), css('msgItemThreadChar', { opacity: '.75', fontWeight: 'normal' }), threadCharTitle ? attr.title(threadCharTitle) : []) : [], msgitemView.parent ? [] : mi.Envelope.Subject || '(no subject)', dom.span(css('msgItemSubjectSnippet', { fontWeight: 'normal', color: styles.colorMilder }), ' ' + (mi.Message.Preview || ''))), dom.div(keywords, mailboxtags))), dom.div(msgItemCellStyle, dom._class('msgItemAge'), age(received())), function click(e) {
+			dom.div(css('msgItemThreadBar', { position: 'absolute', right: 0, top: 0, bottom: 0, borderRight: '2px solid', borderRightColor: styles.colorMilder }), 
+			// The middle and the connecting ends overlap their neighbours by a
+			// couple of pixels so consecutive per-row segments merge into one
+			// continuous line instead of showing seams between rows.
+			!msgitemView.parent ? css('msgItemThreadBarFirst', { top: '50%', bottom: '-2px' }) : (isThreadLast() ?
+				css('msgItemThreadBarLast', { top: '-2px', bottom: '50%' }) :
+				css('msgItemThreadBarMiddle', { top: '-2px', bottom: '-2px' }))) : []), dom.div(msgItemCellStyle, css('msgItemSubject', { position: 'relative' }), dom.div(css('msgItemSubjectSpread', { display: 'flex', justifyContent: 'space-between', position: 'relative' }), dom.div(css('msgItemSubjectText', { whiteSpace: 'nowrap', overflow: 'hidden' }), threadIndent > 0 ? dom.span(threadChar, style({ paddingLeft: (threadIndent / 2) + 'em' }), css('msgItemThreadChar', { opacity: '.75', fontWeight: 'normal' }), threadCharTitle ? attr.title(threadCharTitle) : []) : [], msgitemView.parent ? [] : dom.span(css('msgItemSubjectTitle', {}), mi.Envelope.Subject || '(no subject)'), dom.span(css('msgItemSubjectSnippet', { fontWeight: 'normal', color: styles.colorMilder }), ' ' + (mi.Message.Preview || ''))), dom.div(keywords, mailboxtags))), dom.div(msgItemCellStyle, dom._class('msgItemAge'), age(received())), function click(e) {
 			e.preventDefault();
 			e.stopPropagation();
 			msglistView.click(msgitemView, e.ctrlKey, e.shiftKey);
@@ -3878,11 +4224,18 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		loadHeaderDetails(pm);
 	};
 	let textbtn, htmlbtn, htmlextbtn;
+	// Modern theme: a single mode button with a dropdown, shown up in the header next
+	// to Details instead of the classic inline Text/HTML button row.
+	let msgModernModeToggle;
 	const activeBtn = (b) => {
 		for (const xb of [textbtn, htmlbtn, htmlextbtn]) {
 			if (xb) {
 				xb.classList.toggle('active', xb === b);
 			}
+		}
+		if (msgModernModeToggle) {
+			const lbl = b === textbtn ? 'Text' : b === htmlextbtn ? 'HTML+ext' : 'HTML';
+			dom._kids(msgModernModeToggle, (!textbtn ? '⚠ ' : '') + lbl + ' ▾');
 		}
 	};
 	const fromAddressSettingsSave = async (mode) => {
@@ -3963,7 +4316,18 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	let urlType; // text, html, htmlexternal; for opening in new tab/print
 	let msgbuttonElem, msgheaderElem, msgattachmentElem, msgmodeElem;
 	let msgheaderFullElem; // Full headers, when enabled.
-	const msgmetaElem = dom.div(css('msgmeta', { backgroundColor: styles.backgroundColorMild, borderBottom: '5px solid', borderBottomColor: ['white', 'black'], maxHeight: '90%', overflowY: 'auto' }), attr.role('region'), attr.arialabel('Buttons and headers for message'), msgbuttonElem = dom.div(), dom.div(attr.arialive('assertive'), dom.table(styleClasses.msgHeaders, msgheaderElem = dom.tbody()), msgheaderFullElem = dom.table(), msgattachmentElem = dom.div(), msgmodeElem = dom.div()), 
+	// Modern reading-pane header hooks (display:none in classic; the .theme-modern
+	// rules in lib.ts lay these out and hide the classic header table by default).
+	const fromAddr0 = (mi.Envelope.From && mi.Envelope.From[0]) || undefined;
+	const receivedLocal = mi.Message.Received;
+	const msgModernSubjectElem = dom.h2(css('msgModernSubject', { display: 'none' }), mi.Envelope.Subject || '(no subject)');
+	const msgModernDetailsToggle = dom.clickbutton(css('msgModernDetailsToggle', {}), 'Details', attr.title('Show recipients and date.'), function click() {
+		msgmetaElem.classList.toggle('detailsExpanded');
+	});
+	const msgModernSenderElem = dom.div(css('msgModernSender', { display: 'none' }), dom.span(css('msgModernAvatar', {}), style({ backgroundColor: avatarColor(fromAddr0) }), avatarText(fromAddr0)), dom.div(css('msgModernSenderText', {}), dom.div(css('msgModernSenderName', {}), fromAddr0 ? (fromAddr0.Name || formatEmail(fromAddr0)) : '(unknown sender)'), dom.div(css('msgModernSenderTime', {}), receivedLocal.toDateString() + ' ' + receivedLocal.toTimeString().split(' ')[0])), dom.div(css('msgModernSenderActions', {}), 
+	// Populated/shown by the message-load code when there is an HTML/text choice.
+	msgModernModeToggle = dom.clickbutton(css('msgModernModeToggle', {}), style({ display: 'none' }), attr.title('Switch between text and HTML view.'), ''), msgModernDetailsToggle));
+	const msgmetaElem = dom.div(css('msgmeta', { backgroundColor: styles.backgroundColorMild, borderBottom: '5px solid', borderBottomColor: ['white', 'black'], maxHeight: '90%', overflowY: 'auto' }), attr.role('region'), attr.arialabel('Buttons and headers for message'), msgModernSubjectElem, msgModernSenderElem, msgbuttonElem = dom.div(dom._class('msgButtons')), dom.div(dom._class('msgDetails'), attr.arialive('assertive'), dom.table(styleClasses.msgHeaders, msgheaderElem = dom.tbody()), msgheaderFullElem = dom.table(), msgattachmentElem = dom.div(), msgmodeElem = dom.div(dom._class('msgMode'))), 
 	// Explicit separator that separates headers from body, to
 	// prevent HTML messages from faking UI elements.
 	dom.div(css('headerBodySeparator', { height: '2px', backgroundColor: styles.borderColor })));
@@ -3973,7 +4337,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	const draftMailboxID = listMailboxes().find(mb => mb.Draft)?.ID;
 	// Initially called with potentially null pm, once loaded called again with pm set.
 	const loadButtons = (pm) => {
-		dom._kids(msgbuttonElem, dom.div(dom._class('pad'), m.MailboxID === draftMailboxID ? dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)) : [], ' ', (!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ', (pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ', (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
+		dom._kids(msgbuttonElem, dom.div(dom._class('pad'), m.MailboxID === draftMailboxID ? dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)) : [], ' ', (!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ', (pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton(dom._class('msgReplyButton'), 'Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ', (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
 			dom.clickbutton('Reply all', attr.title('Compose a reply to all participants of this message.'), clickCmd(cmdReplyAll, shortcuts)), ' ', dom.clickbutton('Forward', attr.title('Compose a forwarding message, optionally including attachments.'), clickCmd(cmdForward, shortcuts)), ' ', dom.clickbutton('Archive', attr.title('Move to the Archive mailbox.'), clickCmd(msglistView.cmdArchive, shortcuts)), ' ', m.MailboxID === trashMailboxID ?
 			dom.clickbutton('Delete', attr.title('Permanently delete message.'), clickCmd(msglistView.cmdDelete, shortcuts)) :
 			dom.clickbutton('Trash', attr.title('Move to the Trash mailbox.'), clickCmd(msglistView.cmdTrash, shortcuts)), ' ', dom.clickbutton('Junk', attr.title('Move to Junk mailbox, marking as junk and causing this message to be used in spam classification of new incoming messages.'), clickCmd(msglistView.cmdJunk, shortcuts)), ' ', dom.clickbutton('Move to...', function click(e) {
@@ -4169,10 +4533,12 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		const haveText = pm.Texts && pm.Texts.length > 0;
 		if (!haveText && !pm.HasHTML) {
 			dom._kids(msgcontentElem);
+			msgModernModeToggle.style.display = 'none';
 			dom._kids(msgmodeElem, dom.div(dom._class('pad'), msgHeaderSeparatorStyle, dom.span('No textual content', msgModeWarningStyle)));
 		}
 		else if (haveText && !pm.HasHTML) {
 			loadText(pm);
+			msgModernModeToggle.style.display = 'none';
 			dom._kids(msgmodeElem);
 		}
 		else {
@@ -4182,6 +4548,17 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 				showShortcut('T');
 				await cmdShowHTML();
 			}), htmlextbtn = dom.clickbutton(text || !text && pm.ViewMode != api.ViewMode.ModeHTMLExt ? [] : dom._class('active'), 'HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)))));
+			// Modern theme: surface the same choice as a single dropdown button up in the
+			// header (the classic .msgMode row above is hidden by CSS under .theme-modern).
+			msgModernModeToggle.style.display = '';
+			dom._kids(msgModernModeToggle, (!haveText ? '⚠ ' : '') + (text ? 'Text' : (pm.ViewMode == api.ViewMode.ModeHTMLExt ? 'HTML+ext' : 'HTML')) + ' ▾');
+			msgModernModeToggle.onclick = (e) => {
+				const remove = popover(e.target, { transparent: true }, dom.div(css('popupMore', { display: 'flex', flexDirection: 'column', gap: '.5ex', textAlign: 'right' }), [
+					haveText ? dom.clickbutton('Text', async function click() { await cmdShowText(); remove(); }) : [],
+					dom.clickbutton('HTML', attr.title(htmlNote), async function click() { await cmdShowHTML(); remove(); }),
+					dom.clickbutton('HTML with external resources', attr.title(htmlNote), async function click() { await cmdShowHTMLExternal(); remove(); }),
+				].map(b => dom.div(b))));
+			};
 			if (text) {
 				loadText(pm);
 			}
@@ -5566,6 +5943,7 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 		cmdExpand();
 	});
 	let name, unread;
+	let iconSpan, nameBox;
 	let actionBtn;
 	const cmdOpenActions = async () => {
 		const trashmb = mailboxlistView.mailboxes().find(mb => mb.Trash);
@@ -5701,11 +6079,11 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 			const mbSrcID = mailboxMsgIDs.find(mbMsgID => mbMsgID[1] === msgID)[0];
 			await moveAskRuleset(msgID, mbSrcID, xmb, mailboxlistView.mailboxes());
 		}
-	}, dom.div(css('mailbox', { padding: '.15em .25em', display: 'flex', justifyContent: 'space-between' }), name = dom.div(css('mailboxName', { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })), dom.div(style({ whiteSpace: 'nowrap' }), actionBtn = dom.clickbutton(dom._class('mailboxHoverOnly'), '...', attr.tabindex('-1'), // Without, tab breaks because this disappears when mailbox loses focus.
+	}, dom.div(css('mailbox', { padding: '.15em .25em', display: 'flex', justifyContent: 'space-between' }), nameBox = dom.div(css('mailboxNameBox', { display: 'flex', alignItems: 'center', minWidth: 0 }), iconSpan = dom.span(css('mailboxIcon', { display: 'none' }), mailboxIcon(xmb)), name = dom.div(css('mailboxName', { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }))), dom.div(style({ whiteSpace: 'nowrap' }), actionBtn = dom.clickbutton(dom._class('mailboxHoverOnly'), '...', attr.tabindex('-1'), // Without, tab breaks because this disappears when mailbox loses focus.
 	attr.arialabel('Mailbox actions'), attr.title('Actions on mailbox, like deleting, emptying, renaming.'), function click(e) {
 		e.stopPropagation();
 		cmdOpenActions();
-	}), ' ', unread = dom.b(dom._class('silenttitle')))));
+	}), ' ', unread = dom.b(dom._class('silenttitle'), dom._class('mailboxUnread')))));
 	const update = () => {
 		let moreElems = [];
 		if (settings.mailboxCollapsed[mbv.mailbox.ID]) {
@@ -5725,7 +6103,11 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 				}
 			}
 		}
-		dom._kids(name, dom.span(mbv.parents > 0 ? style({ paddingLeft: '' + (mbv.parents * 2 / 3) + 'em' }) : [], mbv.shortname, attr.title('Total messages: ' + ntotal), moreElems));
+		// Indent the whole name box (icon + name) by depth, so the modern theme's
+		// folder icon is indented with the name for subfolders too. Visually identical
+		// to the classic per-name indent.
+		nameBox.style.paddingLeft = mbv.parents > 0 ? (mbv.parents * 2 / 3) + 'em' : '';
+		dom._kids(name, dom.span(mbv.shortname, attr.title('Total messages: ' + ntotal), moreElems));
 		dom._kids(unread, nunread === 0 ? ['', attr.title('')] : ['' + nunread, attr.title('' + nunread + ' unread')]);
 	};
 	const mbv = {
@@ -5752,6 +6134,7 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 			mbv.mailbox.Junk = specialUse.Junk;
 			mbv.mailbox.Sent = specialUse.Sent;
 			mbv.mailbox.Trash = specialUse.Trash;
+			dom._kids(iconSpan, mailboxIcon(mbv.mailbox));
 		},
 		setKeywords: (keywords) => {
 			mbv.mailbox.Keywords = keywords;
@@ -6514,19 +6897,19 @@ const init = async () => {
 	};
 	let threadMode;
 	const msgColumnDraggerStyle = css('msgColumnDragger', { position: 'absolute', top: 0, bottom: 0, width: '1px', backgroundColor: styles.popupBorderColor, left: '2.5px' });
-	let msglistElem = dom.div(css('msgList', { backgroundColor: styles.msglistBackgroundColor, position: 'absolute', left: '0', right: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column' }), dom.div(attr.role('region'), attr.arialabel('Filter and sorting buttons for message list'), css('msgListFilterSorting', { display: 'flex', justifyContent: 'space-between', backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor, padding: '.25em .5em' }), dom.div(dom.h1('Refine:', css('refineTitle', { fontWeight: 'normal', fontSize: 'inherit', display: 'inline', margin: 0 }), attr.title('Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.')), ' ', dom.span(dom._class('btngroup'), refineUnreadBtn = dom.clickbutton(settings.refine === 'unread' ? dom._class('active') : [], 'Unread', attr.title('Only show messages marked as unread.'), async function click(e) {
+	let msglistElem = dom.div(css('msgList', { backgroundColor: styles.msglistBackgroundColor, position: 'absolute', left: '0', right: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column' }), dom.div(attr.role('region'), attr.arialabel('Filter and sorting buttons for message list'), css('msgListFilterSorting', { display: 'flex', justifyContent: 'space-between', backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor, padding: '.25em .5em' }), dom.div(dom.h1('Refine:', css('refineTitle', { fontWeight: 'normal', fontSize: 'inherit', display: 'inline', margin: 0 }), attr.title('Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.')), ' ', dom.span(dom._class('btngroup'), refineUnreadBtn = dom.clickbutton(dom._class('refineIcon', 'refineUnread'), settings.refine === 'unread' ? dom._class('active') : [], 'Unread', attr.title('Only show messages marked as unread.'), async function click(e) {
 		settingsPut({ ...settings, refine: 'unread' });
 		refineToggleActive(e.target);
 		await withStatus('Requesting messages', requestNewView(false));
-	}), refineReadBtn = dom.clickbutton(settings.refine === 'read' ? dom._class('active') : [], 'Read', attr.title('Only show messages marked as read.'), async function click(e) {
+	}), refineReadBtn = dom.clickbutton(dom._class('refineIcon', 'refineRead'), settings.refine === 'read' ? dom._class('active') : [], 'Read', attr.title('Only show messages marked as read.'), async function click(e) {
 		settingsPut({ ...settings, refine: 'read' });
 		refineToggleActive(e.target);
 		await withStatus('Requesting messages', requestNewView(false));
-	}), refineAttachmentsBtn = dom.clickbutton(settings.refine === 'attachments' ? dom._class('active') : [], 'Attachments', attr.title('Only show messages with attachments.'), async function click(e) {
+	}), refineAttachmentsBtn = dom.clickbutton(dom._class('refineIcon', 'refineAttachments'), settings.refine === 'attachments' ? dom._class('active') : [], 'Attachments', attr.title('Only show messages with attachments.'), async function click(e) {
 		settingsPut({ ...settings, refine: 'attachments' });
 		refineToggleActive(e.target);
 		await withStatus('Requesting messages', requestNewView(false));
-	}), refineLabelBtn = dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: ' + settings.refine.substring('label:'.length)] : 'Label', attr.title('Only show messages with the selected label.'), async function click(e) {
+	}), refineLabelBtn = dom.clickbutton(dom._class('refineIcon', 'refineLabel'), settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: ' + settings.refine.substring('label:'.length)] : 'Label', attr.title('Only show messages with the selected label.'), async function click(e) {
 		const labels = possibleLabels();
 		const remove = popover(e.target, {}, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '1ex' }), labels.map(l => {
 			const selectLabel = async () => {
@@ -6540,7 +6923,7 @@ const init = async () => {
 				await selectLabel();
 			}));
 		}), labels.length === 0 ? dom.div('No labels yet, set one on a message first.') : []));
-	})), ' ', dom.clickbutton('x', style({ padding: '0 .25em' }), attr.arialabel('Clear refinement filters.'), attr.title('Clear refinement filters.'), async function click(e) {
+	})), ' ', dom.clickbutton(dom._class('refineIcon', 'refineClear'), 'x', style({ padding: '0 .25em' }), attr.arialabel('Clear refinement filters.'), attr.title('Clear refinement filters.'), async function click(e) {
 		settingsPut({ ...settings, refine: '' });
 		refineToggleActive(e.target);
 		await withStatus('Requesting messages', requestNewView(false));
@@ -6691,9 +7074,9 @@ const init = async () => {
 	};
 	const topMailboxesStyle = css('topMailboxes', { backgroundColor: styles.mailboxesTopBackgroundColor });
 	css('searchbarActive', { background: styles.mailboxActiveBackground }); // class set on searchbarElem when active.
-	const webmailroot = dom.div(css('webmailRoot', { display: 'flex', flexDirection: 'column', alignContent: 'stretch', height: '100dvh' }), dom.div(topMailboxesStyle, style({ display: 'flex' }), attr.role('region'), attr.arialabel('Top bar'), topcomposeboxElem = dom.div(dom._class('pad'), style({ width: settings.mailboxesWidth + 'px', textAlign: 'center' }), dom.clickbutton('Compose', attr.title('Compose new email message.'), function click() {
+	const webmailroot = dom.div(css('webmailRoot', { display: 'flex', flexDirection: 'column', alignContent: 'stretch', height: '100dvh' }), dom.div(topMailboxesStyle, style({ display: 'flex' }), attr.role('region'), attr.arialabel('Top bar'), topcomposeboxElem = dom.div(dom._class('pad'), style({ width: settings.mailboxesWidth + 'px', textAlign: 'center' }), dom.clickbutton(dom._class('composeButton'), 'Compose', attr.title('Compose new email message.'), function click() {
 		shortcutCmd(cmdCompose, shortcuts);
-	})), dom.div(dom._class('pad'), css('searchbarBox', { paddingLeft: 0, display: 'flex', flexGrow: 1 }), searchbarElemBox = dom.search(style({ display: 'flex', marginRight: '.5em' }), dom.form(style({ display: 'flex', flexGrow: 1 }), searchbarElem = dom.input(attr.placeholder('Search...'), style({ position: 'relative', width: '100%' }), attr.title('Search messages based on criteria like matching free-form text, in a mailbox, labels, addressees.'), focusPlaceholder('word "with space" -notword mb:Inbox f:from@x.example t:rcpt@x.example start:2023-7-1 end:2023-7-8 s:"subject" a:images l:$Forwarded h:Reply-To:other@x.example minsize:500kb'), function click() {
+	})), dom.div(dom._class('pad'), css('searchbarBox', { paddingLeft: 0, display: 'flex', flexGrow: 1 }), searchbarElemBox = dom.search(style({ display: 'flex', marginRight: '.5em' }), dom.form(style({ display: 'flex', flexGrow: 1 }), searchbarElem = dom.input(dom._class('searchbarElem'), attr.placeholder('Search...'), style({ position: 'relative', width: '100%' }), attr.title('Search messages based on criteria like matching free-form text, in a mailbox, labels, addressees.'), focusPlaceholder('word "with space" -notword mb:Inbox f:from@x.example t:rcpt@x.example start:2023-7-1 end:2023-7-8 s:"subject" a:images l:$Forwarded h:Reply-To:other@x.example minsize:500kb'), function click() {
 		cmdSearch();
 		showShortcut('/');
 	}, function focus() {
@@ -7164,6 +7547,7 @@ const init = async () => {
 			const start = checkParse(() => api.parser.EventStart(data));
 			log('event start', start);
 			accountSettings = start.Settings;
+			applyTheme(accountSettings);
 			connecting = false;
 			sseID = start.SSEID;
 			loginAddress = start.LoginAddress;

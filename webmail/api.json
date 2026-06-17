@@ -1878,6 +1878,83 @@
 					]
 				},
 				{
+					"Name": "WebmailTheme",
+					"Docs": "Webmail appearance. WebmailTheme: \"\" (classic, default) or \"modern\". WebmailScheme: \"\" (auto), \"light\", \"dark\", \"hclight\", \"hcdark\". WebmailAccent: \"\" (blue, default), \"indigo\", \"teal\", \"graphite\", or a \"#rrggbb\" colour.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailScheme",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailAccent",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailListScale",
+					"Docs": "Webmail typography for the modern theme. Sizes are CSS scale multipliers as strings: \"\" (default, 100%), e.g. \"0.9\" or \"1.1\". Element styles are \"\" (theme default), \"normal\", \"bold\", \"italic\", or \"bolditalic\".; Message-list text size.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailSubjectScale",
+					"Docs": "Reading-pane subject heading size.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailListFromStyle",
+					"Docs": "Sender in the message list.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailListSubjectStyle",
+					"Docs": "Subject in the message list.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailListPreviewStyle",
+					"Docs": "Preview snippet in the message list.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailListDateStyle",
+					"Docs": "Date/time in the message list.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailViewSenderStyle",
+					"Docs": "Sender name in the message reading pane.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebmailUnreadStyle",
+					"Docs": "How unread messages are emphasized in the modern message list: \"\" (default, accent bar on the left), \"bold\", \"barbold\", \"tint\" (accent-tinted row), \"dot\".",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "NoShowShortcuts",
 					"Docs": "If true, don't show shortcuts in webmail after mouse interaction.",
 					"Typewords": [
