@@ -144,6 +144,155 @@ try {
 
 let accountSettings: api.Settings
 
+// Accent presets mapped to colours. A value starting with "#" is used directly.
+const accentColors: { [name: string]: string } = {
+	'': '#2b6cff', // blue (default)
+	indigo: '#6c5cff',
+	teal: '#11a3a3',
+	graphite: '#8a8f98',
+}
+// Accent buttons use white text. (Computing black/white by contrast was tried but
+// black text on the accent looked worse, so we keep white across all accents.)
+const accentTextFor = (_color: string): string => '#ffffff'
+
+// applyAppearance reflects appearance settings onto the <html> element: a scheme-*
+// class (forced colour scheme), a theme-modern class (modern look), and the
+// --accent/--accentText custom properties. It also mirrors the values to
+// localStorage so the next page load can apply them before the account settings
+// arrive over the connection (avoiding a flash of the default theme).
+// Appearance bundles everything applyAppearance reflects onto <html>: theme/scheme/
+// accent plus the modern-theme typography (sizes and per-element weight/style). All
+// fields are strings; "" means "use the theme default".
+type Appearance = {
+	theme: string
+	scheme: string
+	accent: string
+	listScale: string
+	subjectScale: string
+	fromStyle: string
+	subjectStyle: string
+	previewStyle: string
+	dateStyle: string
+	viewSenderStyle: string
+	unreadStyle: string
+}
+
+const applyAppearance = (a: Appearance) => {
+	const el = document.documentElement
+	for (const c of ['scheme-light', 'scheme-dark', 'scheme-hclight', 'scheme-hcdark']) {
+		el.classList.remove(c)
+	}
+	if (a.scheme === 'light' || a.scheme === 'dark' || a.scheme === 'hclight' || a.scheme === 'hcdark') {
+		el.classList.add('scheme-' + a.scheme)
+	}
+	el.classList.toggle('theme-modern', a.theme === 'modern')
+	// How unread messages are emphasized in the modern list.
+	for (const c of ['unread-bar', 'unread-bold', 'unread-barbold', 'unread-tint', 'unread-dot']) {
+		el.classList.remove(c)
+	}
+	el.classList.add('unread-' + (a.unreadStyle || 'bar'))
+	// High-contrast schemes carry their own accessible accent; don't override it
+	// with the user's accent choice. Otherwise apply the chosen accent.
+	if (a.scheme === 'hclight' || a.scheme === 'hcdark') {
+		el.style.removeProperty('--accent')
+		el.style.removeProperty('--accentText')
+	} else {
+		const color = a.accent.startsWith('#') ? a.accent : (accentColors[a.accent] || accentColors[''])
+		el.style.setProperty('--accent', color)
+		el.style.setProperty('--accentText', accentTextFor(color))
+	}
+	// Modern typography. An empty value removes the property so the CSS default
+	// (a var() fallback in lib.ts) applies.
+	const setVar = (name: string, value: string) => {
+		if (value) {
+			el.style.setProperty(name, value)
+		} else {
+			el.style.removeProperty(name)
+		}
+	}
+	setVar('--ml-scale', a.listScale)
+	setVar('--mv-subj-scale', a.subjectScale)
+	const setStyle = (style: string, weightVar: string, styleVar: string) => {
+		if (!style) {
+			el.style.removeProperty(weightVar)
+			el.style.removeProperty(styleVar)
+			return
+		}
+		el.style.setProperty(weightVar, style === 'bold' || style === 'bolditalic' ? 'bold' : 'normal')
+		el.style.setProperty(styleVar, style === 'italic' || style === 'bolditalic' ? 'italic' : 'normal')
+	}
+	setStyle(a.fromStyle, '--ml-from-weight', '--ml-from-style')
+	setStyle(a.subjectStyle, '--ml-subj-weight', '--ml-subj-style')
+	setStyle(a.previewStyle, '--ml-prev-weight', '--ml-prev-style')
+	setStyle(a.dateStyle, '--ml-date-weight', '--ml-date-style')
+	setStyle(a.viewSenderStyle, '--mv-sender-weight', '--mv-sender-style')
+	try {
+		window.localStorage.setItem('appearance', JSON.stringify(a))
+	} catch (e) {}
+}
+const settingsAppearance = (s: api.Settings | undefined): Appearance => ({
+	theme: s?.WebmailTheme || '',
+	scheme: s?.WebmailScheme || '',
+	accent: s?.WebmailAccent || '',
+	listScale: s?.WebmailListScale || '',
+	subjectScale: s?.WebmailSubjectScale || '',
+	fromStyle: s?.WebmailListFromStyle || '',
+	subjectStyle: s?.WebmailListSubjectStyle || '',
+	previewStyle: s?.WebmailListPreviewStyle || '',
+	dateStyle: s?.WebmailListDateStyle || '',
+	viewSenderStyle: s?.WebmailViewSenderStyle || '',
+	unreadStyle: s?.WebmailUnreadStyle || '',
+})
+const applyTheme = (s: api.Settings | undefined) => {
+	applyAppearance(settingsAppearance(s))
+}
+
+// Apply the last-known appearance immediately on load, before the account settings
+// arrive, to avoid a flash of the default (classic/auto) theme.
+try {
+	const stored = window.localStorage.getItem('appearance')
+	if (stored) {
+		const o = JSON.parse(stored)
+		applyAppearance({
+			theme: o.theme || '', scheme: o.scheme || '', accent: o.accent || '',
+			listScale: o.listScale || '', subjectScale: o.subjectScale || '',
+			fromStyle: o.fromStyle || '', subjectStyle: o.subjectStyle || '', previewStyle: o.previewStyle || '',
+			dateStyle: o.dateStyle || '', viewSenderStyle: o.viewSenderStyle || '', unreadStyle: o.unreadStyle || '',
+		})
+	}
+} catch (e) {}
+
+// Avatar helpers for the modern message list. Initials and a stable colour are
+// derived from the correspondent's address/name (no contact photos in mox).
+const avatarText = (a: api.MessageAddress | undefined): string => {
+	if (!a) {
+		return '?'
+	}
+	const s = (a.Name || a.User || '').trim()
+	const ch = s ? s[0] : '?'
+	return ch.toUpperCase()
+}
+const avatarColor = (a: api.MessageAddress | undefined): string => {
+	const key = a ? (a.User + '@' + (a.Domain ? a.Domain.ASCII : '')) : ''
+	let h = 0
+	for (let i = 0; i < key.length; i++) {
+		h = (h * 31 + key.charCodeAt(i)) >>> 0
+	}
+	// Lightness kept low enough that the white initial stays legible across all
+	// hues (white on hsl(*,45%,38%) clears the large-text contrast floor).
+	return 'hsl(' + (h % 360) + ', 45%, 38%)'
+}
+
+// Emoji icon for a mailbox, by special-use, for the modern theme's folder list.
+const mailboxIcon = (mb: api.Mailbox): string =>
+	mb.Sent ? '\u{1F4E4}' :      // outbox tray
+	mb.Draft ? '\u{1F4DD}' :     // memo
+	mb.Archive ? '\u{1F5C4}' :   // file cabinet
+	mb.Trash ? '\u{1F5D1}' :     // wastebasket
+	mb.Junk ? '⚠️' :    // warning (with emoji variation selector)
+	mb.Name === 'Inbox' ? '\u{1F4E5}' : // inbox tray
+	'\u{1F4C1}'                  // folder
+
 const defaultSettings = {
 	mailboxesWidth: 240,
 	layout: 'auto', // Automatic switching between left/right and top/bottom layout, based on screen width.
@@ -1109,10 +1258,37 @@ const cmdSettings = async () => {
 	let showHTML: HTMLInputElement
 	let showShortcuts: HTMLInputElement
 	let showHeaders: HTMLTextAreaElement
+	let webmailTheme: HTMLSelectElement, webmailScheme: HTMLSelectElement, webmailAccent: HTMLSelectElement
+	let webmailListScale: HTMLSelectElement, webmailSubjectScale: HTMLSelectElement
+	let webmailListFromStyle: HTMLSelectElement, webmailListSubjectStyle: HTMLSelectElement, webmailListPreviewStyle: HTMLSelectElement, webmailListDateStyle: HTMLSelectElement, webmailViewSenderStyle: HTMLSelectElement
+	let webmailUnreadStyle: HTMLSelectElement
 
 	if (!accountSettings) {
 		throw new Error('No account settings fetched yet.')
 	}
+
+	// Build a font-style picker (weight/italic) and a size picker for the modern
+	// theme typography settings.
+	const styleSelect = (cur: string) =>
+		dom.select(
+			dom.option('Default', attr.value(''), cur === '' ? attr.selected('') : []),
+			dom.option('Normal', attr.value('normal'), cur === 'normal' ? attr.selected('') : []),
+			dom.option('Bold', attr.value('bold'), cur === 'bold' ? attr.selected('') : []),
+			dom.option('Italic', attr.value('italic'), cur === 'italic' ? attr.selected('') : []),
+			dom.option('Bold italic', attr.value('bolditalic'), cur === 'bolditalic' ? attr.selected('') : []),
+		)
+	const scaleSelect = (cur: string, big: boolean) =>
+		dom.select(
+			dom.option('80%', attr.value('0.8'), cur === '0.8' ? attr.selected('') : []),
+			dom.option('85%', attr.value('0.85'), cur === '0.85' ? attr.selected('') : []),
+			dom.option('90%', attr.value('0.9'), cur === '0.9' ? attr.selected('') : []),
+			dom.option('95%', attr.value('0.95'), cur === '0.95' ? attr.selected('') : []),
+			dom.option('100% (default)', attr.value(''), cur === '' ? attr.selected('') : []),
+			dom.option('110%', attr.value('1.1'), cur === '1.1' ? attr.selected('') : []),
+			dom.option('120%', attr.value('1.2'), cur === '1.2' ? attr.selected('') : []),
+			big ? dom.option('130%', attr.value('1.3'), cur === '1.3' ? attr.selected('') : []) : [],
+			big ? dom.option('140%', attr.value('1.4'), cur === '1.4' ? attr.selected('') : []) : [],
+		)
 
 	const remove = popup(
 		css('popupSettings', {minWidth: '30em'}),
@@ -1130,9 +1306,21 @@ const cmdSettings = async () => {
 					ShowHTML: showHTML.checked,
 					NoShowShortcuts: !showShortcuts.checked,
 					ShowHeaders: showHeaders.value.split('\n').map(s => s.trim()).filter(s => !!s),
+					WebmailTheme: webmailTheme.value,
+					WebmailScheme: webmailScheme.value,
+					WebmailAccent: webmailAccent.value,
+					WebmailListScale: webmailListScale.value,
+					WebmailSubjectScale: webmailSubjectScale.value,
+					WebmailListFromStyle: webmailListFromStyle.value,
+					WebmailListSubjectStyle: webmailListSubjectStyle.value,
+					WebmailListPreviewStyle: webmailListPreviewStyle.value,
+					WebmailListDateStyle: webmailListDateStyle.value,
+					WebmailViewSenderStyle: webmailViewSenderStyle.value,
+					WebmailUnreadStyle: webmailUnreadStyle.value,
 				}
 				await withDisabled(fieldset, client.SettingsSave(accSet))
 				accountSettings = accSet
+				applyTheme(accountSettings)
 				remove()
 			},
 			fieldset=dom.fieldset(
@@ -1185,6 +1373,59 @@ const cmdSettings = async () => {
 					dom.div(style({fontStyle: 'italic'}), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.'),
 				),
 
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Appearance theme'),
+					webmailTheme=dom.select(
+						dom.option('Classic', attr.value(''), accountSettings.WebmailTheme === '' ? attr.selected('') : []),
+						dom.option('Modern', attr.value('modern'), accountSettings.WebmailTheme === 'modern' ? attr.selected('') : []),
+					),
+					attr.title('Modern is an alternative, more compact visual theme. Classic is the default look.'),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Colour scheme'),
+					webmailScheme=dom.select(
+						dom.option('Auto (follow system)', attr.value(''), accountSettings.WebmailScheme === '' ? attr.selected('') : []),
+						dom.option('Light', attr.value('light'), accountSettings.WebmailScheme === 'light' ? attr.selected('') : []),
+						dom.option('Dark', attr.value('dark'), accountSettings.WebmailScheme === 'dark' ? attr.selected('') : []),
+						dom.option('High contrast light', attr.value('hclight'), accountSettings.WebmailScheme === 'hclight' ? attr.selected('') : []),
+						dom.option('High contrast dark', attr.value('hcdark'), accountSettings.WebmailScheme === 'hcdark' ? attr.selected('') : []),
+					),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Accent colour'),
+					webmailAccent=dom.select(
+						dom.option('Blue', attr.value(''), accountSettings.WebmailAccent === '' ? attr.selected('') : []),
+						dom.option('Indigo', attr.value('indigo'), accountSettings.WebmailAccent === 'indigo' ? attr.selected('') : []),
+						dom.option('Teal', attr.value('teal'), accountSettings.WebmailAccent === 'teal' ? attr.selected('') : []),
+						dom.option('Graphite', attr.value('graphite'), accountSettings.WebmailAccent === 'graphite' ? attr.selected('') : []),
+					),
+				),
+				dom.div(
+					style({margin: '1ex 0'}),
+					dom.div(style({fontStyle: 'italic', color: styles.colorMild}), 'Modern theme typography (no effect on the classic theme)'),
+					dom.div(
+						style({display: 'flex', flexWrap: 'wrap', gap: '1ex 2ex', marginTop: '.5ex'}),
+						dom.label(dom.div('Message list size'), webmailListScale=scaleSelect(accountSettings.WebmailListScale, false)),
+						dom.label(dom.div('Reading subject size'), webmailSubjectScale=scaleSelect(accountSettings.WebmailSubjectScale, true)),
+						dom.label(dom.div('List: sender'), webmailListFromStyle=styleSelect(accountSettings.WebmailListFromStyle)),
+						dom.label(dom.div('List: subject'), webmailListSubjectStyle=styleSelect(accountSettings.WebmailListSubjectStyle)),
+						dom.label(dom.div('List: preview'), webmailListPreviewStyle=styleSelect(accountSettings.WebmailListPreviewStyle)),
+						dom.label(dom.div('List: date'), webmailListDateStyle=styleSelect(accountSettings.WebmailListDateStyle)),
+						dom.label(dom.div('Reading: sender'), webmailViewSenderStyle=styleSelect(accountSettings.WebmailViewSenderStyle)),
+						dom.label(dom.div('Unread emphasis'),
+							webmailUnreadStyle=dom.select(
+								dom.option('Accent bar (default)', attr.value(''), accountSettings.WebmailUnreadStyle === '' ? attr.selected('') : []),
+								dom.option('Bold', attr.value('bold'), accountSettings.WebmailUnreadStyle === 'bold' ? attr.selected('') : []),
+								dom.option('Accent bar + bold', attr.value('barbold'), accountSettings.WebmailUnreadStyle === 'barbold' ? attr.selected('') : []),
+								dom.option('Background tint', attr.value('tint'), accountSettings.WebmailUnreadStyle === 'tint' ? attr.selected('') : []),
+								dom.option('Dot', attr.value('dot'), accountSettings.WebmailUnreadStyle === 'dot' ? attr.selected('') : []),
+							),
+						),
+					),
+				),
 
 				dom.div(
 					style({marginTop: '2ex'}),
@@ -2720,6 +2961,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 		ensureCSS('.msgItem.focus', {borderColor: styles.msgItemFocusBorderColor, border: '1px solid'})
 		ensureCSS('.msgItem:hover', {backgroundColor: styles.msgItemHoverBackgroundColor})
 		ensureCSS('.msgItem.active', {background: styles.msgItemActiveBackground})
+		ensureCSS('.msgItemAvatar', {display: 'none'})
 
 		// When rerendering, we remember active & focus states. So we don't have to make
 		// the caller also call redraw on MsglistView.
@@ -2760,6 +3002,10 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			isUnread() ? css('msgItemUnread', {fontWeight: 'bold'}) : [],
 			// Relevant means not muted and matching the query.
 			isRelevant() ? [] : css('msgItemNotRelevant', {opacity: '.4'}),
+			(() => {
+				const a = (mi.Envelope.From && mi.Envelope.From[0]) || (mi.Envelope.To && mi.Envelope.To[0]) || undefined
+				return dom.div(dom._class('msgItemAvatar'), style({backgroundColor: avatarColor(a)}), avatarText(a))
+			})(),
 			dom.div(msgItemCellStyle, dom._class('msgItemFlags'),
 				dom.div(
 					css('msgItemFlagsSpread', {display: 'flex', justifyContent: 'space-between'}),
@@ -2797,10 +3043,13 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 				// from any thread above/below.
 				((msgitemView.parent || msgitemView.kids.length > 0) && !msgitemView.threadRoot().collapsed) ?
 					dom.div(css('msgItemThreadBar', {position: 'absolute', right: 0, top: 0, bottom: 0, borderRight: '2px solid', borderRightColor: styles.colorMilder}),
-						!msgitemView.parent ? css('msgItemThreadBarFirst', {top: '50%', bottom: '-1px'}) : (
+						// The middle and the connecting ends overlap their neighbours by a
+						// couple of pixels so consecutive per-row segments merge into one
+						// continuous line instead of showing seams between rows.
+						!msgitemView.parent ? css('msgItemThreadBarFirst', {top: '50%', bottom: '-2px'}) : (
 							isThreadLast() ?
-								css('msgItemThreadBarLast', {top: '-1px', bottom: '50%'}) :
-								css('msgItemThreadBarMiddle', {top: '-1px', bottom: '-1px'})
+								css('msgItemThreadBarLast', {top: '-2px', bottom: '50%'}) :
+								css('msgItemThreadBarMiddle', {top: '-2px', bottom: '-2px'})
 						)
 					) : []
 			),
@@ -2809,7 +3058,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 					dom.div(
 						css('msgItemSubjectText', {whiteSpace: 'nowrap', overflow: 'hidden'}),
 						threadIndent > 0 ? dom.span(threadChar, style({paddingLeft: (threadIndent/2)+'em'}), css('msgItemThreadChar', {opacity: '.75', fontWeight: 'normal'}), threadCharTitle ? attr.title(threadCharTitle) : []) : [],
-						msgitemView.parent ? [] : mi.Envelope.Subject || '(no subject)',
+						msgitemView.parent ? [] : dom.span(css('msgItemSubjectTitle', {}), mi.Envelope.Subject || '(no subject)'),
 						dom.span(css('msgItemSubjectSnippet', {fontWeight: 'normal', color: styles.colorMilder}), ' '+(mi.Message.Preview || '')),
 					),
 					dom.div(
@@ -3128,11 +3377,18 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 
 	let textbtn: HTMLButtonElement, htmlbtn: HTMLButtonElement, htmlextbtn: HTMLButtonElement
+	// Modern theme: a single mode button with a dropdown, shown up in the header next
+	// to Details instead of the classic inline Text/HTML button row.
+	let msgModernModeToggle: HTMLButtonElement
 	const activeBtn = (b: HTMLButtonElement) => {
 		for (const xb of [textbtn, htmlbtn, htmlextbtn]) {
 			if (xb) {
 				xb.classList.toggle('active', xb === b)
 			}
+		}
+		if (msgModernModeToggle) {
+			const lbl = b === textbtn ? 'Text' : b === htmlextbtn ? 'HTML+ext' : 'HTML'
+			dom._kids(msgModernModeToggle, (!textbtn ? '⚠ ' : '') + lbl + ' ▾')
 		}
 	}
 
@@ -3233,11 +3489,34 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	let msgbuttonElem: HTMLElement, msgheaderElem: HTMLTableSectionElement, msgattachmentElem: HTMLElement, msgmodeElem: HTMLElement
 	let msgheaderFullElem: HTMLTableElement // Full headers, when enabled.
 
+	// Modern reading-pane header hooks (display:none in classic; the .theme-modern
+	// rules in lib.ts lay these out and hide the classic header table by default).
+	const fromAddr0 = (mi.Envelope.From && mi.Envelope.From[0]) || undefined
+	const receivedLocal = mi.Message.Received
+	const msgModernSubjectElem = dom.h2(css('msgModernSubject', {display: 'none'}), mi.Envelope.Subject || '(no subject)')
+	const msgModernDetailsToggle = dom.clickbutton(css('msgModernDetailsToggle', {}), 'Details', attr.title('Show recipients and date.'), function click() {
+		msgmetaElem.classList.toggle('detailsExpanded')
+	})
+	const msgModernSenderElem = dom.div(css('msgModernSender', {display: 'none'}),
+		dom.span(css('msgModernAvatar', {}), style({backgroundColor: avatarColor(fromAddr0)}), avatarText(fromAddr0)),
+		dom.div(css('msgModernSenderText', {}),
+			dom.div(css('msgModernSenderName', {}), fromAddr0 ? (fromAddr0.Name || formatEmail(fromAddr0)) : '(unknown sender)'),
+			dom.div(css('msgModernSenderTime', {}), receivedLocal.toDateString() + ' ' + receivedLocal.toTimeString().split(' ')[0]),
+		),
+		dom.div(css('msgModernSenderActions', {}),
+			// Populated/shown by the message-load code when there is an HTML/text choice.
+			msgModernModeToggle=dom.clickbutton(css('msgModernModeToggle', {}), style({display: 'none'}), attr.title('Switch between text and HTML view.'), ''),
+			msgModernDetailsToggle,
+		),
+	)
+
 	const msgmetaElem = dom.div(
 		css('msgmeta', {backgroundColor: styles.backgroundColorMild, borderBottom: '5px solid', borderBottomColor: ['white', 'black'], maxHeight: '90%', overflowY: 'auto'}),
 		attr.role('region'), attr.arialabel('Buttons and headers for message'),
-		msgbuttonElem=dom.div(),
-		dom.div(
+		msgModernSubjectElem,
+		msgModernSenderElem,
+		msgbuttonElem=dom.div(dom._class('msgButtons')),
+		dom.div(dom._class('msgDetails'),
 			attr.arialive('assertive'),
 			dom.table(
 				styleClasses.msgHeaders,
@@ -3245,7 +3524,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			),
 			msgheaderFullElem=dom.table(),
 			msgattachmentElem=dom.div(),
-			msgmodeElem=dom.div(),
+			msgmodeElem=dom.div(dom._class('msgMode')),
 		),
 		// Explicit separator that separates headers from body, to
 		// prevent HTML messages from faking UI elements.
@@ -3269,7 +3548,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			dom.div(dom._class('pad'),
 				m.MailboxID === draftMailboxID ? dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)) : [], ' ',
 				(!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ',
-				(pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
+				(pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton(dom._class('msgReplyButton'), 'Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
 				(mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
 					dom.clickbutton('Reply all', attr.title('Compose a reply to all participants of this message.'), clickCmd(cmdReplyAll, shortcuts)), ' ',
 				dom.clickbutton('Forward', attr.title('Compose a forwarding message, optionally including attachments.'), clickCmd(cmdForward, shortcuts)), ' ',
@@ -3608,6 +3887,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		const haveText = pm.Texts && pm.Texts.length > 0
 		if (!haveText && !pm.HasHTML) {
 			dom._kids(msgcontentElem)
+			msgModernModeToggle.style.display = 'none'
 			dom._kids(msgmodeElem,
 				dom.div(dom._class('pad'),
 					msgHeaderSeparatorStyle,
@@ -3616,6 +3896,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			)
 		} else if (haveText && !pm.HasHTML) {
 			loadText(pm)
+			msgModernModeToggle.style.display = 'none'
 			dom._kids(msgmodeElem)
 		} else {
 			const text = haveText && pm.ViewMode == api.ViewMode.ModeText
@@ -3634,6 +3915,22 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 					),
 				)
 			)
+			// Modern theme: surface the same choice as a single dropdown button up in the
+			// header (the classic .msgMode row above is hidden by CSS under .theme-modern).
+			msgModernModeToggle.style.display = ''
+			dom._kids(msgModernModeToggle, (!haveText ? '⚠ ' : '') + (text ? 'Text' : (pm.ViewMode == api.ViewMode.ModeHTMLExt ? 'HTML+ext' : 'HTML')) + ' ▾')
+			msgModernModeToggle.onclick = (e: MouseEvent) => {
+				const remove = popover(e.target! as HTMLElement, {transparent: true},
+					dom.div(
+						css('popupMore', {display: 'flex', flexDirection: 'column', gap: '.5ex', textAlign: 'right'}),
+						[
+							haveText ? dom.clickbutton('Text', async function click() { await cmdShowText(); remove() }) : [],
+							dom.clickbutton('HTML', attr.title(htmlNote), async function click() { await cmdShowHTML(); remove() }),
+							dom.clickbutton('HTML with external resources', attr.title(htmlNote), async function click() { await cmdShowHTMLExternal(); remove() }),
+						].map(b => dom.div(b)),
+					),
+				)
+			}
 			if (text) {
 				loadText(pm)
 			} else if (pm.ViewMode == api.ViewMode.ModeHTMLExt) {
@@ -5215,6 +5512,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 	})
 
 	let name: HTMLElement, unread: HTMLElement
+	let iconSpan: HTMLElement, nameBox: HTMLElement
 	let actionBtn: HTMLButtonElement
 
 	const cmdOpenActions = async () => {
@@ -5425,7 +5723,10 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 		},
 		dom.div(
 			css('mailbox', {padding: '.15em .25em', display: 'flex', justifyContent: 'space-between'}),
-			name=dom.div(css('mailboxName', {whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'})),
+			nameBox=dom.div(css('mailboxNameBox', {display: 'flex', alignItems: 'center', minWidth: 0}),
+				iconSpan=dom.span(css('mailboxIcon', {display: 'none'}), mailboxIcon(xmb)),
+				name=dom.div(css('mailboxName', {whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'})),
+			),
 			dom.div(
 				style({whiteSpace: 'nowrap'}),
 				actionBtn=dom.clickbutton(dom._class('mailboxHoverOnly'),
@@ -5439,7 +5740,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 					},
 				),
 				' ',
-				unread=dom.b(dom._class('silenttitle')),
+				unread=dom.b(dom._class('silenttitle'), dom._class('mailboxUnread')),
 			),
 		),
 	)
@@ -5462,7 +5763,11 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 				}
 			}
 		}
-		dom._kids(name, dom.span(mbv.parents > 0 ? style({paddingLeft: ''+(mbv.parents*2/3)+'em'}) : [], mbv.shortname, attr.title('Total messages: ' + ntotal), moreElems))
+		// Indent the whole name box (icon + name) by depth, so the modern theme's
+		// folder icon is indented with the name for subfolders too. Visually identical
+		// to the classic per-name indent.
+		nameBox.style.paddingLeft = mbv.parents > 0 ? (mbv.parents*2/3)+'em' : ''
+		dom._kids(name, dom.span(mbv.shortname, attr.title('Total messages: ' + ntotal), moreElems))
 		dom._kids(unread, nunread === 0 ? ['', attr.title('')] : [''+nunread, attr.title(''+nunread+' unread')])
 	}
 
@@ -5492,6 +5797,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 			mbv.mailbox.Junk = specialUse.Junk
 			mbv.mailbox.Sent = specialUse.Sent
 			mbv.mailbox.Trash = specialUse.Trash
+			dom._kids(iconSpan, mailboxIcon(mbv.mailbox))
 		},
 		setKeywords: (keywords: string[]) => {
 			mbv.mailbox.Keywords = keywords
@@ -6544,7 +6850,7 @@ const init = async () => {
 				dom.h1('Refine:', css('refineTitle', {fontWeight: 'normal', fontSize: 'inherit', display: 'inline', margin: 0}), attr.title('Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.')),
 				' ',
 				dom.span(dom._class('btngroup'),
-					refineUnreadBtn=dom.clickbutton(settings.refine === 'unread' ? dom._class('active') : [],
+					refineUnreadBtn=dom.clickbutton(dom._class('refineIcon', 'refineUnread'), settings.refine === 'unread' ? dom._class('active') : [],
 						'Unread',
 						attr.title('Only show messages marked as unread.'),
 						async function click(e: MouseEvent) {
@@ -6553,7 +6859,7 @@ const init = async () => {
 							await withStatus('Requesting messages', requestNewView(false))
 						},
 					),
-					refineReadBtn=dom.clickbutton(settings.refine === 'read' ? dom._class('active') : [],
+					refineReadBtn=dom.clickbutton(dom._class('refineIcon', 'refineRead'), settings.refine === 'read' ? dom._class('active') : [],
 						'Read',
 						attr.title('Only show messages marked as read.'),
 						async function click(e: MouseEvent) {
@@ -6562,7 +6868,7 @@ const init = async () => {
 							await withStatus('Requesting messages', requestNewView(false))
 						},
 					),
-					refineAttachmentsBtn=dom.clickbutton(settings.refine === 'attachments' ? dom._class('active') : [],
+					refineAttachmentsBtn=dom.clickbutton(dom._class('refineIcon', 'refineAttachments'), settings.refine === 'attachments' ? dom._class('active') : [],
 						'Attachments',
 						attr.title('Only show messages with attachments.'),
 						async function click(e: MouseEvent) {
@@ -6571,7 +6877,7 @@ const init = async () => {
 							await withStatus('Requesting messages', requestNewView(false))
 						},
 					),
-					refineLabelBtn=dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: '+settings.refine.substring('label:'.length)] : 'Label',
+					refineLabelBtn=dom.clickbutton(dom._class('refineIcon', 'refineLabel'), settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: '+settings.refine.substring('label:'.length)] : 'Label',
 						attr.title('Only show messages with the selected label.'),
 						async function click(e: MouseEvent) {
 							const labels = possibleLabels()
@@ -6600,6 +6906,7 @@ const init = async () => {
 				),
 				' ',
 				dom.clickbutton(
+					dom._class('refineIcon', 'refineClear'),
 					'x',
 					style({padding: '0 .25em'}),
 					attr.arialabel('Clear refinement filters.'),
@@ -6824,7 +7131,7 @@ const init = async () => {
 			attr.role('region'), attr.arialabel('Top bar'),
 			topcomposeboxElem=dom.div(dom._class('pad'),
 				style({width: settings.mailboxesWidth + 'px', textAlign: 'center'}),
-				dom.clickbutton('Compose', attr.title('Compose new email message.'), function click() {
+				dom.clickbutton(dom._class('composeButton'), 'Compose', attr.title('Compose new email message.'), function click() {
 					shortcutCmd(cmdCompose, shortcuts)
 				}),
 			),
@@ -6835,6 +7142,7 @@ const init = async () => {
 					dom.form(
 						style({display: 'flex', flexGrow: 1}),
 						searchbarElem=dom.input(
+							dom._class('searchbarElem'),
 							attr.placeholder('Search...'),
 							style({position: 'relative', width: '100%'}),
 							attr.title('Search messages based on criteria like matching free-form text, in a mailbox, labels, addressees.'),
@@ -7441,6 +7749,7 @@ const init = async () => {
 			log('event start', start)
 
 			accountSettings = start.Settings
+			applyTheme(accountSettings)
 			connecting = false
 			sseID = start.SSEID
 			loginAddress = start.LoginAddress

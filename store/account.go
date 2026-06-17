@@ -840,6 +840,28 @@ type Settings struct {
 	// Show HTML version of message by default, instead of plain text.
 	ShowHTML bool
 
+	// Webmail appearance. WebmailTheme: "" (classic, default) or "modern".
+	// WebmailScheme: "" (auto), "light", "dark", "hclight", "hcdark".
+	// WebmailAccent: "" (blue, default), "indigo", "teal", "graphite", or a "#rrggbb" colour.
+	WebmailTheme  string
+	WebmailScheme string
+	WebmailAccent string
+
+	// Webmail typography for the modern theme. Sizes are CSS scale multipliers as
+	// strings: "" (default, 100%), e.g. "0.9" or "1.1". Element styles are "" (theme
+	// default), "normal", "bold", "italic", or "bolditalic".
+	WebmailListScale        string // Message-list text size.
+	WebmailSubjectScale     string // Reading-pane subject heading size.
+	WebmailListFromStyle    string // Sender in the message list.
+	WebmailListSubjectStyle string // Subject in the message list.
+	WebmailListPreviewStyle string // Preview snippet in the message list.
+	WebmailListDateStyle    string // Date/time in the message list.
+	WebmailViewSenderStyle  string // Sender name in the message reading pane.
+
+	// How unread messages are emphasized in the modern message list: "" (default,
+	// accent bar on the left), "bold", "barbold", "tint" (accent-tinted row), "dot".
+	WebmailUnreadStyle string
+
 	// If true, don't show shortcuts in webmail after mouse interaction.
 	NoShowShortcuts bool
 

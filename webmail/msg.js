@@ -311,7 +311,7 @@ var api;
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "CreateSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "Expunged", "Docs": "", "Typewords": ["bool"] }, { "Name": "ParentID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
 		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
-		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "NoShowShortcuts", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHeaders", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "WebmailTheme", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailScheme", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailAccent", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListScale", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailSubjectScale", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListFromStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListSubjectStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListPreviewStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailListDateStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailViewSenderStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "WebmailUnreadStyle", "Docs": "", "Typewords": ["string"] }, { "Name": "NoShowShortcuts", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHeaders", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Settings", "Docs": "", "Typewords": ["Settings"] }, { "Name": "AccountPath", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparators", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
@@ -1133,7 +1133,10 @@ const css = (className, styles, important) => {
 // todo: reduce number of colors. hopefully we can derive some colors from a few base colors (making them brighter/darker, or shifting hue, etc). then make them configurable through settings.
 // todo: add the standard padding and border-radius, perhaps more.
 // We define css variables, making them easy to override.
-ensureCSS(':root', {
+// Base colour tokens. Each value is [light, dark]. These drive the automatic
+// light/dark behaviour (:root + prefers-color-scheme) AND the forced-scheme
+// rules (html.scheme-light / html.scheme-dark) added below.
+const baseTokens = {
 	'--color': ['black', '#ddd'],
 	'--colorMild': ['#555', '#bbb'],
 	'--colorMilder': ['#666', '#aaa'],
@@ -1165,18 +1168,208 @@ ensureCSS(':root', {
 	'--warningBackgroundColor': ['#ffca91', '#a85700'],
 	'--successBackground': ['#d2f791', '#1fa204'],
 	'--emphasisBackground': ['#666', '#aaa'],
-	// For authentication/security results.
-	'--underlineGreen': '#50c40f',
-	'--underlineRed': '#e15d1c',
-	'--underlineBlue': '#09f',
-	'--underlineGrey': '#888',
+	'--underlineGreen': ['#50c40f', '#50c40f'],
+	'--underlineRed': ['#e15d1c', '#e15d1c'],
+	'--underlineBlue': ['#09f', '#09f'],
+	'--underlineGrey': ['#888', '#888'],
 	'--quoted1Color': ['#03828f', '#71f2ff'],
 	'--quoted2Color': ['#c7445c', '#ec4c4c'],
 	'--quoted3Color': ['#417c10', '#73e614'],
 	'--scriptSwitchUnderlineColor': ['#dca053', '#e88f1e'],
 	'--linkColor': ['#096bc2', '#63b6ff'],
 	'--linkVisitedColor': ['#0704c1', '#c763ff'],
+	// New in phase 2. Accent is unused by the classic look (so adds no visual
+	// change); the modern theme (stage 2) routes accented elements through it.
+	'--accent': ['#2b6cff', '#2b6cff'],
+	'--accentText': ['#ffffff', '#ffffff'],
+	'--radius': ['.4em', '.4em'],
+};
+ensureCSS(':root', baseTokens);
+// pickScheme returns a single-valued token map (light=index 0, dark=index 1)
+// for use in a forced-scheme rule.
+const pickScheme = (i) => {
+	const m = {};
+	for (const [k, v] of Object.entries(baseTokens)) {
+		m[k] = v[i];
+	}
+	return m;
+};
+// High-contrast token maps: maximal contrast, solid borders, no faint tints.
+const hcLightTokens = {
+	'--color': '#000000', '--colorMild': '#000000', '--colorMilder': '#1a1a1a',
+	'--backgroundColor': '#ffffff', '--backgroundColorMild': '#ffffff', '--backgroundColorMilder': '#000000',
+	'--borderColor': '#000000', '--mailboxesTopBackgroundColor': '#ffffff', '--msglistBackgroundColor': '#ffffff',
+	'--boxShadow': '0 0 0 1px #000',
+	'--buttonBackground': '#ffffff', '--buttonBorderColor': '#000000', '--buttonHoverBackground': '#e6e6e6',
+	'--overlayOpaqueBackgroundColor': '#ffffff', '--overlayBackgroundColor': 'rgba(0,0,0,0.5)',
+	'--popupColor': '#000000', '--popupBackgroundColor': '#ffffff', '--popupBorderColor': '#000000',
+	'--highlightBackground': '#0044cc', '--highlightBorderColor': '#000000', '--highlightBackgroundHover': '#0033aa',
+	'--mailboxActiveBackground': '#0044cc', '--mailboxHoverBackgroundColor': '#d6e4ff',
+	'--msgItemActiveBackground': '#0044cc', '--msgItemHoverBackgroundColor': '#d6e4ff', '--msgItemFocusBorderColor': '#0044cc',
+	'--buttonTristateOnBackground': '#006600', '--buttonTristateOffBackground': '#990000',
+	'--warningBackgroundColor': '#ffdd00', '--successBackground': '#006600', '--emphasisBackground': '#000000',
+	'--underlineGreen': '#006600', '--underlineRed': '#990000', '--underlineBlue': '#0044cc', '--underlineGrey': '#000000',
+	'--quoted1Color': '#000000', '--quoted2Color': '#000000', '--quoted3Color': '#000000',
+	'--scriptSwitchUnderlineColor': '#990000',
+	'--linkColor': '#0000ee', '--linkVisitedColor': '#551a8b',
+	'--accent': '#0044cc', '--accentText': '#ffffff', '--radius': '.4em',
+};
+const hcDarkTokens = {
+	'--color': '#ffffff', '--colorMild': '#ffffff', '--colorMilder': '#e6e6e6',
+	'--backgroundColor': '#000000', '--backgroundColorMild': '#000000', '--backgroundColorMilder': '#ffffff',
+	'--borderColor': '#ffffff', '--mailboxesTopBackgroundColor': '#000000', '--msglistBackgroundColor': '#000000',
+	'--boxShadow': '0 0 0 1px #fff',
+	'--buttonBackground': '#000000', '--buttonBorderColor': '#ffffff', '--buttonHoverBackground': '#1a1a1a',
+	'--overlayOpaqueBackgroundColor': '#000000', '--overlayBackgroundColor': 'rgba(0,0,0,0.7)',
+	'--popupColor': '#ffffff', '--popupBackgroundColor': '#000000', '--popupBorderColor': '#ffffff',
+	'--highlightBackground': '#66aaff', '--highlightBorderColor': '#ffffff', '--highlightBackgroundHover': '#3388ff',
+	'--mailboxActiveBackground': '#0066ff', '--mailboxHoverBackgroundColor': '#003366',
+	'--msgItemActiveBackground': '#0066ff', '--msgItemHoverBackgroundColor': '#003366', '--msgItemFocusBorderColor': '#66aaff',
+	'--buttonTristateOnBackground': '#00cc00', '--buttonTristateOffBackground': '#ff5555',
+	'--warningBackgroundColor': '#ffdd00', '--successBackground': '#00cc00', '--emphasisBackground': '#ffffff',
+	'--underlineGreen': '#00ff00', '--underlineRed': '#ff5555', '--underlineBlue': '#66aaff', '--underlineGrey': '#ffffff',
+	'--quoted1Color': '#ffffff', '--quoted2Color': '#ffffff', '--quoted3Color': '#ffffff',
+	'--scriptSwitchUnderlineColor': '#ffaa00',
+	'--linkColor': '#66aaff', '--linkVisitedColor': '#cc99ff',
+	'--accent': '#66aaff', '--accentText': '#000000', '--radius': '.4em',
+};
+// Forced schemes: a class on <html> overrides the auto (:root + media query)
+// tokens. Specificity of html.scheme-* (0,1,1) beats :root (0,1,0).
+ensureCSS('html.scheme-light', pickScheme(0));
+ensureCSS('html.scheme-dark', pickScheme(1));
+ensureCSS('html.scheme-hclight', hcLightTokens);
+ensureCSS('html.scheme-hcdark', hcDarkTokens);
+// Modern message list: 2-line layout with avatar, subject line and preview line.
+ensureCSS('.theme-modern .msgItem', {
+	display: 'grid',
+	// Far-left "flags" column holds the thread expand/collapse control (the flag
+	// letters themselves are hidden); it is ~0 wide when there is no control.
+	gridTemplateColumns: 'auto auto minmax(0, 1fr) auto',
+	gridTemplateAreas: '"flags avatar from age" "flags avatar subject subject"',
+	columnGap: '.5em',
+	alignItems: 'center',
+	padding: '.45em .6em',
+	border: '1px solid transparent',
+	borderRadius: 'var(--radius)',
+	// Positioning context for the full-height thread connector bar.
+	position: 'relative',
+	// Configurable list text size (1 = 100%); set via --ml-scale by applyAppearance.
+	fontSize: 'calc(1em * var(--ml-scale, 1))',
 });
+ensureCSS('.theme-modern .msgItemCell', { padding: 0, width: 'auto' });
+// Override the runtime column widths set by updateMsglistWidths.
+// Keep the flags cell (it holds the thread expand/collapse control); hide only the
+// flag letters.
+ensureCSS('.theme-modern .msgItemFlags', { gridArea: 'flags', display: 'flex', alignItems: 'center', padding: 0, width: 'auto' });
+ensureCSS('.theme-modern .msgItemFlag', { display: 'none' });
+// Thread connector: a full-height vertical line on the left, anchored to the whole
+// item (not the from cell). The first/last/middle variant classes still set
+// top/bottom for the half-bars at thread ends.
+ensureCSS('.theme-modern .msgItemFrom', { gridArea: 'from', width: 'auto', position: 'static' });
+// Configurable per-element weight/style (defaults: sender bold, the rest normal).
+ensureCSS('.theme-modern .msgItemFromText', { fontWeight: 'var(--ml-from-weight, bold)', fontStyle: 'var(--ml-from-style, normal)' });
+ensureCSS('.theme-modern .msgItemThreadBar', { left: '.55em', right: 'auto', borderLeft: '2px solid var(--colorMild)', borderRight: 'none' });
+// The bar is anchored to the full item (which has .45em vertical padding), so the
+// default ±1px end offsets fall short of the row edges and leave seams between
+// rows. Overshoot by half an em so consecutive segments overlap into one solid
+// line, and shape the thread ends: the root gets a short tail reaching up toward
+// the collapse control, the last message a short stub marking the end.
+ensureCSS('.theme-modern .msgItemThreadBarMiddle', { top: '-.5em', bottom: '-.5em' });
+ensureCSS('.theme-modern .msgItemThreadBarFirst', { top: '40%', bottom: '-.5em' });
+ensureCSS('.theme-modern .msgItemThreadBarLast', { top: '-.5em', bottom: '50%' });
+ensureCSS('.theme-modern .msgItemSubject', { gridArea: 'subject', width: 'auto' });
+ensureCSS('.theme-modern .msgItemAge', { gridArea: 'age', width: 'auto', color: 'var(--colorMilder)', fontWeight: 'var(--ml-date-weight, normal)', fontStyle: 'var(--ml-date-style, normal)' });
+ensureCSS('.theme-modern .msgItemAvatar', {
+	display: 'flex',
+	gridArea: 'avatar',
+	alignItems: 'center',
+	justifyContent: 'center',
+	width: '34px',
+	height: '34px',
+	borderRadius: '50%',
+	color: '#fff',
+	fontWeight: 'bold',
+	alignSelf: 'center',
+});
+// Subject and preview flow inline within a 2-line clamped box: the subject takes
+// priority (a long subject wraps to the second line), and the muted preview fills
+// whatever room is left.
+ensureCSS('.theme-modern .msgItemSubjectText', { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: '2', overflow: 'hidden', whiteSpace: 'normal' });
+ensureCSS('.theme-modern .msgItemSubjectTitle', { display: 'inline', fontWeight: 'var(--ml-subj-weight, normal)', fontStyle: 'var(--ml-subj-style, normal)' });
+ensureCSS('.theme-modern .msgItemSubjectSnippet', { display: 'inline', margin: 0, fontWeight: 'var(--ml-prev-weight, normal)', fontStyle: 'var(--ml-prev-style, normal)' });
+// Unread emphasis, selected in Settings and reflected as an html.unread-* class:
+// accent bar on the left (default and "barbold"), bold sender/subject ("bold" and
+// "barbold"), an accent-tinted row ("tint"), or a left dot ("dot"). All modern-only.
+ensureCSS('.theme-modern.unread-bar .msgItem.msgItemUnread, .theme-modern.unread-barbold .msgItem.msgItemUnread', { boxShadow: 'inset .2em 0 0 var(--accent)' });
+ensureCSS('.theme-modern.unread-bold .msgItem.msgItemUnread .msgItemFromText, .theme-modern.unread-bold .msgItem.msgItemUnread .msgItemSubjectTitle, .theme-modern.unread-barbold .msgItem.msgItemUnread .msgItemFromText, .theme-modern.unread-barbold .msgItem.msgItemUnread .msgItemSubjectTitle', { fontWeight: 'bold' });
+ensureCSS('.theme-modern.unread-tint .msgItem.msgItemUnread', { background: 'color-mix(in srgb, var(--accent) 10%, transparent)' });
+ensureCSS('.theme-modern.unread-dot .msgItem.msgItemUnread::after', { content: '""', position: 'absolute', left: '.2em', top: '50%', transform: 'translateY(-50%)', width: '.5em', height: '.5em', borderRadius: '50%', background: 'var(--accent)' });
+// Selection and hover use the accent tint and rounded corners (override classic).
+ensureCSS('.theme-modern .msgItem.active', { background: 'color-mix(in srgb, var(--accent) 18%, transparent)' }, true);
+ensureCSS('.theme-modern .msgItem:hover', { backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)' }, true);
+// Modern top bar: pill search, accent Compose button.
+ensureCSS('.theme-modern .searchbarElem', { borderRadius: '1em', padding: '.2em .8em' });
+ensureCSS('.theme-modern .composeButton', { background: 'var(--accent)', color: 'var(--accentText)', borderColor: 'transparent' }, true);
+ensureCSS('.theme-modern .composeButton:hover:not(:disabled)', { background: 'color-mix(in srgb, var(--accent) 85%, var(--color))' }, true);
+// Modern folder list: icons, rounded accent-tinted active row, hover, count badge.
+ensureCSS('.theme-modern .mailboxItem', { borderRadius: 'var(--radius)' });
+ensureCSS('.theme-modern .mailboxItem.active', { background: 'color-mix(in srgb, var(--accent) 18%, transparent)' }, true);
+ensureCSS('.theme-modern .mailboxItem:hover', { backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)' }, true);
+ensureCSS('.theme-modern .mailboxIcon', { display: 'inline-block', width: '1.3em', marginRight: '.3em', textAlign: 'center', flex: 'none' });
+ensureCSS('.theme-modern .mailboxUnread:not(:empty)', { background: 'var(--accent)', color: 'var(--accentText)', borderRadius: '1em', padding: '0 .5em', fontSize: '.85em', fontWeight: 'normal' });
+// Modern reading pane: reorder the header into a flex column — large subject, then
+// avatar+sender (with a Details disclosure), then the action pills, then the detail
+// block (the classic header table is collapsed by default). Classic is untouched
+// because the modern elements are display:none there.
+ensureCSS('.theme-modern .msgmeta', { display: 'flex', flexDirection: 'column', padding: '.6em .8em', gap: '.15em' });
+ensureCSS('.theme-modern .msgModernSubject', { display: 'block', order: '1', margin: '.1em 0 .2em', fontSize: 'calc(1.5em * var(--mv-subj-scale, 1))', fontWeight: '600', lineHeight: '1.25' });
+ensureCSS('.theme-modern .msgModernSender', { display: 'flex', order: '2', alignItems: 'center', gap: '.6em', marginBottom: '.35em' });
+ensureCSS('.theme-modern .msgButtons', { order: '3' });
+ensureCSS('.theme-modern .msgDetails', { order: '4' });
+ensureCSS('.theme-modern .headerBodySeparator', { order: '5' });
+// Avatar + sender identity line.
+ensureCSS('.theme-modern .msgModernAvatar', { display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', width: '40px', height: '40px', borderRadius: '50%', color: '#fff', fontWeight: 'bold' });
+ensureCSS('.theme-modern .msgModernSenderText', { display: 'flex', flexDirection: 'column', minWidth: '0' });
+ensureCSS('.theme-modern .msgModernSenderName', { fontWeight: 'var(--mv-sender-weight, 600)', fontStyle: 'var(--mv-sender-style, normal)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+ensureCSS('.theme-modern .msgModernSenderTime', { color: 'var(--colorMild)', fontSize: '.9em' });
+// Header actions live at the right end of the sender line: the mode dropdown
+// (Text/HTML) and the Details disclosure, both small rounded pills like the other
+// modern buttons. The classic inline Text/HTML row is hidden here.
+ensureCSS('.theme-modern .msgModernSenderActions', { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '.4em', flex: 'none' });
+ensureCSS('.theme-modern .msgModernSenderActions button', { borderRadius: '1em', padding: '.15em .7em', fontSize: '.85em' }, true);
+ensureCSS('.theme-modern .msgMode', { display: 'none' });
+// Details (recipients + date) collapsed by default; the Details toggle reveals the
+// classic header table.
+ensureCSS('.theme-modern .msgmeta .msgHeaders', { display: 'none' });
+ensureCSS('.theme-modern .msgmeta.detailsExpanded .msgHeaders', { display: 'table' });
+// Action buttons as pills, with an accent Reply. (important to beat the generic
+// button rules, which tie on specificity by source order.)
+ensureCSS('.theme-modern .msgmeta .msgButtons button', { borderRadius: '1em', padding: '.25em .9em' }, true);
+ensureCSS('.theme-modern .msgmeta .msgReplyButton', { background: 'var(--accent)', color: 'var(--accentText)', borderColor: 'transparent' }, true);
+ensureCSS('.theme-modern .msgmeta .msgReplyButton:hover:not(:disabled)', { background: 'color-mix(in srgb, var(--accent) 85%, var(--color))' }, true);
+// Comfortable body padding.
+ensureCSS('.theme-modern .msgscroll', { padding: '1em 1.2em' });
+// Modern message-list filter/sort toolbar: drop the "Refine:" label, keep both
+// groups on a single nowrap row, render the quick filters as compact rounded
+// icon pills so it fits even at narrow widths.
+ensureCSS('.theme-modern .refineTitle', { display: 'none' });
+ensureCSS('.theme-modern .msgListFilterSorting', { padding: '.3em .5em', gap: '.5em', alignItems: 'center' });
+ensureCSS('.theme-modern .msgListFilterSorting > div', { display: 'flex', alignItems: 'center', gap: '.35em', flexWrap: 'nowrap' });
+ensureCSS('.theme-modern .msgListFilterSorting .btngroup', { display: 'inline-flex', alignItems: 'center', gap: '.3em' });
+// Textual toolbar controls (Label, ↑↓) are compact rounded pills.
+ensureCSS('.theme-modern .msgListFilterSorting button', { borderRadius: '1em', padding: '.2em .7em', fontSize: '.85em', lineHeight: '1.3', border: '1px solid transparent' }, true);
+ensureCSS('.theme-modern .msgListFilterSorting select', { borderRadius: '1em', fontSize: '.85em', padding: '.15em .5em' });
+// Active filter / inverted sort takes the accent.
+ensureCSS('.theme-modern .msgListFilterSorting button.active, .theme-modern .msgListFilterSorting button.invert', { background: 'var(--accent)', color: 'var(--accentText)', borderColor: 'transparent' }, true);
+// Quick filters render as equal, borderless circular icon buttons (text collapsed via
+// font-size:0; the glyph comes from a centred ::before), tinted on hover.
+ensureCSS('.theme-modern .msgListFilterSorting .refineIcon', { fontSize: '0', width: '1.9rem', height: '1.9rem', padding: '0', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid transparent' }, true);
+ensureCSS('.theme-modern .msgListFilterSorting .refineIcon:hover', { background: 'color-mix(in srgb, var(--accent) 14%, transparent)' }, true);
+ensureCSS('.theme-modern .refineUnread::before', { content: '"\u{1F4E9}"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineRead::before', { content: '"\u{1F4D6}"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineAttachments::before', { content: '"\u{1F4CE}"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineClear::before', { content: '"✕"', fontSize: '1rem', lineHeight: '1' });
+ensureCSS('.theme-modern .refineLabel::before', { content: '"\u{1F3F7}"', fontSize: '1rem', lineHeight: '1' });
 // Typed way to reference a css variables. Kept from before used variables.
 const styles = {
 	color: 'var(--color)',
