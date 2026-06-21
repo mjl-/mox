@@ -293,7 +293,7 @@ var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
 	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress", "esearch", "notify")
-	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace", "esearch")
+	commandsStateSelected         = stateCommands("check", "close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace", "esearch")
 )
 
 // Commands that use sequence numbers. Cannot be used when UIDONLY is enabled.
@@ -1361,7 +1361,7 @@ func (c *conn) command() {
 	// Check if command is allowed in this state.
 	if _, ok1 := commandsStateAny[cmdlow]; ok1 {
 	} else if _, ok2 := commandsStateNotAuthenticated[cmdlow]; ok2 && c.state == stateNotAuthenticated {
-	} else if _, ok3 := commandsStateAuthenticated[cmdlow]; ok3 && c.state == stateAuthenticated || c.state == stateSelected {
+	} else if _, ok3 := commandsStateAuthenticated[cmdlow]; ok3 && (c.state == stateAuthenticated || c.state == stateSelected) {
 	} else if _, ok4 := commandsStateSelected[cmdlow]; ok4 && c.state == stateSelected {
 	} else if ok1 || ok2 || ok3 || ok4 {
 		xuserErrorf("not allowed in this connection state")
