@@ -19,7 +19,21 @@ database.
 */
 package store
 
-// todo: make up a function naming scheme that indicates whether caller should broadcast changes.
+// Functions in this package use a consistent pattern for indicating whether the caller
+// must broadcast changes:
+//
+// - Functions that accept a *bstore.Tx parameter are low-level database operations.
+//   They modify data within a provided transaction and return changes. The caller is
+//   responsible for committing the transaction and calling BroadcastChanges() with
+//   the returned changes. These functions return changes as return values.
+//
+// - Functions that do NOT accept a *bstore.Tx parameter are higher-level operations.
+//   They manage their own database transactions, commit them, and handle broadcasting
+//   of changes internally. The caller does not need to broadcast changes.
+//
+// This pattern ensures clear separation of concerns: low-level functions delegate
+// broadcasting responsibility to their callers (allowing batch operations), while
+// high-level functions provide complete, self-contained operations.
 
 import (
 	"context"
