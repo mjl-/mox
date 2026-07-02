@@ -311,13 +311,18 @@ func (c *Config) IsClientSettingsDomain(d dns.Domain) (is bool) {
 }
 
 func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
+	managerHosts := map[*autotls.Manager]map[dns.Domain]struct{}{}
+
 	for _, l := range c.Static.Listeners {
 		if l.TLS == nil || l.TLS.ACME == "" {
 			continue
 		}
 
 		m := c.Static.ACME[l.TLS.ACME].Manager
-		hostnames := map[dns.Domain]struct{}{}
+		if managerHosts[m] == nil {
+			managerHosts[m] = map[dns.Domain]struct{}{}
+		}
+		hostnames := managerHosts[m]
 
 		hostnames[c.Static.HostnameDomain] = struct{}{}
 		if l.HostnameDomain.ASCII != "" {
@@ -368,14 +373,18 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 			}
 		}
 
-		public := c.Static.Listeners["public"]
-		ips := public.IPs
-		if len(public.NATIPs) > 0 {
-			ips = public.NATIPs
-		}
-		if public.IPsNATed {
-			ips = nil
-		}
+	}
+
+	public := c.Static.Listeners["public"]
+	ips := public.IPs
+	if len(public.NATIPs) > 0 {
+		ips = public.NATIPs
+	}
+	if public.IPsNATed {
+		ips = nil
+	}
+
+	for m, hostnames := range managerHosts {
 		m.SetAllowedHostnames(log, dns.StrictResolver{Pkg: "autotls", Log: log.Logger}, hostnames, ips, checkACMEHosts)
 	}
 }
