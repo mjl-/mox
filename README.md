@@ -39,6 +39,7 @@ See Quickstart below to get started.
 - "mox localserve" subcommand for running mox locally for email-related
   testing/developing, including pedantic mode.
 - Most non-server Go packages mox consists of are written to be reusable.
+- Optional Introbox for messages from senders with no established reputation.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
 mechiel@ueber.net. Mox includes BSD-3-claused code from the Go Authors, and the
@@ -149,7 +150,6 @@ support:
 - Recognize common deliverability issues and help postmasters solve them
 - JMAP, IMAP OBJECTID extension, IMAP JMAPACCESS extension
 - Calendaring with CalDAV/iCal
-- Introbox, to which first-time senders are delivered
 - Add special IMAP mailbox ("Queue?") that contains queued but
   undelivered messages, updated with IMAP flags/keywords/tags and message headers.
 - External addresses in aliases/lists.

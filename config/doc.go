@@ -1240,6 +1240,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# (optional)
 			KeepRejects: false
 
+			# Mailbox for delivering messages from senders with no established reputation. It
+			# must be different from RejectsMailbox. If empty, these messages are delivered to
+			# the regular destination mailbox, typically Inbox. Useful for deprioritizing mail
+			# from unknown correspondents while keeping mail from known correspondents in
+			# Inbox. Moving a message from Introbox to its originally intended mailbox marks
+			# it as nonjunk and records a positive interaction, so future messages from the
+			# sender are delivered to their regular destination. Moving it to a junk mailbox
+			# records a negative interaction for the intended mailbox. (optional)
+			Introbox:
+
 			# Automatically set $Junk and $NotJunk flags based on mailbox messages are
 			# delivered/moved/copied to. Email clients typically have too limited
 			# functionality to conveniently set these flags, especially $NonJunk, but they can

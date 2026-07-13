@@ -3547,8 +3547,22 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 
 			var delivered bool
+			var deliveredMailbox string
 			a.d.acc.WithWLock(func() {
-				if err := a.d.acc.DeliverMailbox(log, a.mailbox, a.d.m, dataFile); err != nil {
+				conf, _ := a.d.acc.Conf()
+				mailbox := a.mailbox
+				introbox := delayFirstTime && !a.d.m.IsForward && !a.d.m.IsMailingList && a.reason == reasonNoBadSignals && conf.Introbox != "" && conf.Introbox != mailbox
+				if introbox {
+					mailbox = conf.Introbox
+					log.Info("delivering sender with no established reputation to introbox", slog.String("mailbox", mailbox))
+				}
+				var err error
+				if introbox {
+					err = a.d.acc.DeliverMailboxDestined(log, mailbox, a.mailbox, a.d.m, dataFile)
+				} else {
+					err = a.d.acc.DeliverMailbox(log, mailbox, a.d.m, dataFile)
+				}
+				if err != nil {
 					log.Errorx("delivering", err)
 					metricDelivery.WithLabelValues("delivererror", a0.reason).Inc()
 					if errors.Is(err, store.ErrOverQuota) {
@@ -3560,11 +3574,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					return
 				}
 				delivered = true
+				deliveredMailbox = mailbox
 				ndelivered++
 				metricDelivery.WithLabelValues("delivered", a0.reason).Inc()
 				log.Info("incoming message delivered", slog.String("reason", a0.reason), slog.Any("msgfrom", msgFrom))
 
-				conf, _ := a.d.acc.Conf()
 				if conf.RejectsMailbox != "" && a.d.m.MessageID != "" {
 					if err := a.d.acc.RejectsRemove(log, conf.RejectsMailbox, a.d.m.MessageID); err != nil {
 						log.Errorx("removing message from rejects mailbox", err, slog.String("messageid", messageID))
@@ -3579,7 +3593,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				if err != nil {
 					log.Errorx("loading parsed part for evaluating webhook", err)
 				} else {
-					err = queue.Incoming(context.Background(), log, a.d.acc, messageID, *a.d.m, part, a.mailbox)
+					err = queue.Incoming(context.Background(), log, a.d.acc, messageID, *a.d.m, part, deliveredMailbox)
 					log.Check(err, "queueing webhook for incoming delivery")
 				}
 			} else if nerr > 0 && ndelivered == 0 {

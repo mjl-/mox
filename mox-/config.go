@@ -1434,7 +1434,11 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if strings.EqualFold(acc.RejectsMailbox, "Inbox") {
 			addAccountErrorf("cannot set RejectsMailbox to inbox, messages will be removed automatically from the rejects mailbox")
 		}
+		if acc.Introbox != "" && acc.Introbox == acc.RejectsMailbox {
+			addAccountErrorf("cannot set Introbox and RejectsMailbox to the same mailbox")
+		}
 		checkMailboxNormf(acc.RejectsMailbox, "rejects mailbox", addErrorf)
+		checkMailboxNormf(acc.Introbox, "introbox mailbox", addErrorf)
 
 		if len(acc.LoginDisabled) > 256 {
 			addAccountErrorf("message for disabled login must be <256 characters")

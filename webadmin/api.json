@@ -4179,6 +4179,13 @@
 					]
 				},
 				{
+					"Name": "Introbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "AutomaticJunkFlags",
 					"Docs": "",
 					"Typewords": [

@@ -143,6 +143,7 @@ try {
 } catch (err) {}
 
 let accountSettings: api.Settings
+let introboxMailbox: string = ''
 
 const defaultSettings = {
 	mailboxesWidth: 240,
@@ -5541,6 +5542,7 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 		const stem = (s: string) => s.split('/')[0]
 		const specialUse = [
 			(mb: api.Mailbox) => stem(mb.Name) === 'Inbox',
+			(mb: api.Mailbox) => introboxMailbox !== '' && stem(mb.Name) === stem(introboxMailbox),
 			(mb: api.Mailbox) => draftmb && stem(mb.Name) === stem(draftmb.Name),
 			(mb: api.Mailbox) => sentmb && stem(mb.Name) === stem(sentmb.Name),
 			(mb: api.Mailbox) => archivemb && stem(mb.Name) === stem(archivemb.Name),
@@ -7441,6 +7443,7 @@ const init = async () => {
 			log('event start', start)
 
 			accountSettings = start.Settings
+			introboxMailbox = start.Introbox
 			connecting = false
 			sseID = start.SSEID
 			loginAddress = start.LoginAddress

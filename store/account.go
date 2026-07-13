@@ -456,11 +456,11 @@ type Message struct {
 	// per-mailbox reputation.
 	//
 	// MailboxDestinedID is normally 0, but when a message is delivered to the Rejects
-	// mailbox, it is set to the intended mailbox according to delivery rules,
-	// typically that of Inbox. When such a message is moved out of Rejects, the
-	// MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the
-	// message is used for reputation calculation for future deliveries to that
-	// mailbox.
+	// mailbox or diverted to the Introbox, it is set to the intended mailbox according
+	// to delivery rules, typically that of Inbox. When such a message is moved to its
+	// intended mailbox, MailboxOrigID is corrected by setting it to MailboxDestinedID.
+	// This ensures the message is used for reputation calculation for future
+	// deliveries to that mailbox.
 	//
 	// These are not bstore references to prevent having to update all messages in a
 	// mailbox when the original mailbox is removed. Use of these fields requires
@@ -754,6 +754,30 @@ func (m *Message) JunkFlagsForMailbox(mb Mailbox, conf config.Account) {
 	} else if conf.JunkMailbox != nil && conf.NeutralMailbox != nil && conf.NotJunkMailbox == nil {
 		m.Junk = false
 		m.Notjunk = true
+	}
+}
+
+// JunkFlagsForMailboxMove sets Junk and Notjunk flags for a mailbox move. A
+// message moved or copied from Introbox to its originally intended mailbox is
+// marked as a positive interaction and used for reputation during future
+// deliveries. A move or copy to a junk mailbox records a negative interaction
+// for the intended mailbox.
+func (m *Message) JunkFlagsForMailboxMove(mbSrc, mbDst Mailbox, conf config.Account) {
+	m.JunkFlagsForMailbox(mbDst, conf)
+	if mbSrc.Name != conf.Introbox || m.MailboxDestinedID == 0 {
+		return
+	}
+	if m.MailboxDestinedID == mbDst.ID {
+		m.MailboxOrigID = m.MailboxDestinedID
+		m.MailboxDestinedID = 0
+		m.Junk = false
+		m.Notjunk = true
+	} else if m.Junk {
+		// Associate a negative decision with the intended mailbox too. Otherwise
+		// future messages would keep returning to Introbox without using it for
+		// reputation.
+		m.MailboxOrigID = m.MailboxDestinedID
+		m.MailboxDestinedID = 0
 	}
 }
 
@@ -2325,7 +2349,15 @@ func (a *Account) MessageAdd(log mlog.Log, tx *bstore.Tx, mb *Mailbox, m *Messag
 	}
 
 	conf, _ := a.Conf()
-	m.JunkFlagsForMailbox(*mb, conf)
+	if mb.Name == conf.Introbox && m.MailboxDestinedID != 0 && m.MailboxDestinedID != mb.ID {
+		// Introbox is neutral until the user moves the message to its intended
+		// mailbox. In particular, do not let automatic mailbox rules mark a
+		// top-level Introbox as nonjunk immediately.
+		m.Junk = false
+		m.Notjunk = false
+	} else {
+		m.JunkFlagsForMailbox(*mb, conf)
+	}
 
 	var part *message.Part
 	if m.ParsedBuf == nil {
@@ -2941,6 +2973,19 @@ func (a *Account) DeliverDestination(log mlog.Log, dest config.Destination, m *M
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
 func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFile *os.File) (rerr error) {
+	return a.deliverMailbox(log, mailbox, "", m, msgFile)
+}
+
+// DeliverMailboxDestined delivers an email to mailbox while recording
+// destinedMailbox as the mailbox to which it would otherwise have been delivered.
+// Both mailboxes are created if necessary.
+//
+// Caller must hold account wlock.
+func (a *Account) DeliverMailboxDestined(log mlog.Log, mailbox, destinedMailbox string, m *Message, msgFile *os.File) (rerr error) {
+	return a.deliverMailbox(log, mailbox, destinedMailbox, m, msgFile)
+}
+
+func (a *Account) deliverMailbox(log mlog.Log, mailbox, destinedMailbox string, m *Message, msgFile *os.File) (rerr error) {
 	var changes []Change
 
 	var commit bool
@@ -2954,6 +2999,15 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 	}()
 
 	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
+		if destinedMailbox != "" && destinedMailbox != mailbox {
+			mbDestined, chl, err := a.MailboxEnsure(tx, destinedMailbox, true, SpecialUse{}, &m.ModSeq)
+			if err != nil {
+				return fmt.Errorf("ensuring intended mailbox: %w", err)
+			}
+			m.MailboxDestinedID = mbDestined.ID
+			changes = append(changes, chl...)
+		}
+
 		mb, chl, err := a.MailboxEnsure(tx, mailbox, true, SpecialUse{}, &m.ModSeq)
 		if err != nil {
 			return fmt.Errorf("ensuring mailbox: %w", err)

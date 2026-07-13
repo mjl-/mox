@@ -490,6 +490,19 @@
 			"Returns": []
 		},
 		{
+			"Name": "IntroboxSave",
+			"Docs": "IntroboxSave saves the mailbox for messages from senders with no established\nreputation, creating it if it does not exist. The mailbox must be different from\nRejectsMailbox. If empty, the introbox is disabled.",
+			"Params": [
+				{
+					"Name": "mailbox",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "TLSPublicKeys",
 			"Docs": "",
 			"Params": [],
@@ -709,6 +722,13 @@
 					"Docs": "",
 					"Typewords": [
 						"bool"
+					]
+				},
+				{
+					"Name": "Introbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
 					]
 				},
 				{

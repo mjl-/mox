@@ -259,13 +259,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			return fmt.Errorf("finding destination mailbox: %w", err)
 		}
 		if mb != nil {
-			// We want to deliver to mb.ID, but this message may be rejected and sent to the
-			// Rejects mailbox instead, with MailboxID overwritten. Record the ID in
-			// MailboxDestinedID too. If the message is later moved out of the Rejects mailbox,
-			// we'll adjust the MailboxOrigID so it gets taken into account during reputation
-			// calculating in future deliveries. If we end up delivering to the intended
-			// mailbox (i.e. not rejecting), MailboxDestinedID is cleared during delivery so we
-			// don't store it unnecessarily.
+			// We want to deliver to mb.ID, but this message may instead be stored in the
+			// Rejects mailbox or diverted to the Introbox. Record the ID in
+			// MailboxDestinedID too. If the message is later moved to the intended mailbox,
+			// we'll adjust MailboxOrigID so it gets taken into account during reputation
+			// calculation for future deliveries. If we deliver directly to the intended
+			// mailbox, MailboxDestinedID is cleared during delivery.
 			d.m.MailboxID = mb.ID
 			d.m.MailboxDestinedID = mb.ID
 		} else {

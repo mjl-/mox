@@ -4793,7 +4793,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 					m.IsReject = false
 				}
 				m.TrainedJunk = nil
-				m.JunkFlagsForMailbox(mbDst, conf)
+				m.JunkFlagsForMailboxMove(mbSrc, mbDst, conf)
 				m.SaveDate = &now
 				err := tx.Insert(&m)
 				xcheckf(err, "inserting message")
@@ -5056,7 +5056,7 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 			nm.Seen = false
 		}
 
-		nm.JunkFlagsForMailbox(*mbDst, accConf)
+		nm.JunkFlagsForMailboxMove(*mbSrc, *mbDst, accConf)
 
 		err = tx.Update(&nm)
 		xcheckf(err, "updating message with new mailbox")

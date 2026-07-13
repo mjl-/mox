@@ -19,6 +19,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -80,6 +81,14 @@ Subject: test
 Message-Id: <test2@example.org>
 
 test email, unique.
+`, "\n", "\r\n")
+
+var deliverMessage3 = strings.ReplaceAll(`From: <remote@example.org>
+To: <mjl@mox.example>
+Subject: test
+Message-Id: <test3@example.org>
+
+test email, unique again.
 `, "\n", "\r\n")
 
 type testserver struct {
@@ -639,6 +648,74 @@ func TestDelivery(t *testing.T) {
 	})
 
 	checkEvaluationCount(t, 0)
+}
+
+func TestIntrobox(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+		TXT: map[string][]string{
+			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"example.org."},
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
+	defer ts.close()
+
+	acc := mox.Conf.Dynamic.Accounts[ts.acc.Name]
+	dest := acc.Destinations["mjl@mox.example"]
+	dest.Mailbox = "Intended"
+	acc.Destinations["mjl@mox.example"] = dest
+	accDest := mox.Conf.AccountDestinationsLocked["mjl@mox.example"]
+	accDest.Destination = dest
+	mox.Conf.AccountDestinationsLocked["mjl@mox.example"] = accDest
+	acc.Introbox = "Introbox"
+	acc.AutomaticJunkFlags.Enabled = true
+	acc.AutomaticJunkFlags.JunkMailboxRegexp = "^(junk|spam)"
+	acc.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
+	acc.JunkMailbox = regexp.MustCompile(acc.AutomaticJunkFlags.JunkMailboxRegexp)
+	acc.NeutralMailbox = regexp.MustCompile(acc.AutomaticJunkFlags.NeutralMailboxRegexp)
+	mox.Conf.Dynamic.Accounts[ts.acc.Name] = acc
+
+	deliver := func(msg string) {
+		ts.run(func(client *smtpclient.Client) {
+			mailFrom := "remote@example.org"
+			rcptTo := "mjl@mox.example"
+			err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
+			tcheck(t, err, "deliver")
+		})
+	}
+
+	deliver(deliverMessage)
+	ts.checkCount("Intended", 0)
+	ts.checkCount("Introbox", 1)
+
+	deliver(deliverMessage2)
+	ts.checkCount("Intended", 0)
+	ts.checkCount("Introbox", 2)
+
+	introbox, err := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB).FilterNonzero(store.Mailbox{Name: "Introbox"}).Get()
+	tcheck(t, err, "get introbox")
+	var ids []int64
+	err = bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).FilterNonzero(store.Message{MailboxID: introbox.ID}).ForEach(func(m store.Message) error {
+		if m.Junk || m.Notjunk {
+			t.Fatalf("introbox message has junk flags: junk %v, notjunk %v", m.Junk, m.Notjunk)
+		}
+		ids = append(ids, m.ID)
+		return nil
+	})
+	tcheck(t, err, "get introbox message ids")
+	ts.xops.MessageMove(ctxbg, pkglog, ts.acc, ids, "Intended", 0)
+	ts.checkCount("Intended", 2)
+	ts.checkCount("Introbox", 0)
+
+	deliver(deliverMessage3)
+	ts.checkCount("Intended", 3)
+	ts.checkCount("Introbox", 0)
 }
 
 func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Message, msg string) {

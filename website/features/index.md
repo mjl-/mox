@@ -213,6 +213,20 @@ calculate the probability that a message is junk, which must not pass a
 configurable threshold.  The reputation of words is based on their occurrence
 in historic junk/non-junk messages, as classified by the user.
 
+### Introbox
+
+An account can configure an Introbox for accepted messages from senders with no
+established reputation. This keeps messages from unknown correspondents separate
+while messages from known correspondents continue to arrive in their regular
+destination, typically Inbox. Introbox must be different from RejectsMailbox.
+
+Moving a message from Introbox to its originally intended mailbox marks the
+message as nonjunk and records a positive interaction for that destination.
+Future messages from the sender can then use this reputation and are delivered
+to their regular destination. Moving it to a junk mailbox records a negative
+interaction for the intended mailbox. This works through webmail, the web API,
+and IMAP clients.
+
 ### Delivery feedback
 
 When an incoming message is rejected for being junk, mox returns a temporary

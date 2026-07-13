@@ -38,6 +38,40 @@ func tcompare(t *testing.T, got, expect any) {
 	}
 }
 
+func TestJunkFlagsForMailboxMove(t *testing.T) {
+	conf := config.Account{
+		Introbox: "Introbox",
+		AutomaticJunkFlags: config.AutomaticJunkFlags{
+			Enabled: true,
+		},
+	}
+	conf.JunkMailbox = regexp.MustCompile("^junk$")
+	conf.NotJunkMailbox = regexp.MustCompile(".*")
+
+	introbox := Mailbox{ID: 1, Name: "Introbox"}
+	intended := Mailbox{ID: 2, Name: "Intended"}
+	junkmb := Mailbox{ID: 3, Name: "Junk"}
+	other := Mailbox{ID: 4, Name: "Archive"}
+
+	m := Message{MailboxOrigID: introbox.ID, MailboxDestinedID: intended.ID}
+	m.JunkFlagsForMailboxMove(introbox, intended, conf)
+	if m.MailboxOrigID != intended.ID || m.MailboxDestinedID != 0 || m.Junk || !m.Notjunk {
+		t.Fatalf("positive introbox move not recorded: %#v", m)
+	}
+
+	m = Message{MailboxOrigID: introbox.ID, MailboxDestinedID: intended.ID}
+	m.JunkFlagsForMailboxMove(introbox, junkmb, conf)
+	if m.MailboxOrigID != intended.ID || m.MailboxDestinedID != 0 || !m.Junk || m.Notjunk {
+		t.Fatalf("negative introbox move not recorded: %#v", m)
+	}
+
+	m = Message{MailboxOrigID: introbox.ID, MailboxDestinedID: intended.ID}
+	m.JunkFlagsForMailboxMove(introbox, other, conf)
+	if m.MailboxOrigID != introbox.ID || m.MailboxDestinedID != intended.ID || m.Junk || !m.Notjunk {
+		t.Fatalf("unrelated introbox move changed reputation destination: %#v", m)
+	}
+}
+
 func TestMailbox(t *testing.T) {
 	log := mlog.New("store", nil)
 	os.RemoveAll("../testdata/store/data")
