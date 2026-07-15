@@ -218,7 +218,8 @@ in historic junk/non-junk messages, as classified by the user.
 An account can configure an Introbox for accepted messages from senders with no
 established reputation. This keeps messages from unknown correspondents separate
 while messages from known correspondents continue to arrive in their regular
-destination, typically Inbox. Introbox must be different from RejectsMailbox.
+destination, typically Inbox. Introbox cannot be Inbox and must be different
+from RejectsMailbox.
 
 Moving a message from Introbox to its originally intended mailbox marks the
 message as nonjunk and records a positive interaction for that destination.

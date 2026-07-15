@@ -719,13 +719,13 @@ func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
 }
 
 // IntroboxSave saves the mailbox for messages from senders with no established
-// reputation, creating it if it does not exist. The mailbox must be different from
-// RejectsMailbox. If empty, the introbox is disabled.
+// reputation, creating it if it does not exist. The mailbox cannot be Inbox and
+// must be different from RejectsMailbox. If empty, the introbox is disabled.
 func (Account) IntroboxSave(ctx context.Context, mailbox string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	if mailbox != "" {
 		var err error
-		mailbox, _, err = store.CheckMailboxName(mailbox, true)
+		mailbox, _, err = store.CheckMailboxName(mailbox, false)
 		xcheckuserf(ctx, err, "checking introbox mailbox name")
 
 		log := pkglog.WithContext(ctx)

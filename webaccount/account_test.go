@@ -522,6 +522,7 @@ func TestAccount(t *testing.T) {
 		return nil
 	})
 	tcheck(t, err, "checking introbox mailbox")
+	tneedErrorCode(t, "user:error", func() { api.IntroboxSave(ctx, "Inbox") })
 	tneedErrorCode(t, "user:error", func() { api.IntroboxSave(ctx, "bad//name") })
 	api.IntroboxSave(ctx, "") // Restore.
 

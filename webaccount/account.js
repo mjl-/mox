@@ -569,8 +569,8 @@ var api;
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// IntroboxSave saves the mailbox for messages from senders with no established
-		// reputation, creating it if it does not exist. The mailbox must be different from
-		// RejectsMailbox. If empty, the introbox is disabled.
+		// reputation, creating it if it does not exist. The mailbox cannot be Inbox and
+		// must be different from RejectsMailbox. If empty, the introbox is disabled.
 		async IntroboxSave(mailbox) {
 			const fn = "IntroboxSave";
 			const paramTypes = [["string"]];
@@ -1675,7 +1675,7 @@ openssl pkcs12 \\
 		e.preventDefault();
 		e.stopPropagation();
 		await check(introboxFieldset, client.IntroboxSave(introboxMailbox.value));
-	}, introboxFieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.label('Mailbox', attr.title('Mailbox for delivering messages from senders with no established reputation. The mailbox is created if it does not exist and must be different from RejectsMailbox. If empty, these messages are delivered to the regular destination mailbox, typically Inbox. Moving a message from Introbox to its intended mailbox marks it as nonjunk, so future messages from the sender are delivered normally. Moving it to a junk mailbox records a negative interaction for the intended mailbox.'), dom.div(introboxMailbox = dom.input(attr.value(acc.Introbox)))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))))), dom.br(), dom.h2('Rejects'), dom.form(async function submit(e) {
+	}, introboxFieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.label('Mailbox', attr.title('Mailbox for delivering messages from senders with no established reputation. The mailbox is created if it does not exist, cannot be Inbox, and must be different from RejectsMailbox. If empty, these messages are delivered to the regular destination mailbox, typically Inbox. Moving a message from Introbox to its intended mailbox marks it as nonjunk, so future messages from the sender are delivered normally. Moving it to a junk mailbox records a negative interaction for the intended mailbox.'), dom.div(introboxMailbox = dom.input(attr.value(acc.Introbox)))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))))), dom.br(), dom.h2('Rejects'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		await check(rejectsFieldset, client.RejectsSave(rejectsMailbox.value, keepRejects.checked));

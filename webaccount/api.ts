@@ -625,8 +625,8 @@ export class Client {
 	}
 
 	// IntroboxSave saves the mailbox for messages from senders with no established
-	// reputation, creating it if it does not exist. The mailbox must be different from
-	// RejectsMailbox. If empty, the introbox is disabled.
+	// reputation, creating it if it does not exist. The mailbox cannot be Inbox and
+	// must be different from RejectsMailbox. If empty, the introbox is disabled.
 	async IntroboxSave(mailbox: string): Promise<void> {
 		const fn: string = "IntroboxSave"
 		const paramTypes: string[][] = [["string"]]

@@ -1434,6 +1434,9 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if strings.EqualFold(acc.RejectsMailbox, "Inbox") {
 			addAccountErrorf("cannot set RejectsMailbox to inbox, messages will be removed automatically from the rejects mailbox")
 		}
+		if strings.EqualFold(acc.Introbox, "Inbox") {
+			addAccountErrorf("cannot set Introbox to inbox")
+		}
 		if acc.Introbox != "" && acc.Introbox == acc.RejectsMailbox {
 			addAccountErrorf("cannot set Introbox and RejectsMailbox to the same mailbox")
 		}

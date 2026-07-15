@@ -1223,7 +1223,7 @@ openssl pkcs12 \\
 				dom.div(style({display: 'flex', gap: '1em'}),
 					dom.label(
 						'Mailbox',
-						attr.title('Mailbox for delivering messages from senders with no established reputation. The mailbox is created if it does not exist and must be different from RejectsMailbox. If empty, these messages are delivered to the regular destination mailbox, typically Inbox. Moving a message from Introbox to its intended mailbox marks it as nonjunk, so future messages from the sender are delivered normally. Moving it to a junk mailbox records a negative interaction for the intended mailbox.'),
+						attr.title('Mailbox for delivering messages from senders with no established reputation. The mailbox is created if it does not exist, cannot be Inbox, and must be different from RejectsMailbox. If empty, these messages are delivered to the regular destination mailbox, typically Inbox. Moving a message from Introbox to its intended mailbox marks it as nonjunk, so future messages from the sender are delivered normally. Moving it to a junk mailbox records a negative interaction for the intended mailbox.'),
 						dom.div(introboxMailbox=dom.input(attr.value(acc.Introbox))),
 					),
 					dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
