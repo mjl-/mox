@@ -512,7 +512,7 @@ func TestAccount(t *testing.T) {
 	tneedErrorCode(t, "user:error", func() { api.IntroboxSave(ctx, "Rejects") })
 	api.RejectsSave(ctx, "", false) // Restore.
 
-	api.IntroboxSave(ctx, "Inbox/Intro")
+	api.IntroboxSave(ctx, "inbox/Intro")
 	err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 		mb, err := acc.MailboxFind(tx, "Inbox/Intro")
 		tcheck(t, err, "looking up introbox mailbox")
