@@ -102,7 +102,7 @@ func TestParseSignature(t *testing.T) {
         B/aHff1A==
 `
 	smtputf8 := true
-	_, _, err := parseSignature([]byte(strings.ReplaceAll(hdr, "\n", "\r\n")), smtputf8)
+	_, _, err := ParseSignature([]byte(strings.ReplaceAll(hdr, "\n", "\r\n")), smtputf8)
 	if err != nil {
 		t.Fatalf("parsing signature: %s", err)
 	}
@@ -604,7 +604,7 @@ test
 }
 
 func TestBodyHash(t *testing.T) {
-	simpleGot, err := bodyHash(crypto.SHA256.New(), true, bufio.NewReader(strings.NewReader("")))
+	simpleGot, err := BodyHash(crypto.SHA256.New(), true, bufio.NewReader(strings.NewReader("")))
 	if err != nil {
 		t.Fatalf("body hash, simple, empty string: %s", err)
 	}
@@ -613,7 +613,7 @@ func TestBodyHash(t *testing.T) {
 		t.Fatalf("simple body hash for empty string, got %s, expected %s", base64Encode(simpleGot), base64Encode(simpleWant))
 	}
 
-	relaxedGot, err := bodyHash(crypto.SHA256.New(), false, bufio.NewReader(strings.NewReader("")))
+	relaxedGot, err := BodyHash(crypto.SHA256.New(), false, bufio.NewReader(strings.NewReader("")))
 	if err != nil {
 		t.Fatalf("body hash, relaxed, empty string: %s", err)
 	}
@@ -640,7 +640,7 @@ d 	 e
 	relaxedOut := strings.ReplaceAll(` c
 d e
 `, "\n", "\r\n")
-	relaxedBh, err := bodyHash(crypto.SHA256.New(), false, bufio.NewReader(strings.NewReader(exampleIn)))
+	relaxedBh, err := BodyHash(crypto.SHA256.New(), false, bufio.NewReader(strings.NewReader(exampleIn)))
 	if err != nil {
 		t.Fatalf("bodyhash: %s", err)
 	}
@@ -650,7 +650,7 @@ d e
 	simpleOut := strings.ReplaceAll(` c
 d 	 e
 `, "\n", "\r\n")
-	simpleBh, err := bodyHash(crypto.SHA256.New(), true, bufio.NewReader(strings.NewReader(exampleIn)))
+	simpleBh, err := BodyHash(crypto.SHA256.New(), true, bufio.NewReader(strings.NewReader(exampleIn)))
 	if err != nil {
 		t.Fatalf("bodyhash: %s", err)
 	}
@@ -665,7 +665,7 @@ We lost the game.  Are you hungry yet?
 Joe.
 
 `, "\n", "\r\n")
-	relaxedGot, err = bodyHash(crypto.SHA256.New(), false, bufio.NewReader(strings.NewReader(relaxedBody)))
+	relaxedGot, err = BodyHash(crypto.SHA256.New(), false, bufio.NewReader(strings.NewReader(relaxedBody)))
 	if err != nil {
 		t.Fatalf("body hash, relaxed, ed25519 example: %s", err)
 	}

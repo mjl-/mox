@@ -337,6 +337,13 @@ func TestAdmin(t *testing.T) {
 	tneedErrorCode(t, "user:error", func() { api.DomainDKIMRemove(ctxbg, "mox.example", "testsel") }) // Already removed.
 	tneedErrorCode(t, "user:error", func() { api.DomainDKIMRemove(ctxbg, "bogus.example", "testsel") })
 
+	// ARC
+	api.DomainARCSave(ctxbg, "mox.example", false, "", []string{"google.com"})
+	tneedErrorCode(t, "user:error", func() { api.DomainARCSave(ctxbg, "mox.example", true, "", nil) })           // Seal enabled without selector.
+	tneedErrorCode(t, "user:error", func() { api.DomainARCSave(ctxbg, "mox.example", true, "bogus", nil) })      // Unknown selector.
+	tneedErrorCode(t, "user:error", func() { api.DomainARCSave(ctxbg, "bogus.example", false, "", nil) })        // Unknown domain.
+	api.DomainARCSave(ctxbg, "mox.example", false, "", nil) // Restore: remove ARC config.
+
 	// Aliases
 	alias := config.Alias{Addresses: []string{"mjl@mox.example"}}
 	api.AliasAdd(ctxbg, "support", "mox.example", alias)

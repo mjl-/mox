@@ -11,6 +11,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/arc"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
@@ -44,6 +45,7 @@ type delivery struct {
 	dmarcUse         bool
 	dmarcResult      dmarc.Result
 	dkimResults      []dkim.Result
+	arcResult        arc.Result
 	iprevStatus      iprev.Status
 	smtputf8         bool
 }
@@ -307,8 +309,32 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	}
 
 	if d.dmarcUse && d.dmarcResult.Reject {
-		addReasonText("message does not pass domain dmarc policy which asks to reject")
-		return reject(smtp.C550MailboxUnavail, smtp.SePol7MultiAuthFails26, "rejecting per dmarc policy", nil, reasonDMARCPolicy)
+		// Check if ARC chain from a trusted sealer can override DMARC failure.
+		// ../rfc/8617:Section 5.2
+		arcOverride := false
+		if d.arcResult.Status == arc.ChainStatusPass {
+			rcptDom := d.smtpRcptTo.IPDomain.Domain
+			if confDom, ok := mox.Conf.Domain(rcptDom); ok && confDom.ARC != nil {
+				for _, set := range d.arcResult.Sets {
+					for _, trusted := range confDom.ARC.TrustedSealerDomains {
+						if set.AS.Domain == trusted {
+							arcOverride = true
+							break
+						}
+					}
+					if arcOverride {
+						break
+					}
+				}
+			}
+		}
+		if arcOverride {
+			addReasonText("dmarc policy requests reject, but overridden by passing arc chain from trusted sealer")
+			dmarcOverrideReason = string(dmarcrpt.PolicyOverrideLocalPolicy)
+		} else {
+			addReasonText("message does not pass domain dmarc policy which asks to reject")
+			return reject(smtp.C550MailboxUnavail, smtp.SePol7MultiAuthFails26, "rejecting per dmarc policy", nil, reasonDMARCPolicy)
+		}
 	} else if !d.dmarcUse {
 		addReasonText("not using any dmarc result")
 	} else {

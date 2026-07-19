@@ -136,13 +136,13 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 			slog.Duration("duration", time.Since(start)))
 	}()
 
-	hdrs, bodyOffset, err := parseHeaders(bufio.NewReader(&moxio.AtReader{R: msg}))
+	hdrs, bodyOffset, err := ParseHeaders(bufio.NewReader(&moxio.AtReader{R: msg}))
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrHeaderMalformed, err)
 	}
 	nfrom := 0
 	for _, h := range hdrs {
-		if h.lkey == "from" {
+		if h.LKey == "from" {
 			nfrom++
 		}
 	}
@@ -183,7 +183,7 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 			// additional time, preventing someone from adding one more header later on.
 			counts := map[string]int{}
 			for _, h := range hdrs {
-				counts[h.lkey]++
+				counts[h.LKey]++
 			}
 			for _, h := range sel.Headers {
 				for j := counts[strings.ToLower(h)]; j > 0; j-- {
@@ -207,7 +207,7 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 			sig.Canonicalization += "simple"
 		}
 
-		h, hok := algHash(sig.AlgorithmHash)
+		h, hok := AlgHash(sig.AlgorithmHash)
 		if !hok {
 			return "", fmt.Errorf("unrecognized hash algorithm %q", sig.AlgorithmHash)
 		}
@@ -223,7 +223,7 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 			sig.BodyHash = bh
 		} else {
 			br := bufio.NewReader(&moxio.AtReader{R: msg, Offset: int64(bodyOffset)})
-			bh, err = bodyHash(h.New(), !sel.BodyRelaxed, br)
+			bh, err = BodyHash(h.New(), !sel.BodyRelaxed, br)
 			if err != nil {
 				return "", err
 			}
@@ -237,7 +237,7 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 		}
 		verifySig := []byte(strings.TrimSuffix(sigh, "\r\n"))
 
-		dh, err := dataHash(h.New(), !sel.HeaderRelaxed, sig, hdrs, verifySig)
+		dh, err := DataHash(h.New(), !sel.HeaderRelaxed, sig, hdrs, verifySig)
 		if err != nil {
 			return "", err
 		}
@@ -375,7 +375,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, smtpu
 		}
 	}()
 
-	hdrs, bodyOffset, err := parseHeaders(bufio.NewReader(&moxio.AtReader{R: r}))
+	hdrs, bodyOffset, err := ParseHeaders(bufio.NewReader(&moxio.AtReader{R: r}))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrHeaderMalformed, err)
 	}
@@ -383,11 +383,11 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, smtpu
 	// todo: reuse body hashes and possibly verify signatures in parallel. and start the dns lookup immediately. ../rfc/6376:2697
 
 	for _, h := range hdrs {
-		if h.lkey != "dkim-signature" {
+		if h.LKey != "dkim-signature" {
 			continue
 		}
 
-		sig, verifySig, err := parseSignature(h.raw, smtputf8)
+		sig, verifySig, err := ParseSignature(h.Raw, smtputf8)
 		if err != nil {
 			// ../rfc/6376:2503
 			err := fmt.Errorf("parsing DKIM-Signature header: %w", err)
@@ -395,7 +395,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, smtpu
 			continue
 		}
 
-		h, canonHeaderSimple, canonDataSimple, err := checkSignatureParams(ctx, log, sig)
+		h, canonHeaderSimple, canonDataSimple, err := CheckSignatureParams(ctx, log, sig)
 		if err != nil {
 			results = append(results, Result{StatusPermerror, sig, nil, false, err})
 			continue
@@ -415,9 +415,9 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, smtpu
 	return results, nil
 }
 
-// check if signature is acceptable.
+// CheckSignatureParams checks if a DKIM signature is acceptable.
 // Only looks at the signature parameters, not at the DNS record.
-func checkSignatureParams(ctx context.Context, log mlog.Log, sig *Sig) (hash crypto.Hash, canonHeaderSimple, canonBodySimple bool, rerr error) {
+func CheckSignatureParams(ctx context.Context, log mlog.Log, sig *Sig) (hash crypto.Hash, canonHeaderSimple, canonBodySimple bool, rerr error) {
 	// "From" header is required, ../rfc/6376:2122 ../rfc/6376:2546
 	var from bool
 	for _, h := range sig.SignedHeaders {
@@ -450,7 +450,7 @@ func checkSignatureParams(ctx context.Context, log mlog.Log, sig *Sig) (hash cry
 		return 0, false, false, fmt.Errorf("%w: %s", ErrTLD, sig.Domain)
 	}
 
-	h, hok := algHash(sig.AlgorithmHash)
+	h, hok := AlgHash(sig.AlgorithmHash)
 	if !hok {
 		return 0, false, false, fmt.Errorf("%w: %q", ErrHashAlgorithmUnknown, sig.AlgorithmHash)
 	}
@@ -495,19 +495,20 @@ func checkSignatureParams(ctx context.Context, log mlog.Log, sig *Sig) (hash cry
 }
 
 // lookup the public key in the DNS and verify the signature.
-func verifySignature(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (Status, *Record, bool, error) {
+func verifySignature(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []Header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (Status, *Record, bool, error) {
 	// ../rfc/6376:2604
 	status, record, _, authentic, err := Lookup(ctx, elog, resolver, sig.Selector, sig.Domain)
 	if err != nil {
 		// todo: for temporary errors, we could pass on information so caller returns a 4.7.5 ecode, ../rfc/6376:2777
 		return status, nil, authentic, err
 	}
-	status, err = verifySignatureRecord(record, sig, hash, canonHeaderSimple, canonDataSimple, hdrs, verifySig, body, ignoreTestMode)
+	status, err = VerifySignatureRecord(record, sig, hash, canonHeaderSimple, canonDataSimple, hdrs, verifySig, body, ignoreTestMode)
 	return status, record, authentic, err
 }
 
-// verify a DKIM signature given the record from dns and signature from the email message.
-func verifySignatureRecord(r *Record, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (rstatus Status, rerr error) {
+// VerifySignatureRecord verifies a DKIM signature given the record from dns and
+// signature from the email message.
+func VerifySignatureRecord(r *Record, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []Header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (rstatus Status, rerr error) {
 	if !ignoreTestMode {
 		// ../rfc/6376:1558
 		y := false
@@ -578,7 +579,7 @@ func verifySignatureRecord(r *Record, sig *Sig, hash crypto.Hash, canonHeaderSim
 	// ../rfc/6376:1700
 	// ../rfc/6376:2656
 
-	dh, err := dataHash(hash.New(), canonHeaderSimple, sig, hdrs, verifySig)
+	dh, err := DataHash(hash.New(), canonHeaderSimple, sig, hdrs, verifySig)
 	if err != nil {
 		// Any error is likely an invalid header field in the message, hence permanent error.
 		return StatusPermerror, fmt.Errorf("calculating data hash: %w", err)
@@ -597,7 +598,7 @@ func verifySignatureRecord(r *Record, sig *Sig, hash crypto.Hash, canonHeaderSim
 		return StatusPermerror, fmt.Errorf("%w: unrecognized signature algorithm %q", ErrSigAlgorithmUnknown, r.Key)
 	}
 
-	bh, err := bodyHash(hash.New(), canonDataSimple, body)
+	bh, err := BodyHash(hash.New(), canonDataSimple, body)
 	if err != nil {
 		// Any error is likely some internal error, hence temporary error.
 		return StatusTemperror, fmt.Errorf("calculating body hash: %w", err)
@@ -609,7 +610,8 @@ func verifySignatureRecord(r *Record, sig *Sig, hash crypto.Hash, canonHeaderSim
 	return StatusPass, nil
 }
 
-func algHash(s string) (crypto.Hash, bool) {
+// AlgHash returns the crypto.Hash for a hash algorithm name ("sha1" or "sha256").
+func AlgHash(s string) (crypto.Hash, bool) {
 	if strings.EqualFold(s, "sha1") {
 		return crypto.SHA1, true
 	} else if strings.EqualFold(s, "sha256") {
@@ -618,8 +620,8 @@ func algHash(s string) (crypto.Hash, bool) {
 	return 0, false
 }
 
-// bodyHash calculates the hash over the body.
-func bodyHash(h hash.Hash, canonSimple bool, body *bufio.Reader) ([]byte, error) {
+// BodyHash calculates the hash over the body.
+func BodyHash(h hash.Hash, canonSimple bool, body *bufio.Reader) ([]byte, error) {
 	// todo: take l= into account. we don't currently allow it for policy reasons.
 
 	var crlf = []byte("\r\n")
@@ -719,11 +721,13 @@ func bodyHash(h hash.Hash, canonSimple bool, body *bufio.Reader) ([]byte, error)
 	return h.Sum(nil), nil
 }
 
-func dataHash(h hash.Hash, canonSimple bool, sig *Sig, hdrs []header, verifySig []byte) ([]byte, error) {
+// DataHash computes the hash over selected headers and the DKIM-Signature
+// header, using the specified canonicalization.
+func DataHash(h hash.Hash, canonSimple bool, sig *Sig, hdrs []Header, verifySig []byte) ([]byte, error) {
 	headers := ""
-	revHdrs := map[string][]header{}
+	revHdrs := map[string][]Header{}
 	for _, h := range hdrs {
-		revHdrs[h.lkey] = append([]header{h}, revHdrs[h.lkey]...)
+		revHdrs[h.LKey] = append([]Header{h}, revHdrs[h.LKey]...)
 	}
 
 	for _, key := range sig.SignedHeaders {
@@ -733,13 +737,13 @@ func dataHash(h hash.Hash, canonSimple bool, sig *Sig, hdrs []header, verifySig 
 			continue
 		}
 		revHdrs[lkey] = h[1:]
-		s := string(h[0].raw)
+		s := string(h[0].Raw)
 		if canonSimple {
 			// ../rfc/6376:823
 			// Add unmodified.
 			headers += s
 		} else {
-			ch, err := relaxedCanonicalHeaderWithoutCRLF(s)
+			ch, err := RelaxedCanonicalHeaderWithoutCRLF(s)
 			if err != nil {
 				return nil, fmt.Errorf("canonicalizing header: %w", err)
 			}
@@ -750,7 +754,7 @@ func dataHash(h hash.Hash, canonSimple bool, sig *Sig, hdrs []header, verifySig 
 	h.Write([]byte(headers))
 	dkimSig := verifySig
 	if !canonSimple {
-		ch, err := relaxedCanonicalHeaderWithoutCRLF(string(verifySig))
+		ch, err := RelaxedCanonicalHeaderWithoutCRLF(string(verifySig))
 		if err != nil {
 			return nil, fmt.Errorf("canonicalizing DKIM-Signature header: %w", err)
 		}
@@ -760,8 +764,10 @@ func dataHash(h hash.Hash, canonSimple bool, sig *Sig, hdrs []header, verifySig 
 	return h.Sum(nil), nil
 }
 
-// a single header, can be multiline.
-func relaxedCanonicalHeaderWithoutCRLF(s string) (string, error) {
+// RelaxedCanonicalHeaderWithoutCRLF canonicalizes a single header (possibly
+// multiline) using relaxed rules (RFC 6376 Section 3.4.2), returning it
+// without the trailing CRLF.
+func RelaxedCanonicalHeaderWithoutCRLF(s string) (string, error) {
 	// ../rfc/6376:831
 	t := strings.SplitN(s, ":", 2)
 	if len(t) != 2 {
@@ -791,16 +797,19 @@ func relaxedCanonicalHeaderWithoutCRLF(s string) (string, error) {
 	return ch, nil
 }
 
-type header struct {
-	key   string // Key in original case.
-	lkey  string // Key in lower-case, for canonical case.
-	value []byte // Literal header value, possibly spanning multiple lines, not modified in any way, including crlf, excluding leading key and colon.
-	raw   []byte // Like value, but including original leading key and colon. Ready for use as simple header canonicalized use.
+// Header represents a single email header, possibly spanning multiple lines.
+type Header struct {
+	Key   string // Key in original case.
+	LKey  string // Key in lower-case, for canonical case.
+	Value []byte // Literal header value, possibly spanning multiple lines, not modified in any way, including crlf, excluding leading key and colon.
+	Raw   []byte // Like value, but including original leading key and colon. Ready for use as simple header canonicalized use.
 }
 
-func parseHeaders(br *bufio.Reader) ([]header, int, error) {
+// ParseHeaders parses email message headers from a buffered reader and returns
+// a slice of Header structs and the body offset. Used by both DKIM and ARC.
+func ParseHeaders(br *bufio.Reader) ([]Header, int, error) {
 	var o int
-	var l []header
+	var l []Header
 	var key, lkey string
 	var value []byte
 	var raw []byte
@@ -822,7 +831,7 @@ func parseHeaders(br *bufio.Reader) ([]header, int, error) {
 			continue
 		}
 		if key != "" {
-			l = append(l, header{key, lkey, value, raw})
+			l = append(l, Header{key, lkey, value, raw})
 		}
 		t := bytes.SplitN(line, []byte(":"), 2)
 		if len(t) != 2 {
@@ -844,7 +853,7 @@ func parseHeaders(br *bufio.Reader) ([]header, int, error) {
 		raw = slices.Clone(line)
 	}
 	if key != "" {
-		l = append(l, header{key, lkey, value, raw})
+		l = append(l, Header{key, lkey, value, raw})
 	}
 	return l, o, nil
 }

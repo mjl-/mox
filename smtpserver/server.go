@@ -39,6 +39,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/arc"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
@@ -2717,6 +2718,26 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		dkimcancel()
 	}()
 
+	// ARC verification.
+	var arcResult arc.Result
+	var arcErr error
+	wg.Add(1)
+	go func() {
+		defer func() {
+			x := recover()
+			if x != nil {
+				c.log.Error("arc verify panic", slog.Any("err", x))
+				debug.PrintStack()
+				metrics.PanicInc(metrics.Dkimverify) // Reuse DKIM metric for ARC panics.
+			}
+		}()
+		defer wg.Done()
+		arcctx, arccancel := context.WithTimeout(ctx, time.Minute)
+		defer arccancel()
+		arcResult, arcErr = arc.Verify(arcctx, c.log.Logger, c.resolver, c.msgsmtputf8, dataFile)
+		arccancel()
+	}()
+
 	// SPF.
 	// ../rfc/7208:472
 	var receivedSPF spf.Received
@@ -2848,6 +2869,33 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			slog.Any("domain", domain),
 			slog.Any("selector", selector),
 			slog.Any("identity", identity))
+	}
+
+	// Add ARC results to Authentication-Results header. ../rfc/8617
+	if arcErr != nil {
+		c.log.Infox("arc verify", arcErr)
+	}
+	if arcResult.Status != arc.ChainStatusNone {
+		arcMethod := message.AuthMethod{
+			Method: "arc",
+			Result: string(arcResult.Status),
+		}
+		if arcResult.Status == arc.ChainStatusPass && len(arcResult.Sets) > 0 {
+			lastSet := arcResult.Sets[len(arcResult.Sets)-1]
+			arcMethod.Props = append(arcMethod.Props,
+				message.MakeAuthProp("header", "oldest-pass", fmt.Sprintf("%d", arcResult.OldestPass), false, ""),
+			)
+			arcMethod.Props = append(arcMethod.Props,
+				message.MakeAuthProp("header", "as", lastSet.AS.Domain.ASCII, true, ""),
+			)
+		}
+		if arcResult.Err != nil {
+			arcMethod.Reason = arcResult.Err.Error()
+		}
+		authResults.Methods = append(authResults.Methods, arcMethod)
+		c.log.Debug("arc verification result",
+			slog.String("status", string(arcResult.Status)),
+			slog.Int("sets", len(arcResult.Sets)))
 	}
 
 	// Add SPF results to Authentication-Results header. ../rfc/7208:2141
@@ -3100,7 +3148,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			msgTo = envelope.To
 			msgCc = envelope.CC
 		}
-		d := delivery{c.tls, &m, dataFile, smtpRcptTo, deliverTo, destination, canonicalAddr, acc, msgTo, msgCc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus, c.smtputf8}
+		d := delivery{c.tls, &m, dataFile, smtpRcptTo, deliverTo, destination, canonicalAddr, acc, msgTo, msgCc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, arcResult, iprevStatus, c.smtputf8}
 
 		r := analyze(ctx, log, c.resolver, d)
 		return &r, nil

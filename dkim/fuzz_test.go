@@ -7,7 +7,7 @@ import (
 func FuzzParseSignature(f *testing.F) {
 	f.Add([]byte(""))
 	f.Fuzz(func(t *testing.T, buf []byte) {
-		parseSignature(buf, false)
+		ParseSignature(buf, false)
 	})
 }
 
