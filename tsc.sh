@@ -7,6 +7,8 @@ set -euo pipefail
 
 out=$1
 shift
-./node_modules/.bin/tsc --noEmitOnError true --pretty false --newLine lf --strict --allowUnreachableCode false --allowUnusedLabels false --noFallthroughCasesInSwitch true --noImplicitReturns true --noUnusedLocals true --noImplicitThis true --noUnusedParameters true --target es2022 --module none --outFile $out.spaces "$@" | sed -E 's/^([^\(]+)\(([0-9]+),([0-9]+)\):/\1:\2:\3: /'
-CGO_ENABLED=0 go run unexpand.go -t 4 <$out.spaces >$out
-rm $out.spaces
+outbasename=$(dirname $out)/$(basename $out .js)
+cat "$@" >$outbasename-spaces.ts
+./node_modules/.bin/tsc --noEmitOnError true --pretty false --newLine lf --strict --allowUnreachableCode false --allowUnusedLabels false --noFallthroughCasesInSwitch true --noImplicitReturns true --noUnusedLocals true --noImplicitThis true --noUnusedParameters true --target es2022 --module es2022 $outbasename-spaces.ts | sed -E 's/^([^\(]+)\(([0-9]+),([0-9]+)\):/\1:\2:\3: /'
+CGO_ENABLED=0 go run unexpand.go -t 4 <$outbasename-spaces.js >$outbasename.js
+rm $outbasename-spaces.ts $outbasename-spaces.js

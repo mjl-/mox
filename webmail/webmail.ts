@@ -1,4 +1,4 @@
-// Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
+/* Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten. */
 
 /*
 Webmail is a self-contained webmail client.

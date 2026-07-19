@@ -1703,7 +1703,6 @@ var api;
 		return await new Promise(fn);
 	};
 })(api || (api = {}));
-// Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 let moxversion;
 let moxgoos;
 let moxgoarch;

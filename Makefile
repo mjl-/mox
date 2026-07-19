@@ -135,7 +135,7 @@ install-js: node_modules/.bin/tsc
 
 install-js0:
 	-mkdir -p node_modules/.bin
-	npm install --ignore-scripts --save-dev --save-exact typescript@5.1.6
+	npm install --ignore-scripts --save-dev --save-exact typescript@7.0.2
 
 webmail/webmail.js: lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
 	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts

@@ -961,7 +961,6 @@ var api;
 		return await new Promise(fn);
 	};
 })(api || (api = {}));
-// Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 let moxversion;
 let moxgoos;
 let moxgoarch;
@@ -1650,7 +1649,7 @@ openssl pkcs12 \\
 				Threshold: parseFloat(junkThreshold.value),
 				Onegrams: junkOnegrams.checked,
 				Twograms: junkTwograms.checked,
-				Threegrams: acc.JunkFilter?.Threegrams || false,
+				Threegrams: acc.JunkFilter?.Threegrams || false, // Ignored on server.
 				MaxPower: parseFloat(junkMaxPower.value),
 				TopWords: parseInt(junkTopWords.value),
 				IgnoreWords: parseFloat(junkIgnoreWords.value),

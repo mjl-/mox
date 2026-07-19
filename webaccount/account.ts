@@ -1,4 +1,4 @@
-// Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
+/* Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten. */
 
 // From HTML.
 declare let page: HTMLElement

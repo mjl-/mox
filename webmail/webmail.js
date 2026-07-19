@@ -1170,9 +1170,9 @@ ensureCSS(':root', {
 	'--underlineRed': '#e15d1c',
 	'--underlineBlue': '#09f',
 	'--underlineGrey': '#888',
-	'--quoted1Color': ['#03828f', '#71f2ff'],
-	'--quoted2Color': ['#c7445c', '#ec4c4c'],
-	'--quoted3Color': ['#417c10', '#73e614'],
+	'--quoted1Color': ['#03828f', '#71f2ff'], // red
+	'--quoted2Color': ['#c7445c', '#ec4c4c'], // green
+	'--quoted3Color': ['#417c10', '#73e614'], // blue
 	'--scriptSwitchUnderlineColor': ['#dca053', '#e88f1e'],
 	'--linkColor': ['#096bc2', '#63b6ff'],
 	'--linkVisitedColor': ['#0704c1', '#c763ff'],
@@ -1463,7 +1463,7 @@ const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAdd
 	// prevent different layout between messages when not all headers are present.
 	dom.tr(dom.td(moreHeaders.map(s => dom.div(s + ':', msgHeaderFieldStyle, style({ visibility: 'hidden', height: 0 })))), dom.td()));
 };
-// Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
+/* Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten. */
 /*
 Webmail is a self-contained webmail client.
 
@@ -1593,19 +1593,19 @@ catch (err) { }
 let accountSettings;
 const defaultSettings = {
 	mailboxesWidth: 240,
-	layout: 'auto',
-	leftWidthPct: 50,
-	topHeightPct: 40,
-	msglistflagsWidth: 40,
-	msglistageWidth: 70,
-	msglistfromPct: 30,
-	refine: '',
-	orderAsc: false,
-	ignoreErrorsUntil: 0,
-	mailboxCollapsed: {},
-	showAllHeaders: false,
+	layout: 'auto', // Automatic switching between left/right and top/bottom layout, based on screen width.
+	leftWidthPct: 50, // Split in percentage of remaining width for left/right layout.
+	topHeightPct: 40, // Split in percentage of remaining height for top/bottom layout.
+	msglistflagsWidth: 40, // Width in pixels of flags column in message list.
+	msglistageWidth: 70, // Width in pixels of age column.
+	msglistfromPct: 30, // Percentage of remaining width in message list to use for "from" column. The remainder is for the subject.
+	refine: '', // Refine filters, e.g. '', 'attachments', 'read', 'unread', 'label:...'.
+	orderAsc: false, // Order from most recent to least recent by default.
+	ignoreErrorsUntil: 0, // For unhandled javascript errors/rejected promises, we normally show a popup for details, but users can ignore them for a week at a time.
+	mailboxCollapsed: {}, // Mailboxes that are collapsed.
+	showAllHeaders: false, // Whether to show all message headers.
 	threading: api.ThreadMode.ThreadOn,
-	checkConsistency: location.hostname === 'localhost',
+	checkConsistency: location.hostname === 'localhost', // Enable UI update consistency checks, default only for local development.
 	composeWidth: 0,
 	composeViewportWidth: 0,
 	composeHeight: 0,
@@ -6352,7 +6352,7 @@ const init = async () => {
 	let viewSequence = 0; // Counter for assigning viewID.
 	let viewID = 0; // Updated when a new view is started, e.g. when opening another mailbox or starting a search.
 	let search = {
-		active: false,
+		active: false, // Whether a search is active.
 		query: '', // The query, as shown in the searchbar. Used in location hash.
 	};
 	let requestSequence = 0; // Counter for assigning requestID.

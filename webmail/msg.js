@@ -1170,9 +1170,9 @@ ensureCSS(':root', {
 	'--underlineRed': '#e15d1c',
 	'--underlineBlue': '#09f',
 	'--underlineGrey': '#888',
-	'--quoted1Color': ['#03828f', '#71f2ff'],
-	'--quoted2Color': ['#c7445c', '#ec4c4c'],
-	'--quoted3Color': ['#417c10', '#73e614'],
+	'--quoted1Color': ['#03828f', '#71f2ff'], // red
+	'--quoted2Color': ['#c7445c', '#ec4c4c'], // green
+	'--quoted3Color': ['#417c10', '#73e614'], // blue
 	'--scriptSwitchUnderlineColor': ['#dca053', '#e88f1e'],
 	'--linkColor': ['#096bc2', '#63b6ff'],
 	'--linkVisitedColor': ['#0704c1', '#c763ff'],
@@ -1463,7 +1463,6 @@ const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAdd
 	// prevent different layout between messages when not all headers are present.
 	dom.tr(dom.td(moreHeaders.map(s => dom.div(s + ':', msgHeaderFieldStyle, style({ visibility: 'hidden', height: 0 })))), dom.td()));
 };
-// Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 const init = () => {
 	const mi = api.parser.MessageItem(messageItem);
 	document.title = '"' + mi.Envelope.Subject + '"- from ' + ((mi.Envelope.From || []).map(a => formatAddress(a)).join(', ') || '-') + ' (id ' + mi.Message.ID + ')';
