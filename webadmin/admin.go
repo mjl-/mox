@@ -477,12 +477,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 	listenIPs := xlistenIPs(ctx, true)
 	isListenIP := func(ip net.IP) bool {
-		for _, lip := range listenIPs {
-			if ip.Equal(lip) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(listenIPs, ip.Equal)
 	}
 
 	addf := func(l *[]string, format string, args ...any) {
@@ -937,11 +932,12 @@ EOF
 		}
 		records := slices.Sorted(maps.Keys(daneRecords(public)))
 		if len(records) > 0 {
-			instr := "Ensure the DNS records below exist. These records are for the whole machine, not per domain, so create them only once. Make sure DNSSEC is enabled, otherwise the records have no effect. The records indicate that a remote mail server trying to deliver email with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based on the certificate public key (\"SPKI\", 1) that is SHA2-256-hashed (1) to the hexadecimal hash. DANE-EE verification means only the certificate or public key is verified, not whether the certificate is signed by a (centralized) certificate authority (CA), is expired, or matches the host name.\n\n"
+			var instr strings.Builder
+			instr.WriteString("Ensure the DNS records below exist. These records are for the whole machine, not per domain, so create them only once. Make sure DNSSEC is enabled, otherwise the records have no effect. The records indicate that a remote mail server trying to deliver email with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based on the certificate public key (\"SPKI\", 1) that is SHA2-256-hashed (1) to the hexadecimal hash. DANE-EE verification means only the certificate or public key is verified, not whether the certificate is signed by a (centralized) certificate authority (CA), is expired, or matches the host name.\n\n")
 			for _, r := range records {
-				instr += fmt.Sprintf("\t_25._tcp.%s. TLSA %s\n", pubDom.ASCII, r)
+				instr.WriteString(fmt.Sprintf("\t_25._tcp.%s. TLSA %s\n", pubDom.ASCII, r))
 			}
-			addf(&r.DANE.Instructions, "%s", instr)
+			addf(&r.DANE.Instructions, "%s", instr.String())
 		} else {
 			addf(&r.DANE.Warnings, "DANE not configured: no static TLS host keys.")
 
@@ -1440,7 +1436,8 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		}
 		srvwg.Wait()
 
-		instr := "Ensure DNS records like the following exist:\n\n"
+		var instr strings.Builder
+		instr.WriteString("Ensure DNS records like the following exist:\n\n")
 		r.SRVConf.SRVs = map[string][]net.SRV{}
 		for _, req := range reqs {
 			name := req.name + "._tcp." + domain.ASCII
@@ -1448,7 +1445,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			if req.host[0] == "." {
 				weight = 0
 			}
-			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 %d %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", weight, req.port, req.host[0])
+			instr.WriteString(fmt.Sprintf("\t%s._tcp.%-*s SRV 0 %d %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", weight, req.port, req.host[0]))
 			r.SRVConf.SRVs[req.name] = unptr(req.srvs)
 			if req.err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, req.err)
@@ -1466,7 +1463,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 				addf(&r.SRVConf.Errors, "Unexpected SRV record(s) for %q: %s", name, strings.Join(srvs, ", "))
 			}
 		}
-		addf(&r.SRVConf.Instructions, "%s", instr)
+		addf(&r.SRVConf.Instructions, "%s", instr.String())
 	}()
 
 	// Autoconf

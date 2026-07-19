@@ -128,11 +128,11 @@ func (p *Proto) xrespText() (code Code, text string) {
 
 // ../rfc/9051:6895
 func (p *Proto) xrespCode() Code {
-	w := ""
+	var w strings.Builder
 	for !p.peek(' ') && !p.peek(']') {
-		w += string(rune(p.xbyte()))
+		w.WriteString(string(rune(p.xbyte())))
 	}
-	W := strings.ToUpper(w)
+	W := strings.ToUpper(w.String())
 
 	switch W {
 	case "BADCHARSET":
@@ -299,11 +299,11 @@ func (p *Proto) xrespCode() Code {
 	default:
 		var args []string
 		for p.space() {
-			arg := ""
+			var arg strings.Builder
 			for !p.peek(' ') && !p.peek(']') {
-				arg += string(rune(p.xbyte()))
+				arg.WriteString(string(rune(p.xbyte())))
 			}
-			args = append(args, arg)
+			args = append(args, arg.String())
 		}
 		if len(args) == 0 {
 			return CodeWord(W)
@@ -333,15 +333,15 @@ func (p *Proto) xtakeuntil(b byte) string {
 }
 
 func (p *Proto) xdigits() string {
-	var s string
+	var s strings.Builder
 	for {
 		b, err := p.readbyte()
 		if err == nil && (b >= '0' && b <= '9') {
-			s += string(rune(b))
+			s.WriteString(string(rune(b)))
 			continue
 		}
 		p.xunreadbyte()
-		return s
+		return s.String()
 	}
 }
 
@@ -384,14 +384,14 @@ func (p *Proto) xnzuint32() uint32 {
 
 // todo: replace with proper parsing.
 func (p *Proto) xnonspace() string {
-	var s string
+	var s strings.Builder
 	for !p.peek(' ') && !p.peek('\r') && !p.peek('\n') {
-		s += string(rune(p.xbyte()))
+		s.WriteString(string(rune(p.xbyte())))
 	}
-	if s == "" {
+	if s.String() == "" {
 		p.xerrorf("expected non-space")
 	}
-	return s
+	return s.String()
 }
 
 // todo: replace with proper parsing
@@ -742,18 +742,18 @@ func (p *Proto) xfetch() []FetchAttr {
 
 // ../rfc/9051:6746
 func (p *Proto) xmsgatt1() FetchAttr {
-	f := ""
+	var f strings.Builder
 	for {
 		b := p.xbyte()
 		if b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '.' {
-			f += string(rune(b))
+			f.WriteString(string(rune(b)))
 			continue
 		}
 		p.xunreadbyte()
 		break
 	}
 
-	F := strings.ToUpper(f)
+	F := strings.ToUpper(f.String())
 	switch F {
 	case "FLAGS":
 		p.xspace()
@@ -871,7 +871,7 @@ func (p *Proto) xmsgatt1() FetchAttr {
 		}
 		return FetchPreview{preview}
 	}
-	p.xerrorf("unknown fetch attribute %q", f)
+	p.xerrorf("unknown fetch attribute %q", f.String())
 	panic("not reached")
 }
 
@@ -936,7 +936,7 @@ func (p *Proto) xatom() string {
 // ../rfc/9051:6856 ../rfc/6855:153
 func (p *Proto) xquoted() string {
 	p.xtake(`"`)
-	s := ""
+	var s strings.Builder
 	for !p.take('"') {
 		r, err := p.readrune()
 		p.xcheckf(err, "reading rune in quoted string")
@@ -948,9 +948,9 @@ func (p *Proto) xquoted() string {
 			}
 		}
 		// todo: probably refuse some more chars. like \0 and all ctl and backspace.
-		s += string(r)
+		s.WriteString(string(r))
 	}
-	return s
+	return s.String()
 }
 
 func (p *Proto) xliteral() []byte {

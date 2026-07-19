@@ -542,20 +542,16 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 		return false
 	}
 
-	for _, h := range s.SystemHandlers {
-		if handle(h) {
-			return
-		}
+	if slices.ContainsFunc(s.SystemHandlers, handle) {
+		return
 	}
 	if s.Webserver {
 		if WebHandle(nw, r, ipdom) {
 			return
 		}
 	}
-	for _, h := range s.ServiceHandlers {
-		if handle(h) {
-			return
-		}
+	if slices.ContainsFunc(s.ServiceHandlers, handle) {
+		return
 	}
 	nw.Handler = "(nomatch)"
 	http.NotFound(nw, r)

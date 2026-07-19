@@ -1433,15 +1433,16 @@ func addressString(a message.Address, smtputf8 bool) string {
 			continue
 		}
 		// We need to quote.
-		q := `"`
+		var q strings.Builder
+		q.WriteString(`"`)
 		for _, c := range a.Name {
 			if c == '\\' || c == '"' {
-				q += `\`
+				q.WriteString(`\`)
 			}
-			q += string(c)
+			q.WriteString(string(c))
 		}
-		q += `"`
-		name = q
+		q.WriteString(`"`)
+		name = q.String()
 	}
 	return name + " <" + a.User + "@" + host + ">"
 }

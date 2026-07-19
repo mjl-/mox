@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/mjl-/mox/dns"
@@ -71,10 +72,8 @@ func Lookup(ctx context.Context, resolver dns.Resolver, ip net.IP) (rstatus Stat
 	for _, rname := range revNames {
 		ips, result, err := dns.WithPackage(resolver, "iprev").LookupIP(ctx, "ip", rname)
 		authentic = authentic && result.Authentic
-		for _, fwdIP := range ips {
-			if ip.Equal(fwdIP) {
-				return StatusPass, rname, revNames, authentic, nil
-			}
+		if slices.ContainsFunc(ips, ip.Equal) {
+			return StatusPass, rname, revNames, authentic, nil
 		}
 		if err != nil && !dns.IsNotFound(err) {
 			lastErr = err

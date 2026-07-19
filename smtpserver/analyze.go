@@ -609,40 +609,41 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			slog.Bool("contentsignificant", result.Significant),
 			slog.Bool("subjectpass", junkSubjectpass))
 
-		s := "content: "
+		var s strings.Builder
+		s.WriteString("content: ")
 		if accept {
-			s += "not junk"
+			s.WriteString("not junk")
 		} else {
-			s += "junk"
+			s.WriteString("junk")
 		}
 		if !result.Significant {
-			s += " (not significant)"
+			s.WriteString(" (not significant)")
 		}
-		s += fmt.Sprintf(", spamscore %.2f, threshold %.2f%s", result.Probability, threshold, thresholdRemark)
-		s += " (ham words: "
+		s.WriteString(fmt.Sprintf(", spamscore %.2f, threshold %.2f%s", result.Probability, threshold, thresholdRemark))
+		s.WriteString(" (ham words: ")
 		for i, w := range result.Hams {
 			if i > 0 {
-				s += ", "
+				s.WriteString(", ")
 			}
 			word := w.Word
 			if !d.smtputf8 && !isASCII(word) {
 				word = "(non-ascii)"
 			}
-			s += fmt.Sprintf("%s %.3f", word, w.Score)
+			s.WriteString(fmt.Sprintf("%s %.3f", word, w.Score))
 		}
-		s += "), (spam words: "
+		s.WriteString("), (spam words: ")
 		for i, w := range result.Spams {
 			if i > 0 {
-				s += ", "
+				s.WriteString(", ")
 			}
 			word := w.Word
 			if !d.smtputf8 && !isASCII(word) {
 				word = "(non-ascii)"
 			}
-			s += fmt.Sprintf("%s %.3f", word, w.Score)
+			s.WriteString(fmt.Sprintf("%s %.3f", word, w.Score))
 		}
-		s += ")"
-		addReasonText("%s", s)
+		s.WriteString(")")
+		addReasonText("%s", s.String())
 	} else if err != store.ErrNoJunkFilter {
 		log.Errorx("open junkfilter", err)
 		addReasonText("open junkfilter: %v", err)

@@ -498,15 +498,15 @@ func (c *Client) ServerFinal(serverFinal []byte) (rerr error) {
 
 // Convert "," to =2C and "=" to =3D.
 func saslname(s string) string {
-	var r string
+	var r strings.Builder
 	for _, c := range s {
 		if c == ',' {
-			r += "=2C"
+			r.WriteString("=2C")
 		} else if c == '=' {
-			r += "=3D"
+			r.WriteString("=3D")
 		} else {
-			r += string(c)
+			r.WriteString(string(c))
 		}
 	}
-	return r
+	return r.String()
 }

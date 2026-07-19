@@ -502,12 +502,12 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 		// into multiple responses. ../rfc/9051:6809 ../rfc/3501:4833
 		for len(result.UIDs) > 0 {
 			n := min(100, len(result.UIDs))
-			s := ""
+			var s strings.Builder
 			for _, v := range result.UIDs[:n] {
 				if !isUID {
 					v = store.UID(c.xsequence(v))
 				}
-				s += " " + fmt.Sprintf("%d", v)
+				s.WriteString(" " + fmt.Sprintf("%d", v))
 			}
 
 			// Since we don't have the max modseq for the possibly partial uid range we're
@@ -522,7 +522,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 				modseq = fmt.Sprintf(" (MODSEQ %d)", result.MaxModSeq.Client())
 			}
 
-			c.xbwritelinef("* SEARCH%s%s", s, modseq)
+			c.xbwritelinef("* SEARCH%s%s", s.String(), modseq)
 			result.UIDs = result.UIDs[n:]
 		}
 	} else {

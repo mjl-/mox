@@ -160,15 +160,15 @@ func (s *Sig) Header() (string, error) {
 func packQpHdrValue(s string) string {
 	// ../rfc/6376:474
 	const hex = "0123456789ABCDEF"
-	var r string
+	var r strings.Builder
 	for _, b := range []byte(s) {
 		if b > ' ' && b < 0x7f && b != ';' && b != '=' && b != '|' && b != ':' {
-			r += string(b)
+			r.WriteString(string(b))
 		} else {
-			r += "=" + string(hex[b>>4]) + string(hex[(b>>0)&0xf])
+			r.WriteString("=" + string(hex[b>>4]) + string(hex[(b>>0)&0xf]))
 		}
 	}
-	return r
+	return r.String()
 }
 
 var (

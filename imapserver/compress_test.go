@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"io"
 	mathrand "math/rand/v2"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,7 +52,8 @@ func TestCompressBreak(t *testing.T) {
 	tc := start(t, false)
 	defer tc.close()
 
-	msg := exampleMsg
+	var msg strings.Builder
+	msg.WriteString(exampleMsg)
 	// Add random data (so it is not compressible). Don't know why, but only
 	// reproducible with large writes. As if setting socket buffers had no effect.
 	buf := make([]byte, 64*1024)
@@ -60,14 +62,14 @@ func TestCompressBreak(t *testing.T) {
 	text := base64.StdEncoding.EncodeToString(buf)
 	for len(text) > 0 {
 		n := min(76, len(text))
-		msg += text[:n] + "\r\n"
+		msg.WriteString(text[:n] + "\r\n")
 		text = text[n:]
 	}
 
 	tc.login("mjl@mox.example", password0)
 	tc.client.CompressDeflate()
 	tc.client.Select("inbox")
-	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(msg), msg)
+	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(msg.String()), msg.String())
 	tc.transactf("ok", "noop")
 
 	// Write request. Close connection instead of reading data. Write will panic,

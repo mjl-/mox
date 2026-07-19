@@ -153,11 +153,11 @@ func (c CodeParams) CodeString() string {
 type CodeCapability []Capability
 
 func (c CodeCapability) CodeString() string {
-	var s string
+	var s strings.Builder
 	for _, c := range c {
-		s += " " + string(c)
+		s.WriteString(" " + string(c))
 	}
-	return "CAPABILITY" + s
+	return "CAPABILITY" + s.String()
 }
 
 type CodeBadCharset []string
@@ -213,17 +213,17 @@ type CodeCopyUID struct {
 
 func (c CodeCopyUID) CodeString() string {
 	str := func(l []NumRange) string {
-		s := ""
+		var s strings.Builder
 		for i, e := range l {
 			if i > 0 {
-				s += ","
+				s.WriteString(",")
 			}
-			s += fmt.Sprintf("%d", e.First)
+			s.WriteString(fmt.Sprintf("%d", e.First))
 			if e.Last != nil {
-				s += fmt.Sprintf(":%d", *e.Last)
+				s.WriteString(fmt.Sprintf(":%d", *e.Last))
 			}
 		}
-		return s
+		return s.String()
 	}
 	return fmt.Sprintf("COPYUID %d %s %s", c.DestUIDValidity, str(c.From), str(c.To))
 }
@@ -319,18 +319,19 @@ func astring(s string) string {
 
 // imap "string", i.e. double-quoted string or syncliteral.
 func stringx(s string) string {
-	r := `"`
+	var r strings.Builder
+	r.WriteString(`"`)
 	for _, c := range s {
 		if c == '\x00' || c == '\r' || c == '\n' {
 			return syncliteral(s)
 		}
 		if c == '\\' || c == '"' {
-			r += `\`
+			r.WriteString(`\`)
 		}
-		r += string(c)
+		r.WriteString(string(c))
 	}
-	r += `"`
-	return r
+	r.WriteString(`"`)
+	return r.String()
 }
 
 // sync literal, i.e. {<num>}\r\n<num bytes>.
@@ -546,14 +547,14 @@ func (ns NumSet) String() string {
 	if ns.SearchResult {
 		return "$"
 	}
-	var r string
+	var r strings.Builder
 	for i, x := range ns.Ranges {
 		if i > 0 {
-			r += ","
+			r.WriteString(",")
 		}
-		r += x.String()
+		r.WriteString(x.String())
 	}
-	return r
+	return r.String()
 }
 
 func ParseNumSet(s string) (ns NumSet, rerr error) {

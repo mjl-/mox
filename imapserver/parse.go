@@ -20,18 +20,18 @@ var (
 )
 
 func charRange(first, last rune) string {
-	r := ""
+	var r strings.Builder
 	c := first
-	r += string(c)
+	r.WriteString(string(c))
 	for c < last {
 		c++
-		r += string(c)
+		r.WriteString(string(c))
 	}
-	return r
+	return r.String()
 }
 
 func charRemove(s, remove string) string {
-	r := ""
+	var r strings.Builder
 next:
 	for _, c := range s {
 		for _, x := range remove {
@@ -39,9 +39,9 @@ next:
 				continue next
 			}
 		}
-		r += string(c)
+		r.WriteString(string(c))
 	}
-	return r
+	return r.String()
 }
 
 type parser struct {

@@ -246,15 +246,16 @@ func (p *parser) xbarePath() smtp.Path {
 
 // ../rfc/5321:2291
 func (p *parser) xdomain() dns.Domain {
-	s := p.xsubdomain()
+	var s strings.Builder
+	s.WriteString(p.xsubdomain())
 	for p.take(".") {
-		s += "." + p.xsubdomain()
+		s.WriteString("." + p.xsubdomain())
 	}
-	d, err := dns.ParseDomain(s)
+	d, err := dns.ParseDomain(s.String())
 	if err != nil {
-		p.xerrorf("parsing domain name %q: %s", s, err)
+		p.xerrorf("parsing domain name %q: %s", s.String(), err)
 	}
-	if len(s) > 255 {
+	if len(s.String()) > 255 {
 		// ../rfc/5321:3491
 		p.xerrorf("domain longer than 255 octets")
 	}
@@ -512,11 +513,11 @@ func (p *parser) xsaslMech() string {
 
 // ../rfc/4954:696 ../rfc/6533:259
 func (p *parser) xtext() string {
-	r := ""
+	var r strings.Builder
 	for !p.empty() {
 		b := p.orig[p.o]
 		if b >= 0x21 && b < 0x7f && b != '+' && b != '=' && b != ' ' {
-			r += string(b)
+			r.WriteString(string(b))
 			p.xtaken(1)
 			continue
 		}
@@ -533,7 +534,7 @@ func (p *parser) xtext() string {
 		}
 		const hex = "0123456789ABCDEF"
 		b = byte(strings.IndexByte(hex, x[0])<<4) | byte(strings.IndexByte(hex, x[1])<<0)
-		r += string(rune(b))
+		r.WriteString(string(rune(b)))
 	}
-	return r
+	return r.String()
 }

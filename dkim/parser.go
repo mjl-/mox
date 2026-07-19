@@ -206,17 +206,18 @@ func (p *parser) xdomainselector(isselector bool) dns.Domain {
 		// pedantic mode. ../rfc/6376:581 ../rfc/5321:2303
 		return isalphadigit(c) || (i > 0 && (c == '-' || isselector && !Pedantic && c == '_') && p.o+1 < len(p.s))
 	}
-	s := p.xtakefn1(false, subdomain)
+	var s strings.Builder
+	s.WriteString(p.xtakefn1(false, subdomain))
 	for p.hasPrefix(".") {
-		s += p.xtake(".") + p.xtakefn1(false, subdomain)
+		s.WriteString(p.xtake(".") + p.xtakefn1(false, subdomain))
 	}
 	if isselector {
 		// Not to be interpreted as IDNA.
-		return dns.Domain{ASCII: strings.ToLower(s)}
+		return dns.Domain{ASCII: strings.ToLower(s.String())}
 	}
-	d, err := dns.ParseDomain(s)
+	d, err := dns.ParseDomain(s.String())
 	if err != nil {
-		p.xerrorf("parsing domain %q: %s", s, err)
+		p.xerrorf("parsing domain %q: %s", s.String(), err)
 	}
 	return d
 }
@@ -445,7 +446,7 @@ func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 		return rune(10 + c - 'A')
 	}
 
-	s := ""
+	var s strings.Builder
 	for !p.empty() {
 		p.fws()
 		if pipeEncoded && p.hasPrefix("|") {
@@ -462,7 +463,7 @@ func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 				p.xerrorf("expected qp-hdr-value")
 			}
 			c := (hex(h[0]) << 4) | hex(h[1])
-			s += string(c)
+			s.WriteString(string(c))
 			continue
 		}
 		x := p.xtakefn(ignoreFWS, func(c rune, i int) bool {
@@ -471,9 +472,9 @@ func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 		if x == "" {
 			break
 		}
-		s += x
+		s.WriteString(x)
 	}
-	return s
+	return s.String()
 }
 
 func (p *parser) xtimestamp() int64 {

@@ -131,7 +131,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 					}
 				} else if bytes.HasPrefix(line, []byte("X-Keywords:")) {
 					s := strings.TrimSpace(strings.SplitN(string(line), ":", 2)[1])
-					for _, t := range strings.Split(s, ",") {
+					for t := range strings.SplitSeq(s, ",") {
 						word := strings.ToLower(strings.TrimSpace(t))
 						switch word {
 						case "forwarded", "$forwarded":

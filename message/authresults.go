@@ -2,6 +2,7 @@ package message
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/mjl-/mox/dns"
@@ -118,15 +119,16 @@ func value(s string, isAddrLike bool) string {
 	if !quote {
 		return s
 	}
-	r := `"`
+	var r strings.Builder
+	r.WriteString(`"`)
 	for _, c := range s {
 		if c == '"' || c == '\\' {
-			r += "\\"
+			r.WriteString("\\")
 		}
-		r += string(c)
+		r.WriteString(string(c))
 	}
-	r += `"`
-	return r
+	r.WriteString(`"`)
+	return r.String()
 }
 
 // ParseAuthResults parses a Authentication-Results header value.
@@ -220,10 +222,8 @@ func (p *parser) fws() {
 	for p.take(" ") || p.take("\t") {
 	}
 	opts := []string{"\n ", "\n\t", "\r\n ", "\r\n\t"}
-	for _, o := range opts {
-		if p.take(o) {
-			break
-		}
+	if slices.ContainsFunc(opts, p.take) {
+
 	}
 	for p.take(" ") || p.take("\t") {
 	}
@@ -456,19 +456,20 @@ func (p *parser) xpvalue() (bool, string) {
 
 // ../rfc/5321:2291
 func (p *parser) xdomain() (string, dns.Domain) {
-	s := p.xsubdomain()
+	var s strings.Builder
+	s.WriteString(p.xsubdomain())
 	for p.take(".") {
-		s += "." + p.xsubdomain()
+		s.WriteString("." + p.xsubdomain())
 	}
-	d, err := dns.ParseDomain(s)
+	d, err := dns.ParseDomain(s.String())
 	if err != nil {
-		p.xerrorf("parsing domain name %q: %s", s, err)
+		p.xerrorf("parsing domain name %q: %s", s.String(), err)
 	}
-	if len(s) > 255 {
+	if len(s.String()) > 255 {
 		// ../rfc/5321:3491
 		p.xerrorf("domain longer than 255 octets")
 	}
-	return s, d
+	return s.String(), d
 }
 
 // ../rfc/5321:2303

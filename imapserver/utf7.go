@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"unicode/utf16"
 )
 
@@ -26,7 +27,7 @@ var (
 )
 
 func utf7decode(s string) (string, error) {
-	var r string
+	var r strings.Builder
 	var shifted bool
 	var b string
 	lastunshift := -2
@@ -39,7 +40,7 @@ func utf7decode(s string) (string, error) {
 				}
 				shifted = true
 			} else {
-				r += string(c)
+				r.WriteString(string(c))
 			}
 			continue
 		}
@@ -52,7 +53,7 @@ func utf7decode(s string) (string, error) {
 		shifted = false
 		lastunshift = i
 		if b == "" {
-			r += "&"
+			r.WriteString("&")
 			continue
 		}
 		buf, err := utf7encoding.DecodeString(b)
@@ -92,7 +93,7 @@ func utf7decode(s string) (string, error) {
 
 		for _, c := range x {
 			if c < 0x20 || c > 0x7e || c == '&' {
-				r += string(c)
+				r.WriteString(string(c))
 			} else {
 				// ../rfc/3501:1057
 				return "", errUTF7UnneededShift
@@ -102,11 +103,11 @@ func utf7decode(s string) (string, error) {
 	if shifted {
 		return "", errUTF7UnfinishedShift
 	}
-	return r, nil
+	return r.String(), nil
 }
 
 func utf7encode(s string) string {
-	var r string
+	var r strings.Builder
 	var code string
 
 	flushcode := func() {
@@ -126,21 +127,21 @@ func utf7encode(s string) string {
 				b.WriteByte(byte(low >> 0))
 			}
 		}
-		r += "&" + utf7encoding.EncodeToString(b.Bytes()) + "-"
+		r.WriteString("&" + utf7encoding.EncodeToString(b.Bytes()) + "-")
 		code = ""
 	}
 
 	for _, c := range s {
 		if c == '&' {
 			flushcode()
-			r += "&-"
+			r.WriteString("&-")
 		} else if c >= ' ' && c < 0x7f {
 			flushcode()
-			r += string(c)
+			r.WriteString(string(c))
 		} else {
 			code += string(c)
 		}
 	}
 	flushcode()
-	return r
+	return r.String()
 }

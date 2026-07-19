@@ -1422,17 +1422,17 @@ func xmailboxPatternMatcher(ref string, patterns []string) matchStringer {
 		}
 
 		// ../rfc/9051:2361
-		var rs string
+		var rs strings.Builder
 		for _, c := range s {
 			if c == '%' {
-				rs += "[^/]*"
+				rs.WriteString("[^/]*")
 			} else if c == '*' {
-				rs += ".*"
+				rs.WriteString(".*")
 			} else {
-				rs += regexp.QuoteMeta(string(c))
+				rs.WriteString(regexp.QuoteMeta(string(c)))
 			}
 		}
-		subs = append(subs, rs)
+		subs = append(subs, rs.String())
 	}
 
 	if len(subs) == 0 {
@@ -3089,7 +3089,7 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 
 	// Clients should only send capabilities that need enabling.
 	// We should only echo that we recognize as needing enabling.
-	var enabled string
+	var enabled strings.Builder
 	var qresync bool
 
 	// Accounts can suppress capabilities, we ignore them when the client tries to
@@ -3112,17 +3112,17 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 			capUTF8Accept,
 			capCondstore: // ../rfc/7162:384
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 		case capQresync:
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 			qresync = true
 		case capMetadata:
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 		case capUIDOnly:
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 			c.uidonly = true
 			c.uids = nil
 		}
@@ -3130,11 +3130,11 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 	// QRESYNC enabled CONDSTORE too ../rfc/7162:1391
 	if qresync && !c.enabled[capCondstore] {
 		c.xensureCondstore(nil)
-		enabled += " CONDSTORE"
+		enabled.WriteString(" CONDSTORE")
 	}
 
 	// Response syntax: ../rfc/9051:6520 ../rfc/5161:211
-	c.xbwritelinef("* ENABLED%s", enabled)
+	c.xbwritelinef("* ENABLED%s", enabled.String())
 	c.ok(tag, cmd)
 }
 

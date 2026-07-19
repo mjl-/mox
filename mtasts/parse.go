@@ -290,13 +290,14 @@ func (p *parser) xmx() (mx MX) {
 
 // ../rfc/5321:2291
 func (p *parser) xdomain() dns.Domain {
-	s := p.xsubdomain()
+	var s strings.Builder
+	s.WriteString(p.xsubdomain())
 	for p.take(".") {
-		s += "." + p.xsubdomain()
+		s.WriteString("." + p.xsubdomain())
 	}
-	d, err := dns.ParseDomain(s)
+	d, err := dns.ParseDomain(s.String())
 	if err != nil {
-		p.xerrorf("parsing domain %q: %s", s, err)
+		p.xerrorf("parsing domain %q: %s", s.String(), err)
 	}
 	return d
 }

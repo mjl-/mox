@@ -3060,14 +3060,14 @@ understand email deliverability problems.
 			idents := record.Identifiers
 			fmt.Printf("\theaderfrom %q, envelopes from %q, to %q\n", idents.HeaderFrom, idents.EnvelopeFrom, idents.EnvelopeTo)
 			eval := record.Row.PolicyEvaluated
-			var reasons string
+			var reasons strings.Builder
 			for _, reason := range eval.Reasons {
-				reasons += "; " + string(reason.Type)
+				reasons.WriteString("; " + string(reason.Type))
 				if reason.Comment != "" {
-					reasons += fmt.Sprintf(": %q", reason.Comment)
+					reasons.WriteString(fmt.Sprintf(": %q", reason.Comment))
 				}
 			}
-			fmt.Printf("\tresult %s: dkim %s, spf %s; sourceIP %s, count %d%s\n", eval.Disposition, eval.DKIM, eval.SPF, record.Row.SourceIP, record.Row.Count, reasons)
+			fmt.Printf("\tresult %s: dkim %s, spf %s; sourceIP %s, count %d%s\n", eval.Disposition, eval.DKIM, eval.SPF, record.Row.SourceIP, record.Row.Count, reasons.String())
 			for _, dkim := range record.AuthResults.DKIM {
 				var result string
 				if dkim.HumanResult != "" {

@@ -2870,11 +2870,8 @@ ruleset:
 			if m.MailFromValidated && matchDomain(m.MailFromDomain) {
 				ok = true
 			}
-			for _, d := range m.DKIMDomains {
-				if matchDomain(d) {
-					ok = true
-					break
-				}
+			if slices.ContainsFunc(m.DKIMDomains, matchDomain) {
+				ok = true
 			}
 			if !ok {
 				continue ruleset
@@ -3361,15 +3358,15 @@ func MessagePath(messageID int64) string {
 // string allocations.
 func messagePathElems(messageID int64) []string {
 	v := messageID >> msgFilesPerDirShift
-	dir := ""
+	var dir strings.Builder
 	for {
-		dir += string(msgDirChars[int(v)&(len(msgDirChars)-1)])
+		dir.WriteString(string(msgDirChars[int(v)&(len(msgDirChars)-1)]))
 		v >>= 6
 		if v == 0 {
 			break
 		}
 	}
-	return []string{dir, strconv.FormatInt(messageID, 10)}
+	return []string{dir.String(), strconv.FormatInt(messageID, 10)}
 }
 
 // Set returns a copy of f, with each flag that is true in mask set to the
@@ -3642,14 +3639,14 @@ func MailboxID(tx *bstore.Tx, id int64) (Mailbox, error) {
 // Name must be in normalized form, see CheckMailboxName.
 func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (nmb Mailbox, changes []Change, created []string, exists bool, rerr error) {
 	elems := strings.Split(name, "/")
-	var p string
+	var p strings.Builder
 	var modseq ModSeq
 	for i, elem := range elems {
 		if i > 0 {
-			p += "/"
+			p.WriteString("/")
 		}
-		p += elem
-		exists, err := a.MailboxExists(tx, p)
+		p.WriteString(elem)
+		exists, err := a.MailboxExists(tx, p.String())
 		if err != nil {
 			return Mailbox{}, nil, nil, false, fmt.Errorf("checking if mailbox exists")
 		}
@@ -3659,13 +3656,13 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUs
 			}
 			continue
 		}
-		mb, nchanges, err := a.MailboxEnsure(tx, p, true, specialUse, &modseq)
+		mb, nchanges, err := a.MailboxEnsure(tx, p.String(), true, specialUse, &modseq)
 		if err != nil {
 			return Mailbox{}, nil, nil, false, fmt.Errorf("ensuring mailbox exists: %v", err)
 		}
 		nmb = mb
 		changes = append(changes, nchanges...)
-		created = append(created, p)
+		created = append(created, p.String())
 	}
 	return nmb, changes, created, false, nil
 }

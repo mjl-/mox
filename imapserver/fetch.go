@@ -939,36 +939,37 @@ func (cmd *fetchCmd) xsectionMsgtext(smt *sectionMsgtext, p *message.Part) io.Re
 }
 
 func (cmd *fetchCmd) sectionRespField(a fetchAtt) string {
-	s := a.field + "["
+	var s strings.Builder
+	s.WriteString(a.field + "[")
 	if len(a.sectionBinary) > 0 {
-		s += fmt.Sprintf("%d", a.sectionBinary[0])
+		s.WriteString(fmt.Sprintf("%d", a.sectionBinary[0]))
 		for _, v := range a.sectionBinary[1:] {
-			s += "." + fmt.Sprintf("%d", v)
+			s.WriteString("." + fmt.Sprintf("%d", v))
 		}
 	} else if a.section != nil {
 		if a.section.part != nil {
 			p := a.section.part
-			s += fmt.Sprintf("%d", p.part[0])
+			s.WriteString(fmt.Sprintf("%d", p.part[0]))
 			for _, v := range p.part[1:] {
-				s += "." + fmt.Sprintf("%d", v)
+				s.WriteString("." + fmt.Sprintf("%d", v))
 			}
 			if p.text != nil {
 				if p.text.mime {
-					s += ".MIME"
+					s.WriteString(".MIME")
 				} else {
-					s += "." + cmd.sectionMsgtextName(p.text.msgtext)
+					s.WriteString("." + cmd.sectionMsgtextName(p.text.msgtext))
 				}
 			}
 		} else if a.section.msgtext != nil {
-			s += cmd.sectionMsgtextName(a.section.msgtext)
+			s.WriteString(cmd.sectionMsgtextName(a.section.msgtext))
 		}
 	}
-	s += "]"
+	s.WriteString("]")
 	// binary does not have partial in field, unlike BODY ../rfc/9051:6757
 	if a.field != "BINARY" && a.partial != nil {
-		s += fmt.Sprintf("<%d>", a.partial.offset)
+		s.WriteString(fmt.Sprintf("<%d>", a.partial.offset))
 	}
-	return s
+	return s.String()
 }
 
 func (cmd *fetchCmd) sectionMsgtextName(smt *sectionMsgtext) string {

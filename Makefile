@@ -124,6 +124,9 @@ fmt:
 	go fmt ./...
 	gofmt -w -s *.go */*.go
 
+fix:
+	go fix ./...
+
 tswatch:
 	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'
 

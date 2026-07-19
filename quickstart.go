@@ -954,11 +954,12 @@ and check the admin page for the needed DNS records.`)
 	if err := sconf.Describe(&destBuf, destsExample); err != nil {
 		fatalf("describing destination example: %v", err)
 	}
-	ndests := odests + "# If you receive email from mailing lists, you may want to configure them like the\n# example below (remove the empty/false SMTPMailRegexp and IsForward).\n# If you are receiving forwarded email, see the IsForwarded option in a Ruleset.\n"
+	var ndests strings.Builder
+	ndests.WriteString(odests + "# If you receive email from mailing lists, you may want to configure them like the\n# example below (remove the empty/false SMTPMailRegexp and IsForward).\n# If you are receiving forwarded email, see the IsForwarded option in a Ruleset.\n")
 	for _, line := range strings.Split(destBuf.String(), "\n")[1:] {
-		ndests += "#\t\t" + line + "\n"
+		ndests.WriteString("#\t\t" + line + "\n")
 	}
-	dconfstr := strings.ReplaceAll(db.String(), odests, ndests)
+	dconfstr := strings.ReplaceAll(db.String(), odests, ndests.String())
 	xwritefile(filepath.FromSlash("config/domains.conf"), []byte(dconfstr), 0660)
 
 	// Verify config.

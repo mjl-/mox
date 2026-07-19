@@ -1,5 +1,4 @@
 //go:build tools
-// +build tools
 
 // For unexpand the 4 spaces that the typescript compiler outputs into tabs.
 // Not all unexpand commands implement the -t flag (openbsd).

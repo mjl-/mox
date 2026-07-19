@@ -3,6 +3,7 @@ package imapserver
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/mjl-/mox/mlog"
 )
@@ -46,18 +47,19 @@ type string0 string
 // ../rfc/9051:7081
 // ../rfc/9051:6856 ../rfc/6855:153
 func (t string0) pack(c *conn) string {
-	r := `"`
+	var r strings.Builder
+	r.WriteString(`"`)
 	for _, ch := range t {
 		if ch == '\x00' || ch == '\r' || ch == '\n' || ch > 0x7f && !c.utf8strings() {
 			return syncliteral(t).pack(c)
 		}
 		if ch == '\\' || ch == '"' {
-			r += `\`
+			r.WriteString(`\`)
 		}
-		r += string(ch)
+		r.WriteString(string(ch))
 	}
-	r += `"`
-	return r
+	r.WriteString(`"`)
+	return r.String()
 }
 
 func (t string0) xwriteTo(c *conn, xw io.Writer) {
@@ -67,15 +69,16 @@ func (t string0) xwriteTo(c *conn, xw io.Writer) {
 type dquote string
 
 func (t dquote) pack(c *conn) string {
-	r := `"`
+	var r strings.Builder
+	r.WriteString(`"`)
 	for _, c := range t {
 		if c == '\\' || c == '"' {
-			r += `\`
+			r.WriteString(`\`)
 		}
-		r += string(c)
+		r.WriteString(string(c))
 	}
-	r += `"`
-	return r
+	r.WriteString(`"`)
+	return r.String()
 }
 
 func (t dquote) xwriteTo(c *conn, xw io.Writer) {
@@ -151,15 +154,16 @@ func (t readerSyncliteral) xwriteTo(c *conn, xw io.Writer) {
 type listspace []token
 
 func (t listspace) pack(c *conn) string {
-	s := "("
+	var s strings.Builder
+	s.WriteString("(")
 	for i, e := range t {
 		if i > 0 {
-			s += " "
+			s.WriteString(" ")
 		}
-		s += e.pack(c)
+		s.WriteString(e.pack(c))
 	}
-	s += ")"
-	return s
+	s.WriteString(")")
+	return s.String()
 }
 
 func (t listspace) xwriteTo(c *conn, xw io.Writer) {
@@ -177,14 +181,14 @@ func (t listspace) xwriteTo(c *conn, xw io.Writer) {
 type concatspace []token
 
 func (t concatspace) pack(c *conn) string {
-	var s string
+	var s strings.Builder
 	for i, e := range t {
 		if i > 0 {
-			s += " "
+			s.WriteString(" ")
 		}
-		s += e.pack(c)
+		s.WriteString(e.pack(c))
 	}
-	return s
+	return s.String()
 }
 
 func (t concatspace) xwriteTo(c *conn, xw io.Writer) {
@@ -200,11 +204,11 @@ func (t concatspace) xwriteTo(c *conn, xw io.Writer) {
 type concat []token
 
 func (t concat) pack(c *conn) string {
-	var s string
+	var s strings.Builder
 	for _, e := range t {
-		s += e.pack(c)
+		s.WriteString(e.pack(c))
 	}
-	return s
+	return s.String()
 }
 
 func (t concat) xwriteTo(c *conn, xw io.Writer) {

@@ -1399,15 +1399,15 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		s := ""
+		var s strings.Builder
 		for _, k := range keys {
 			ks := k
 			if ks == "" {
 				ks = "(default)"
 			}
-			s += ks + ": " + mlog.LevelStrings[l[k]] + "\n"
+			s.WriteString(ks + ": " + mlog.LevelStrings[l[k]] + "\n")
 		}
-		xctl.xstreamfrom(strings.NewReader(s))
+		xctl.xstreamfrom(strings.NewReader(s.String()))
 
 	case "setloglevels":
 		/* protocol:

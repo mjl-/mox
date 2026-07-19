@@ -443,7 +443,7 @@ func stringValue(iscid, nested bool, v any) string {
 	}
 
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr && rv.IsNil() {
+	if rv.Kind() == reflect.Pointer && rv.IsNil() {
 		return ""
 	}
 
@@ -454,7 +454,7 @@ func stringValue(iscid, nested bool, v any) string {
 		return r.String()
 	}
 
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 		return stringValue(iscid, nested, rv.Interface())
 	}
@@ -492,7 +492,7 @@ func stringValue(iscid, nested bool, v any) string {
 				continue
 			}
 			// todo: decide on better approach about which fields to include while preventing recursion
-			if j == 0 && (fv.Kind() == reflect.Struct || fv.Kind() == reflect.Ptr || fv.Kind() == reflect.Interface) && fv.Type() != typeTime {
+			if j == 0 && (fv.Kind() == reflect.Struct || fv.Kind() == reflect.Pointer || fv.Kind() == reflect.Interface) && fv.Type() != typeTime {
 				// Don't recurse.
 				continue
 			}
