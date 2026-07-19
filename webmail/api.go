@@ -341,7 +341,6 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 		}
 	}
 	if !smtputf8 && fromAddr.Address.Localpart.IsInternational() {
-		// todo: may want to warn user that they should consider sending with a ascii-only localpart, in case receiver doesn't support smtputf8.
 		smtputf8 = true
 	}
 	if !smtputf8 && replyTo != nil && replyTo.Address.Localpart.IsInternational() {
@@ -681,16 +680,21 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	})
 
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
+	// Track whether the envelope addresses (MAIL FROM / RCPT TO) need SMTPUTF8
+	// separately — messages that only need SMTPUTF8 due to headers can be downgraded.
 	smtputf8 := false
+	smtputf8Addr := false
 	for _, a := range recipients {
 		if a.Localpart.IsInternational() {
 			smtputf8 = true
+			smtputf8Addr = true
 			break
 		}
 	}
-	if !smtputf8 && fromAddr.Address.Localpart.IsInternational() {
+	if !smtputf8Addr && fromAddr.Address.Localpart.IsInternational() {
 		// todo: may want to warn user that they should consider sending with a ascii-only localpart, in case receiver doesn't support smtputf8.
 		smtputf8 = true
+		smtputf8Addr = true
 	}
 	if !smtputf8 && replyTo != nil && replyTo.Address.Localpart.IsInternational() {
 		smtputf8 = true
@@ -980,7 +984,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		qm := queue.MakeMsg(fp, toPath, xc.Has8bit, xc.SMTPUTF8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS, now, m.Subject)
+		qm := queue.MakeMsg(fp, toPath, xc.Has8bit, xc.SMTPUTF8, smtputf8Addr, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS, now, m.Subject)
 		if m.FutureRelease != nil {
 			ival := time.Until(*m.FutureRelease)
 			if ival < 0 {

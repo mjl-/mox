@@ -781,13 +781,14 @@ type Outgoing struct {
 	Submitted time.Time `bstore:"nonzero,default now"`
 }
 
-// RecipientDomainTLS stores TLS capabilities of a recipient domain as encountered
-// during most recent connection (delivery attempt).
+// RecipientDomainTLS stores TLS and extension capabilities of a recipient domain
+// as encountered during most recent connection (delivery attempt).
 type RecipientDomainTLS struct {
 	Domain     string    // Unicode.
 	Updated    time.Time `bstore:"default now"`
 	STARTTLS   bool      // Supports STARTTLS.
 	RequireTLS bool      // Supports RequireTLS SMTP extension.
+	SMTPUTF8   bool      // Supports SMTPUTF8 SMTP extension.
 }
 
 // DiskUsage tracks quota use.

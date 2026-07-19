@@ -665,6 +665,8 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 
 	// If we have a non-ascii localpart, we will be sending with smtputf8. We'll go
 	// full utf-8 then.
+	// Track whether the envelope addresses (MAIL FROM / RCPT TO) need SMTPUTF8
+	// separately — messages that only need SMTPUTF8 due to headers can be downgraded.
 	intl := func(l []smtp.Path) bool {
 		for _, p := range l {
 			if p.Localpart.IsInternational() {
@@ -673,7 +675,8 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 		return false
 	}
-	smtputf8 := intl([]smtp.Path{fromPath}) || intl(toPaths) || intl(ccPaths) || intl(bccPaths)
+	smtputf8Addr := intl([]smtp.Path{fromPath}) || intl(toPaths) || intl(ccPaths) || intl(bccPaths)
+	smtputf8 := smtputf8Addr
 
 	replyTos, replyToPaths := xparseAddresses(m.ReplyTo)
 	for _, rt := range replyToPaths {
@@ -1017,7 +1020,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 		rcptMsgPrefix := recvHdrFor(recvRcpt) + msgPrefix
 		msgSize := int64(len(rcptMsgPrefix)) + xc.Size
-		qm := queue.MakeMsg(fp, rcpt, xc.Has8bit, xc.SMTPUTF8, msgSize, m.MessageID, []byte(rcptMsgPrefix), req.RequireTLS, now, m.Subject)
+		qm := queue.MakeMsg(fp, rcpt, xc.Has8bit, xc.SMTPUTF8, smtputf8Addr, msgSize, m.MessageID, []byte(rcptMsgPrefix), req.RequireTLS, now, m.Subject)
 		qm.FromID = fromIDs[i]
 		qm.Extra = req.Extra
 		if req.FutureRelease != nil {
