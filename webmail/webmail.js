@@ -1689,6 +1689,10 @@ let domainAddressConfigs = {};
 let rejectsMailbox = '';
 // Last known server version. For asking to reload.
 let lastServerVersion = '';
+// Timers for marking messages as read or non-junk. Maps Message.ID to list of
+// setTimeout timer id's. These timer id's are canceled when messages are
+// permanently deleted.
+let scheduledTimers = new Map();
 const login = async (reason) => {
 	popupOpen = true; // Prevent global key event handler from consuming keys.
 	return new Promise((resolve, _) => {
@@ -4200,20 +4204,42 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			}
 		}
 		messageLoaded();
+		// Add and remove timer id's for marking message as read or non-junk. These id's
+		// are canceled when the corresponding messages are permanently removed, to prevent
+		// error messages about operations on no longer existing messages.
+		const tidAdd = (tid) => {
+			const l = scheduledTimers.get(miv.messageitem.Message.ID) || [];
+			l.push(tid);
+			scheduledTimers.set(miv.messageitem.Message.ID, l);
+		};
+		const tidRemove = (tid) => {
+			const l = scheduledTimers.get(miv.messageitem.Message.ID) || [];
+			const i = l.indexOf(tid);
+			if (i >= 0) {
+				l.splice(i, 1);
+			}
+			if (l.length === 0) {
+				scheduledTimers.delete(miv.messageitem.Message.ID);
+			}
+		};
 		if (!miv.messageitem.Message.Seen) {
-			window.setTimeout(async () => {
+			const tid = window.setTimeout(async () => {
 				if (!miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID()) {
 					await withStatus('Marking current message as read', client.FlagsAdd([miv.messageitem.Message.ID], ['\\seen']));
 				}
+				tidRemove(tid);
 			}, 500);
+			tidAdd(tid);
 		}
 		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
-			window.setTimeout(async () => {
+			const tid = window.setTimeout(async () => {
 				const mailboxIsReject = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && mb.Name === rejectsMailbox);
 				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
 					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']));
 				}
+				tidRemove(tid);
 			}, 5 * 1000);
+			tidAdd(tid);
 		}
 	})();
 	return mv;
@@ -4269,7 +4295,16 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 		if (!window.confirm('Are you sure you want to permanently delete?')) {
 			return;
 		}
-		await withStatus('Permanently deleting messages', client.MessageDelete(mlv.selected().map(miv => miv.messageitem.Message.ID)));
+		const ids = mlv.selected().map(miv => miv.messageitem.Message.ID);
+		// Cancel pending timers that may mark these messages as read or non-junk, to
+		// prevent error messages about non-existent (removed) messages.
+		for (const id of ids) {
+			for (const tid of (scheduledTimers.get(id) || [])) {
+				window.clearTimeout(tid);
+			}
+			scheduledTimers.delete(id);
+		}
+		await withStatus('Permanently deleting messages', client.MessageDelete(ids));
 	};
 	const cmdTrash = async () => {
 		const mb = listMailboxes().find(mb => mb.Trash);
