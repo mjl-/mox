@@ -3747,7 +3747,9 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 				if (mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
 					const from = mi.Envelope.From[0];
 					const name = from.Name || formatEmail(from);
-					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" }) + ' at ' + mi.Envelope.Date.toLocaleTimeString();
+					// If message did not have Date header, we'll get the Go zero value, with year 1. Use time received instead in that case.
+					const dt = mi.Envelope.Date.getFullYear() === 1 ? m.Received : mi.Envelope.Date;
+					const datetime = dt.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" }) + ' at ' + dt.toLocaleTimeString();
 					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n';
 				}
 				body = '\n\n' + sig + '\n' + onWroteLine + body;
