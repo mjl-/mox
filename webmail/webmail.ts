@@ -969,7 +969,7 @@ const withDisabled = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promis
 		elem.disabled = true
 		return await p
 	} catch (err) {
-		console.log({err})
+		log({err})
 		window.alert('Error: ' + errmsg(err))
 		throw err
 	} finally {
@@ -1940,7 +1940,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	const localdatetime = (d: Date) => localdate(d) + 'T' + pad0(d.getHours()) + ':' + pad0(d.getMinutes()) + ':00'
 	const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 	const scheduleTimeChanged = () => {
-		console.log('datetime change', scheduleTime.value)
+		log('datetime change', scheduleTime.value)
 		dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()])
 	}
 
@@ -2431,7 +2431,7 @@ interface MsgitemView {
 	// the threadRoot or otherwise if its threadRoot isn't collapsed.
 	threadRoot: () => MsgitemView
 	isCollapsedThreadRoot: () => boolean
-	descendants: () => MsgitemView[] // Flattened list of all descendents.
+	descendants: () => MsgitemView[] // Flattened list of all descendants.
 	findDescendant: (match: (dmiv: MsgitemView) => boolean) => MsgitemView | null
 	lastDescendant: () => MsgitemView | null
 
@@ -2466,7 +2466,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 		if (envelopeIdentity(mi.Envelope.BCC || [])) {
 			identityHeader.push(identityTag('bcc', 'You are in the BCC header'))
 		}
-		// todo: don't include this if this is a message to a mailling list, based on list-* headers.
+		// todo: don't include this if this is a message to a mailing list, based on list-* headers.
 		if (identityHeader.length === 0) {
 			identityHeader.push(identityTag('-', 'You are not in any To, From, CC, BCC header. Could message to a mailing list or Bcc without Bcc message header.'))
 		}
@@ -2566,7 +2566,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 		}
 
 		// For threaded messages, we draw the subject/first-line indented, and with a
-		// charactering indicating the relationship.
+		// character indicating the relationship.
 		// todo: show different arrow is message is a forward? we can tell by the message flag, it will likely be a message the user sent.
 		let threadChar = ''
 		let threadCharTitle = ''
@@ -3550,7 +3550,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		dom._kids(msgcontentElem)
 		dom._kids(msgscrollElem, elem)
 		dom._kids(msgcontentElem, msgscrollElem)
-		renderAttachments() // Rerender opaciy on inline images.
+		renderAttachments() // Rerender opacity on inline images.
 	}
 	const loadHTML = (): void => {
 		urlType = 'html'
@@ -3562,7 +3562,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				css('msgIframeHTML', {position: 'absolute', width: '100%', height: '100%'}),
 			)
 		)
-		renderAttachments() // Rerender opaciy on inline images.
+		renderAttachments() // Rerender opacity on inline images.
 	}
 	const loadHTMLexternal = (): void => {
 		urlType = 'htmlexternal'
@@ -3574,7 +3574,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				css('msgIframeHTML', {position: 'absolute', width: '100%', height: '100%'}),
 			)
 		)
-		renderAttachments() // Rerender opaciy on inline images.
+		renderAttachments() // Rerender opacity on inline images.
 	}
 
 	const mv: MsgView = {
@@ -3863,7 +3863,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	}
 	const cmdUnmute = async () => { await withStatus('Unmuting thread', client.ThreadMute(mlv.selected().map(miv => miv.messageitem.Message.ID), false)) }
 
-	const seletedRoots = () => {
+	const selectedRoots = () => {
 		const mivs: MsgitemView[] = []
 		mlv.selected().forEach(miv => {
 			const mivroot = miv.threadRoot()
@@ -3879,7 +3879,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			alert('Toggle muting threads is only available when threading is enabled.')
 			return
 		}
-		const rootmivs = seletedRoots()
+		const rootmivs = selectedRoots()
 		const unmuted = !!rootmivs.find(miv => !miv.messageitem.Message.ThreadMuted)
 		await withStatus(unmuted ? 'Muting' : 'Unmuting', client.ThreadMute(rootmivs.map(miv => miv.messageitem.Message.ID), unmuted ? true : false))
 		if (unmuted) {
@@ -3900,7 +3900,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			return
 		}
 
-		const rootmivs = seletedRoots()
+		const rootmivs = selectedRoots()
 		const collapse = !!rootmivs.find(miv => !miv.collapsed)
 
 		const oldstate = state()
@@ -3946,7 +3946,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			return
 		}
 		const oldstate = state()
-		const rootmivs = seletedRoots()
+		const rootmivs = selectedRoots()
 		rootmivs.forEach(miv => {
 			if (miv.collapsed !== collapse) {
 				if (collapse) {
@@ -4448,7 +4448,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 		if (ndmivs.length !== odmivs.length-1) {
 			throw new ConsistencyError('unexpected new descendants counts during remove')
 		}
-		msgitemViews.splice(pi+1, 0, ...ndmivs) // Add all new/current descedants. There is one less than in odmivs.
+		msgitemViews.splice(pi+1, 0, ...ndmivs) // Add all new/current descendants. There is one less than in odmivs.
 		odmivs.forEach(ndimv => ndimv.remove())
 		const next = pmiv.root.nextSibling
 		for (const ndmiv of ndmivs) {
@@ -6361,7 +6361,7 @@ const parseComposeMailto = (mailto: string): ComposeOptions => {
 		} else if (k === 'bcc') {
 			opts.bcc = [...(opts.bcc || []), ...addresses(v)]
 		} else if (k === 'subject') {
-			// q/b-word encoding is allowed, we let the server decode when we start composoing,
+			// q/b-word encoding is allowed, we let the server decode when we start composing,
 			// only if needed. ../rfc/6068:267
 			opts.subject = v
 		} else if (k === 'body') {
