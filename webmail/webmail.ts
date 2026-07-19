@@ -104,6 +104,7 @@ ensureCSS('button, .button, select', {backgroundColor: styles.buttonBackground, 
 ensureCSS('button, .button, select, a.button:visited', {color: styles.color})
 ensureCSS('button.active, .button.active, button.active:hover, .button.active:hover', {backgroundColor: styles.highlightBackground})
 ensureCSS('button:hover:not(:disabled), .button:hover:not(:disabled), select:hover:not(:disabled)', {backgroundColor: styles.buttonHoverBackground})
+ensureCSS('button.active:hover:not(:disabled), .button.active:hover:not(:disabled)', {backgroundColor: styles.highlightBackgroundHover})
 ensureCSS('button:disabled, .button:disabled, select:disabled', {opacity: .5})
 ensureCSS('input, textarea', {backgroundColor: styles.backgroundColor, color: styles.color, border: '1px solid', borderColor: '#888', borderRadius: '.15em', padding: '0 .15em'})
 ensureCSS('input:hover:not(:disabled), textarea:hover:not(:disabled)', {borderColor: styles.colorMilder})
@@ -6535,6 +6536,18 @@ const init = async () => {
 		}
 	}
 
+	const refineToggle = async (refine: string, btn: HTMLButtonElement) => {
+		if (settings.refine === refine) {
+			settingsPut({...settings, refine: ''})
+			refineToggleActive(null)
+		} else {
+			settingsPut({...settings, refine: refine})
+			refineToggleActive(btn)
+		}
+		dom._kids(refineLabelBtn, settings.refine.startsWith('label:') ? 'Label: '+settings.refine.substring('label:'.length) : 'Label')
+		await withStatus('Requesting messages', requestNewView(false))
+	}
+
 	let threadMode: HTMLSelectElement
 
 	const msgColumnDraggerStyle = css('msgColumnDragger', {position: 'absolute', top: 0, bottom: 0, width: '1px', backgroundColor: styles.popupBorderColor, left: '2.5px'})
@@ -6551,36 +6564,28 @@ const init = async () => {
 						'Unread',
 						attr.title('Only show messages marked as unread.'),
 						async function click(e: MouseEvent) {
-							settingsPut({...settings, refine: 'unread'})
-							refineToggleActive(e.target! as HTMLButtonElement)
-							await withStatus('Requesting messages', requestNewView(false))
+							await refineToggle('unread', e.target! as HTMLButtonElement)
 						},
 					),
 					refineReadBtn=dom.clickbutton(settings.refine === 'read' ? dom._class('active') : [],
 						'Read',
 						attr.title('Only show messages marked as read.'),
 						async function click(e: MouseEvent) {
-							settingsPut({...settings, refine: 'read'})
-							refineToggleActive(e.target! as HTMLButtonElement)
-							await withStatus('Requesting messages', requestNewView(false))
+							await refineToggle('read', e.target! as HTMLButtonElement)
 						},
 					),
 					refineAttachmentsBtn=dom.clickbutton(settings.refine === 'attachments' ? dom._class('active') : [],
 						'Attachments',
 						attr.title('Only show messages with attachments.'),
 						async function click(e: MouseEvent) {
-							settingsPut({...settings, refine: 'attachments'})
-							refineToggleActive(e.target! as HTMLButtonElement)
-							await withStatus('Requesting messages', requestNewView(false))
+							await refineToggle('attachments', e.target! as HTMLButtonElement)
 						},
 					),
 					refineFlaggedBtn=dom.clickbutton(settings.refine === 'flagged' ? dom._class('active') : [],
 						'Flagged',
 						attr.title('Only show flagged/starred messages.'),
 						async function click(e: MouseEvent) {
-							settingsPut({...settings, refine: 'flagged'})
-							refineToggleActive(e.target! as HTMLButtonElement)
-							await withStatus('Requesting messages', requestNewView(false))
+							await refineToggle('flagged', e.target! as HTMLButtonElement)
 						},
 					),
 					refineLabelBtn=dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: '+settings.refine.substring('label:'.length)] : 'Label',
@@ -6592,10 +6597,7 @@ const init = async () => {
 									style({display: 'flex', flexDirection: 'column', gap: '1ex'}),
 									labels.map(l => {
 										const selectLabel = async () => {
-											settingsPut({...settings, refine: 'label:'+l})
-											refineToggleActive(e.target! as HTMLButtonElement)
-											dom._kids(refineLabelBtn, 'Label: '+l)
-											await withStatus('Requesting messages', requestNewView(false))
+											await refineToggle('label:'+l, e.target! as HTMLButtonElement)
 											remove()
 										}
 										return dom.div(

@@ -1565,6 +1565,7 @@ ensureCSS('button, .button, select', { backgroundColor: styles.buttonBackground,
 ensureCSS('button, .button, select, a.button:visited', { color: styles.color });
 ensureCSS('button.active, .button.active, button.active:hover, .button.active:hover', { backgroundColor: styles.highlightBackground });
 ensureCSS('button:hover:not(:disabled), .button:hover:not(:disabled), select:hover:not(:disabled)', { backgroundColor: styles.buttonHoverBackground });
+ensureCSS('button.active:hover:not(:disabled), .button.active:hover:not(:disabled)', { backgroundColor: styles.highlightBackgroundHover });
 ensureCSS('button:disabled, .button:disabled, select:disabled', { opacity: .5 });
 ensureCSS('input, textarea', { backgroundColor: styles.backgroundColor, color: styles.color, border: '1px solid', borderColor: '#888', borderRadius: '.15em', padding: '0 .15em' });
 ensureCSS('input:hover:not(:disabled), textarea:hover:not(:disabled)', { borderColor: styles.colorMilder });
@@ -6516,32 +6517,33 @@ const init = async () => {
 			dom._kids(refineLabelBtn, 'Label');
 		}
 	};
+	const refineToggle = async (refine, btn) => {
+		if (settings.refine === refine) {
+			settingsPut({ ...settings, refine: '' });
+			refineToggleActive(null);
+		}
+		else {
+			settingsPut({ ...settings, refine: refine });
+			refineToggleActive(btn);
+		}
+		dom._kids(refineLabelBtn, settings.refine.startsWith('label:') ? 'Label: ' + settings.refine.substring('label:'.length) : 'Label');
+		await withStatus('Requesting messages', requestNewView(false));
+	};
 	let threadMode;
 	const msgColumnDraggerStyle = css('msgColumnDragger', { position: 'absolute', top: 0, bottom: 0, width: '1px', backgroundColor: styles.popupBorderColor, left: '2.5px' });
 	let msglistElem = dom.div(css('msgList', { backgroundColor: styles.msglistBackgroundColor, position: 'absolute', left: '0', right: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column' }), dom.div(attr.role('region'), attr.arialabel('Filter and sorting buttons for message list'), css('msgListFilterSorting', { display: 'flex', justifyContent: 'space-between', backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor, padding: '.25em .5em' }), dom.div(dom.h1('Refine:', css('refineTitle', { fontWeight: 'normal', fontSize: 'inherit', display: 'inline', margin: 0 }), attr.title('Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.')), ' ', dom.span(dom._class('btngroup'), refineUnreadBtn = dom.clickbutton(settings.refine === 'unread' ? dom._class('active') : [], 'Unread', attr.title('Only show messages marked as unread.'), async function click(e) {
-		settingsPut({ ...settings, refine: 'unread' });
-		refineToggleActive(e.target);
-		await withStatus('Requesting messages', requestNewView(false));
+		await refineToggle('unread', e.target);
 	}), refineReadBtn = dom.clickbutton(settings.refine === 'read' ? dom._class('active') : [], 'Read', attr.title('Only show messages marked as read.'), async function click(e) {
-		settingsPut({ ...settings, refine: 'read' });
-		refineToggleActive(e.target);
-		await withStatus('Requesting messages', requestNewView(false));
+		await refineToggle('read', e.target);
 	}), refineAttachmentsBtn = dom.clickbutton(settings.refine === 'attachments' ? dom._class('active') : [], 'Attachments', attr.title('Only show messages with attachments.'), async function click(e) {
-		settingsPut({ ...settings, refine: 'attachments' });
-		refineToggleActive(e.target);
-		await withStatus('Requesting messages', requestNewView(false));
+		await refineToggle('attachments', e.target);
 	}), refineFlaggedBtn = dom.clickbutton(settings.refine === 'flagged' ? dom._class('active') : [], 'Flagged', attr.title('Only show flagged/starred messages.'), async function click(e) {
-		settingsPut({ ...settings, refine: 'flagged' });
-		refineToggleActive(e.target);
-		await withStatus('Requesting messages', requestNewView(false));
+		await refineToggle('flagged', e.target);
 	}), refineLabelBtn = dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: ' + settings.refine.substring('label:'.length)] : 'Label', attr.title('Only show messages with the selected label.'), async function click(e) {
 		const labels = possibleLabels();
 		const remove = popover(e.target, {}, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '1ex' }), labels.map(l => {
 			const selectLabel = async () => {
-				settingsPut({ ...settings, refine: 'label:' + l });
-				refineToggleActive(e.target);
-				dom._kids(refineLabelBtn, 'Label: ' + l);
-				await withStatus('Requesting messages', requestNewView(false));
+				await refineToggle('label:' + l, e.target);
 				remove();
 			};
 			return dom.div(dom.clickbutton(styleClasses.keyword, keywordButtonStyle, l, async function click() {
