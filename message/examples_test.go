@@ -136,7 +136,7 @@ func ExampleComposer() {
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", "\n"))
 	// Output:
 	// From: "Charlie" <root@localhost>
-	// Subject: hi =?utf-8?q?=E2=98=BA?=
+	// Subject: hi =?utf-8?b?4pi6?=
 	// Date: 2 Jan 2006 15:04:05 +0700
 	// Message-ID: <unique@host>
 	// MIME-Version: 1.0
@@ -144,6 +144,48 @@ func ExampleComposer() {
 	// Content-Transfer-Encoding: 7bit
 	//
 	// this is the body
+}
+
+func ExampleComposer_multiWordSubject() {
+	var b bytes.Buffer
+	const smtputf8 = false
+	xc := message.NewComposer(&b, 10*1024*1024, smtputf8)
+
+	defer func() {
+		x := recover()
+		if x == nil {
+			return
+		}
+		if err, ok := x.(error); ok && errors.Is(err, message.ErrCompose) {
+			log.Printf("compose: %v", err)
+		}
+		panic(x)
+	}()
+
+	xc.HeaderAddrs("From", []message.NameAddress{{Address: smtp.NewAddress("test", dns.Domain{ASCII: "localhost"})}})
+	xc.Subject("가장 높은 산, 가장 긴 강")
+	tm, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05+07:00")
+	xc.Header("Date", tm.Format(message.RFC5322Z))
+	xc.Header("Message-ID", "<test@host>")
+	xc.Header("MIME-Version", "1.0")
+	body, ct, cte := xc.TextPart("plain", "test")
+	xc.Header("Content-Type", ct)
+	xc.Header("Content-Transfer-Encoding", cte)
+	xc.Line()
+	xc.Write(body)
+	xc.Flush()
+
+	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", "\n"))
+	// Output:
+	// From: <test@localhost>
+	// Subject: =?utf-8?b?6rCA7J6lIOuGkuydgCDsgrAsIOqwgOyepSDquLQg6rCV?=
+	// Date: 2 Jan 2006 15:04:05 +0700
+	// Message-ID: <test@host>
+	// MIME-Version: 1.0
+	// Content-Type: text/plain; charset=us-ascii
+	// Content-Transfer-Encoding: 7bit
+	//
+	// test
 }
 
 func ExamplePart() {
