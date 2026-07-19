@@ -532,11 +532,11 @@ var api;
 		}
 		// MessageMove moves messages to another mailbox. If the message is already in
 		// the mailbox an error is returned.
-		async MessageMove(messageIDs, mailboxID) {
+		async MessageMove(messageIDs, mailboxID, markSeen) {
 			const fn = "MessageMove";
-			const paramTypes = [["[]", "int64"], ["int64"]];
+			const paramTypes = [["[]", "int64"], ["int64"], ["bool"]];
 			const returnTypes = [];
-			const params = [messageIDs, mailboxID];
+			const params = [messageIDs, mailboxID, markSeen];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MessageDelete permanently deletes messages, without moving them to the Trash mailbox.

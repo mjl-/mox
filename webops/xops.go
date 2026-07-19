@@ -344,7 +344,9 @@ func (x XOps) MailboxesMarkRead(ctx context.Context, log mlog.Log, acc *store.Ac
 }
 
 // MessageMove moves messages to the mailbox represented by mailboxName, or to mailboxID if mailboxName is empty.
-func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64, mailboxName string, mailboxID int64) {
+//
+// If markSeen is true, the messages are marked as seen.
+func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64, mailboxName string, mailboxID int64, markSeen bool) {
 	acc.WithWLock(func() {
 		var changes []store.Change
 
@@ -375,7 +377,7 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 			}
 
 			var modseq store.ModSeq
-			newIDs, changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, &modseq)
+			newIDs, changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, &modseq, markSeen)
 		})
 		newIDs = nil
 
@@ -385,11 +387,13 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 
 // MessageMoveTx moves message to a new mailbox, which must be different than their
 // current mailbox. Moving a message is done by changing the MailboxID and
-// assigning an appriorate new UID, and then inserting a replacement Message record
+// assigning an appropriate new UID, and then inserting a replacement Message record
 // with new ID that is marked expunged in the original mailbox, along with a
 // MessageErase record so the message gets erased when all sessions stopped
 // referencing the message.
-func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq *store.ModSeq) ([]int64, []store.Change) {
+//
+// If markSeen is true, the messages are marked as seen.
+func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq *store.ModSeq, markSeen bool) ([]int64, []store.Change) {
 	var newIDs []int64
 	var commit bool
 	defer func() {
@@ -415,7 +419,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 
 	mbDst.ModSeq = *modseq
 
-	// Get messages. group them by mailbox.
+	// Get messages.
 	l := make([]store.Message, len(messageIDs))
 	for i, id := range messageIDs {
 		l[i] = x.messageID(ctx, tx, id)
@@ -485,7 +489,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 			nm.IsReject = false
 			nm.Seen = false
 		}
-		if mbDst.Trash {
+		if markSeen {
 			nm.Seen = true
 		}
 

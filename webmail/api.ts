@@ -868,11 +868,11 @@ export class Client {
 
 	// MessageMove moves messages to another mailbox. If the message is already in
 	// the mailbox an error is returned.
-	async MessageMove(messageIDs: number[] | null, mailboxID: number): Promise<void> {
+	async MessageMove(messageIDs: number[] | null, mailboxID: number, markSeen: boolean): Promise<void> {
 		const fn: string = "MessageMove"
-		const paramTypes: string[][] = [["[]","int64"],["int64"]]
+		const paramTypes: string[][] = [["[]","int64"],["int64"],["bool"]]
 		const returnTypes: string[][] = []
-		const params: any[] = [messageIDs, mailboxID]
+		const params: any[] = [messageIDs, mailboxID, markSeen]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 

@@ -1383,6 +1383,6 @@ func (s server) MessageFlagsRemove(ctx context.Context, req webapi.MessageFlagsR
 
 func (s server) MessageMove(ctx context.Context, req webapi.MessageMoveRequest) (resp webapi.MessageMoveResult, err error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	xops.MessageMove(ctx, reqInfo.Log, reqInfo.Account, []int64{req.MsgID}, req.DestMailboxName, 0)
+	xops.MessageMove(ctx, reqInfo.Log, reqInfo.Account, []int64{req.MsgID}, req.DestMailboxName, 0, false)
 	return
 }

@@ -532,11 +532,11 @@ var api;
 		}
 		// MessageMove moves messages to another mailbox. If the message is already in
 		// the mailbox an error is returned.
-		async MessageMove(messageIDs, mailboxID) {
+		async MessageMove(messageIDs, mailboxID, markSeen) {
 			const fn = "MessageMove";
-			const paramTypes = [["[]", "int64"], ["int64"]];
+			const paramTypes = [["[]", "int64"], ["int64"], ["bool"]];
 			const returnTypes = [];
-			const params = [messageIDs, mailboxID];
+			const params = [messageIDs, mailboxID, markSeen];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MessageDelete permanently deletes messages, without moving them to the Trash mailbox.
@@ -3241,7 +3241,7 @@ const movePopover = (e, mailboxes, msgs) => {
 	const remove = popover(e.target, {}, dom.div(css('popoverMove', { display: 'flex', flexDirection: 'column', gap: '.25em' }), mailboxes.map(mb => dom.div(dom.clickbutton(mb.Name, mb.ID === msgsMailboxID ? attr.disabled('') : [], async function click() {
 		const moveMsgs = msgs.filter(m => m.MailboxID !== mb.ID);
 		const msgIDs = moveMsgs.map(m => m.ID);
-		await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID));
+		await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID, false));
 		if (moveMsgs.length === 1) {
 			await moveAskRuleset(moveMsgs[0].ID, moveMsgs[0].MailboxID, mb, mailboxes);
 		}
@@ -4285,7 +4285,7 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 	const cmdArchive = async () => {
 		const mb = listMailboxes().find(mb => mb.Archive);
 		if (mb) {
-			await withStatus('Moving to archive mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID));
+			await withStatus('Moving to archive mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true));
 		}
 		else {
 			window.alert('No mailbox configured for archiving yet.');
@@ -4309,7 +4309,7 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 	const cmdTrash = async () => {
 		const mb = listMailboxes().find(mb => mb.Trash);
 		if (mb) {
-			await withStatus('Moving to trash mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID));
+			await withStatus('Moving to trash mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true));
 		}
 		else {
 			window.alert('No mailbox configured for trash yet.');
@@ -4318,7 +4318,7 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 	const cmdJunk = async () => {
 		const mb = listMailboxes().find(mb => mb.Junk);
 		if (mb) {
-			await withStatus('Moving to junk mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID));
+			await withStatus('Moving to junk mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true));
 		}
 		else {
 			window.alert('No mailbox configured for junk yet.');
@@ -5737,7 +5737,7 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 			.filter(mbMsgID => mbMsgID[0] !== xmb.ID)
 			.filter(mbMsgID => mailboxMsgIDs.length === 1 || !sentMailboxID || mbMsgID[0] !== sentMailboxID || !otherMailbox(sentMailboxID))
 			.map(mbMsgID => mbMsgID[1]);
-		await withStatus('Moving to ' + xmb.Name, client.MessageMove(msgIDs, xmb.ID));
+		await withStatus('Moving to ' + xmb.Name, client.MessageMove(msgIDs, xmb.ID, false));
 		if (msgIDs.length === 1) {
 			const msgID = msgIDs[0];
 			const mbSrcID = mailboxMsgIDs.find(mbMsgID => mbMsgID[1] === msgID)[0];

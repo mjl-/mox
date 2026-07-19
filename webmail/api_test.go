@@ -286,20 +286,20 @@ func TestAPI(t *testing.T) {
 	tneedError(t, func() { api.MailboxEmpty(ctx, 0) })               // Bad ID.
 
 	// MessageMove
-	tneedError(t, func() { api.MessageMove(ctx, []int64{testbox1Alt.ID}, inbox.ID) }) // Message was removed (with MailboxEmpty above).
-	api.MessageMove(ctx, []int64{}, testbox1.ID)                                      // No messages.
+	tneedError(t, func() { api.MessageMove(ctx, []int64{testbox1Alt.ID}, inbox.ID, false) }) // Message was removed (with MailboxEmpty above).
+	api.MessageMove(ctx, []int64{}, testbox1.ID, false)                                      // No messages.
 	tdeliver(t, acc, testbox1Alt)
-	tneedError(t, func() { api.MessageMove(ctx, []int64{testbox1Alt.ID}, testbox1.ID) }) // Already in destination mailbox.
-	tneedError(t, func() { api.MessageMove(ctx, []int64{}, 0) })                         // Bad ID.
-	api.MessageMove(ctx, []int64{inboxMinimal.ID, inboxHTML.ID}, testbox1.ID)
-	api.MessageMove(ctx, []int64{inboxMinimal.ID, inboxHTML.ID, testbox1Alt.ID}, inbox.ID)                // From different mailboxes.
-	api.FlagsAdd(ctx, []int64{inboxMinimal.ID}, []string{`minimallabel`})                                 // For move.
-	api.MessageMove(ctx, []int64{inboxMinimal.ID}, testbox1.ID)                                           // Move causes new label for destination mailbox.
-	api.MessageMove(ctx, []int64{rejectsMinimal.ID}, testbox1.ID)                                         // Move causing readjustment of MailboxOrigID due to Rejects mailbox.
-	tneedError(t, func() { api.MessageMove(ctx, []int64{testbox1Alt.ID, inboxMinimal.ID}, testbox1.ID) }) // inboxMinimal already in destination.
+	tneedError(t, func() { api.MessageMove(ctx, []int64{testbox1Alt.ID}, testbox1.ID, false) }) // Already in destination mailbox.
+	tneedError(t, func() { api.MessageMove(ctx, []int64{}, 0, false) })                         // Bad ID.
+	api.MessageMove(ctx, []int64{inboxMinimal.ID, inboxHTML.ID}, testbox1.ID, false)
+	api.MessageMove(ctx, []int64{inboxMinimal.ID, inboxHTML.ID, testbox1Alt.ID}, inbox.ID, true)                 // From different mailboxes.
+	api.FlagsAdd(ctx, []int64{inboxMinimal.ID}, []string{`minimallabel`})                                        // For move.
+	api.MessageMove(ctx, []int64{inboxMinimal.ID}, testbox1.ID, false)                                           // Move causes new label for destination mailbox.
+	api.MessageMove(ctx, []int64{rejectsMinimal.ID}, testbox1.ID, false)                                         // Move causing readjustment of MailboxOrigID due to Rejects mailbox.
+	tneedError(t, func() { api.MessageMove(ctx, []int64{testbox1Alt.ID, inboxMinimal.ID}, testbox1.ID, false) }) // inboxMinimal already in destination.
 	// Restore.
-	api.MessageMove(ctx, []int64{inboxMinimal.ID}, inbox.ID)
-	api.MessageMove(ctx, []int64{testbox1Alt.ID}, testbox1.ID)
+	api.MessageMove(ctx, []int64{inboxMinimal.ID}, inbox.ID, false)
+	api.MessageMove(ctx, []int64{testbox1Alt.ID}, testbox1.ID, false)
 
 	// MessageDelete
 	api.MessageDelete(ctx, []int64{})                                               // No messages.

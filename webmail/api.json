@@ -212,6 +212,12 @@
 					"Typewords": [
 						"int64"
 					]
+				},
+				{
+					"Name": "markSeen",
+					"Typewords": [
+						"bool"
+					]
 				}
 			],
 			"Returns": []

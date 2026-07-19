@@ -1088,7 +1088,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					err = q.IDs(&msgIDs)
 					xcheckf(ctx, err, "listing messages in thread to archive")
 					if len(msgIDs) > 0 {
-						ids, nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq)
+						ids, nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq, true)
 						newIDs = append(newIDs, ids...)
 						changes = append(changes, nchanges...)
 					}
@@ -1151,12 +1151,12 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 // MessageMove moves messages to another mailbox. If the message is already in
 // the mailbox an error is returned.
-func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID int64) {
+func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID int64, markSeen bool) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	acc := reqInfo.Account
 	log := reqInfo.Log
 
-	xops.MessageMove(ctx, log, acc, messageIDs, "", mailboxID)
+	xops.MessageMove(ctx, log, acc, messageIDs, "", mailboxID, markSeen)
 }
 
 var xops = webops.XOps{

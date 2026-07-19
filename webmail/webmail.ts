@@ -2302,7 +2302,7 @@ const movePopover = (e: MouseEvent, mailboxes: api.Mailbox[], msgs: api.Message[
 						async function click() {
 							const moveMsgs = msgs.filter(m => m.MailboxID !== mb.ID)
 							const msgIDs = moveMsgs.map(m => m.ID)
-							await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID))
+							await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID, false))
 							if (moveMsgs.length === 1) {
 								await moveAskRuleset(moveMsgs[0].ID, moveMsgs[0].MailboxID, mb, mailboxes)
 							}
@@ -3810,7 +3810,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	const cmdArchive = async () => {
 		const mb = listMailboxes().find(mb => mb.Archive)
 		if (mb) {
-			await withStatus('Moving to archive mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID))
+			await withStatus('Moving to archive mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true))
 		} else {
 			window.alert('No mailbox configured for archiving yet.')
 		}
@@ -3833,7 +3833,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	const cmdTrash = async () => {
 		const mb = listMailboxes().find(mb => mb.Trash)
 		if (mb) {
-			await withStatus('Moving to trash mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID))
+			await withStatus('Moving to trash mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true))
 		} else {
 			window.alert('No mailbox configured for trash yet.')
 		}
@@ -3841,7 +3841,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	const cmdJunk = async () => {
 		const mb = listMailboxes().find(mb => mb.Junk)
 		if (mb) {
-			await withStatus('Moving to junk mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID))
+			await withStatus('Moving to junk mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true))
 		} else {
 			window.alert('No mailbox configured for junk yet.')
 		}
@@ -5459,7 +5459,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 				.filter(mbMsgID => mbMsgID[0] !== xmb.ID)
 				.filter(mbMsgID => mailboxMsgIDs.length === 1 || !sentMailboxID || mbMsgID[0] !== sentMailboxID || !otherMailbox(sentMailboxID))
 				.map(mbMsgID => mbMsgID[1])
-			await withStatus('Moving to '+xmb.Name, client.MessageMove(msgIDs, xmb.ID))
+			await withStatus('Moving to '+xmb.Name, client.MessageMove(msgIDs, xmb.ID, false))
 			if (msgIDs.length === 1) {
 				const msgID = msgIDs[0]
 				const mbSrcID = mailboxMsgIDs.find(mbMsgID => mbMsgID[1] === msgID)![0]
