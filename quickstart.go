@@ -136,8 +136,8 @@ output of "mox config describe-domains" and see the output of
 	fatalf := func(format string, args ...any) {
 		// We remove in reverse order because dirs would have been created first and must
 		// be removed last, after their files have been removed.
-		for i := len(cleanupPaths) - 1; i >= 0; i-- {
-			p := cleanupPaths[i]
+		for _, p := range slices.Backward(cleanupPaths) {
+
 			if err := os.Remove(p); err != nil {
 				log.Printf("cleaning up %q: %s", p, err)
 			}

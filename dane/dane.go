@@ -417,8 +417,8 @@ func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedH
 			// sure to include the trusted anchor. ../rfc/7671:835
 			for _, chain := range chains {
 				// If pkix verified, check if any of the certificates match.
-				for i := len(chain) - 1; i >= 0; i-- {
-					if match(chain[i]) {
+				for _, c := range slices.Backward(chain) {
+					if match(c) {
 						return true, nil
 					}
 				}

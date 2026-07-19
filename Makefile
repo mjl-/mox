@@ -94,10 +94,6 @@ govendor:
 	go mod vendor
 	./genlicenses.sh
 
-modernize:
-	# skip slicescontains because it rewrites to unintuitive slices.ContainsFunc
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -category=-slicescontains -fix -test ./...
-
 test-integration:
 	-docker compose -f docker-compose-integration.yml kill
 	-docker compose -f docker-compose-integration.yml down
@@ -126,6 +122,9 @@ fmt:
 
 fix:
 	go fix ./...
+
+modernize:
+	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
 
 tswatch:
 	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'

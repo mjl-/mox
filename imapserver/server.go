@@ -1416,7 +1416,7 @@ func xmailboxPatternMatcher(ref string, patterns []string) matchStringer {
 		}
 
 		// Fix casing for all Inbox paths.
-		first := strings.SplitN(s, "/", 2)[0]
+		first, _, _ := strings.Cut(s, "/")
 		if strings.EqualFold(first, "Inbox") {
 			s = "Inbox" + s[len("Inbox"):]
 		}

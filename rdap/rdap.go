@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -200,8 +201,8 @@ func rdapDomainRequest(ctx context.Context, log mlog.Log, rdapURL string, dom dn
 	})
 
 	now := time.Now()
-	for i := len(domain.Events) - 1; i >= 0; i-- {
-		ev := domain.Events[i]
+	for _, ev := range slices.Backward(domain.Events) {
+
 		if ev.EventDate.After(now) {
 			continue
 		}

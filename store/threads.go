@@ -53,8 +53,8 @@ func assignThread(log mlog.Log, tx *bstore.Tx, m *Message, part *message.Part) e
 	if err != nil {
 		log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, slog.Int64("msgid", m.ID))
 	}
-	for i := len(messageIDs) - 1; i >= 0; i-- {
-		messageID := messageIDs[i]
+	for _, messageID := range slices.Backward(messageIDs) {
+
 		if messageID == m.MessageID {
 			continue
 		}
@@ -300,8 +300,8 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 			log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, slog.Int64("msgid", m.ID))
 		}
 
-		for i := len(refids) - 1; i >= 0; i-- {
-			messageID := refids[i]
+		for i, messageID := range slices.Backward(refids) {
+
 			if messageID == m.MessageID {
 				continue
 			}

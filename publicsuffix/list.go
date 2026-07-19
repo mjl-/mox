@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 
 	_ "embed"
@@ -89,8 +90,8 @@ func ParseList(elog *slog.Logger, r io.Reader) (List, error) {
 			} else {
 				t = strings.Split(line, ".")
 			}
-			for i := len(t) - 1; i >= 0; i-- {
-				w := t[i]
+			for i, w := range slices.Backward(t) {
+
 				if w == "" {
 					log.Print("empty label in rule, skipping", slog.String("line", oline))
 					break

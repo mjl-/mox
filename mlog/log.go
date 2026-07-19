@@ -353,8 +353,8 @@ func (h *handler) Enabled(ctx context.Context, level slog.Level) bool {
 
 func (h *handler) configMatch(level slog.Level) (slog.Level, bool) {
 	c := *config.Load()
-	for i := len(h.Pkgs) - 1; i >= 0; i-- {
-		if l, ok := c[h.Pkgs[i]]; ok {
+	for _, v := range slices.Backward(h.Pkgs) {
+		if l, ok := c[v]; ok {
 			return l, match(l, level)
 		}
 	}
