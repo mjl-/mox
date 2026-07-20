@@ -998,9 +998,13 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 		TLSNextProto:      nextProto,
 	}
 
-	// Set server.Protocols with http2 enabled or http2 won't work with go1.27.
+	// Set server.Protocols with http2 enabled or http2 won't work with go1.27 with
+	// http2.ConfigureServer and non-nil server.TLSNextProto.
 	if tlsConfig != nil {
-		setHTTP2Protocol(server)
+		var p http.Protocols
+		p.SetHTTP1(true)
+		p.SetHTTP2(true)
+		server.Protocols = &p
 	}
 
 	// By default, the Go 1.6 and above http.Server includes support for HTTP2.
