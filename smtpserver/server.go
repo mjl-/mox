@@ -3546,6 +3546,13 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				continue
 			}
 
+			if a.voidMailbox {
+				ndelivered++
+				metricDelivery.WithLabelValues("delivered", a0.reason).Inc()
+				log.Info("incoming message diverted to void mailbox", slog.String("reason", a.reason), slog.Any("msgfrom", msgFrom))
+				continue
+			}
+
 			var delivered bool
 			a.d.acc.WithWLock(func() {
 				if err := a.d.acc.DeliverMailbox(log, a.mailbox, a.d.m, dataFile); err != nil {
