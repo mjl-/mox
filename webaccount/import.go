@@ -26,6 +26,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -432,7 +433,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	xensureMailbox := func(name string) *store.Mailbox {
 		// Ensure name is normalized.
 		name = norm.NFC.String(name)
-		name, _, err := store.CheckMailboxName(name, true)
+		name, _, err := config.CheckMailboxName(name, true)
 		ximportcheckf(err, "checking mailbox name")
 
 		if mb, ok := mailboxNames[name]; ok {

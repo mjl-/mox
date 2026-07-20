@@ -193,7 +193,7 @@ func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 
 	// Ensure normalized form.
 	mailbox = norm.NFC.String(mailbox)
-	mailbox, _, err = store.CheckMailboxName(mailbox, true)
+	mailbox, _, err = config.CheckMailboxName(mailbox, true)
 	xctl.xcheck(err, "checking mailbox name")
 
 	// Open account, creating a database file if it doesn't exist yet. It must be known

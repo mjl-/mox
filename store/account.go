@@ -2664,7 +2664,7 @@ func (a *Account) Subjectpass(email string) (key string, err error) {
 //
 // Modseq is used, and initialized if 0, for created mailboxes.
 //
-// Name must be in normalized form, see CheckMailboxName.
+// Name must be in normalized form, see config.CheckMailboxName.
 //
 // Caller must hold account wlock.
 // Caller must propagate changes if any.
@@ -3685,7 +3685,7 @@ func MailboxID(tx *bstore.Tx, id int64) (Mailbox, error) {
 // The mailbox is created with special-use flags, with those flags taken away from
 // other mailboxes if they have them, reflected in the returned changes.
 //
-// Name must be in normalized form, see CheckMailboxName.
+// Name must be in normalized form, see config.CheckMailboxName.
 func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (nmb Mailbox, changes []Change, created []string, exists bool, rerr error) {
 	elems := strings.Split(name, "/")
 	var p string
@@ -3719,7 +3719,7 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUs
 // MailboxRename renames mailbox mbsrc to dst, including children of mbsrc, and
 // adds missing parents for dst.
 //
-// Name must be in normalized form, see CheckMailboxName, and cannot be Inbox.
+// Name must be in normalized form, see config.CheckMailboxName, and cannot be Inbox.
 func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc *Mailbox, dst string, modseq *ModSeq) (changes []Change, isInbox, alreadyExists bool, rerr error) {
 	if mbsrc.Name == "Inbox" || dst == "Inbox" {
 		return nil, true, false, fmt.Errorf("inbox cannot be renamed")
@@ -3910,15 +3910,4 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 
 	changes = append(changes, mb.ChangeRemoveMailbox())
 	return changes, false, nil
-}
-
-// CheckMailboxName checks if name is valid, returning an INBOX-normalized name.
-// I.e. it changes various casings of INBOX and INBOX/* to Inbox and Inbox/*.
-// Name is invalid if it contains leading/trailing/double slashes, or when it isn't
-// unicode-normalized, or when empty or has special characters.
-//
-// If name is the inbox, and allowInbox is false, this is indicated with the isInbox return parameter.
-// For that case, and for other invalid names, an error is returned.
-func CheckMailboxName(name string, allowInbox bool) (normalizedName string, isInbox bool, rerr error) {
-	return config.CheckMailboxName(name, allowInbox)
 }

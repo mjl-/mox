@@ -1748,7 +1748,7 @@ func (c *conn) ok(tag, cmd string) {
 // Name is invalid if it contains leading/trailing/double slashes, or when it isn't
 // unicode-normalized, or when empty or has special characters.
 func xcheckmailboxname(name string, allowInbox bool) string {
-	name, isinbox, err := store.CheckMailboxName(name, allowInbox)
+	name, isinbox, err := config.CheckMailboxName(name, allowInbox)
 	if isinbox {
 		xuserErrorf("special mailboxname Inbox not allowed")
 	} else if err != nil {
