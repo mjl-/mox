@@ -676,7 +676,7 @@ func TestIntrobox(t *testing.T) {
 	acc.Introbox = "Introbox"
 	acc.AutomaticJunkFlags.Enabled = true
 	acc.AutomaticJunkFlags.JunkMailboxRegexp = "^(junk|spam)"
-	acc.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
+	acc.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|introbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
 	acc.JunkMailbox = regexp.MustCompile(acc.AutomaticJunkFlags.JunkMailboxRegexp)
 	acc.NeutralMailbox = regexp.MustCompile(acc.AutomaticJunkFlags.NeutralMailboxRegexp)
 	mox.Conf.Dynamic.Accounts[ts.acc.Name] = acc
