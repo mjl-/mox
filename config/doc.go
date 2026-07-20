@@ -1248,7 +1248,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# originally intended mailbox marks it as nonjunk and records a positive
 			# interaction, so future messages from the sender are delivered to their regular
 			# destination. Moving it to a junk mailbox records a negative interaction for the
-			# intended mailbox. (optional)
+			# intended mailbox. Make sure to add this mailbox to NeutralMailboxRegexp for
+			# proper automatic junk flags handling. (optional)
 			Introbox:
 
 			# Automatically set $Junk and $NotJunk flags based on mailbox messages are
@@ -1267,8 +1268,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Example: ^(junk|spam). (optional)
 				JunkMailboxRegexp:
 
-				# Example: ^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects), and you may wish to
-				# add trash depending on how you use it, or leave this empty. (optional)
+				# Example: ^(inbox|introbox|neutral|postmaster|dmarc|tlsrpt|rejects), and you may
+				# wish to add trash depending on how you use it, or leave this empty. (optional)
 				NeutralMailboxRegexp:
 
 				# Example: .* or an empty string. (optional)

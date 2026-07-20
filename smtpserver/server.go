@@ -3547,11 +3547,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 
 			var delivered bool
-			var deliveredMailbox string
+			var mailbox string
 			a.d.acc.WithWLock(func() {
 				conf, _ := a.d.acc.Conf()
-				mailbox := a.mailbox
-				introbox := delayFirstTime && !a.d.m.IsForward && !a.d.m.IsMailingList && a.reason == reasonNoBadSignals && conf.Introbox != "" && conf.Introbox != mailbox
+				mailbox = a.mailbox
+				introbox := conf.Introbox != "" && conf.Introbox != mailbox && a.method != nil && !(*a.method == methodMsgfromFull || *a.method == methodMsgtoFull) && !a.d.m.IsForward && !a.d.m.IsMailingList && a.dmarcReport == nil && a.tlsReport == nil
 				if introbox {
 					mailbox = conf.Introbox
 					log.Info("delivering sender with no established reputation to introbox", slog.String("mailbox", mailbox))
@@ -3574,7 +3574,6 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					return
 				}
 				delivered = true
-				deliveredMailbox = mailbox
 				ndelivered++
 				metricDelivery.WithLabelValues("delivered", a0.reason).Inc()
 				log.Info("incoming message delivered", slog.String("reason", a0.reason), slog.Any("msgfrom", msgFrom))
@@ -3593,7 +3592,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				if err != nil {
 					log.Errorx("loading parsed part for evaluating webhook", err)
 				} else {
-					err = queue.Incoming(context.Background(), log, a.d.acc, messageID, *a.d.m, part, deliveredMailbox)
+					err = queue.Incoming(context.Background(), log, a.d.acc, messageID, *a.d.m, part, mailbox)
 					log.Check(err, "queueing webhook for incoming delivery")
 				}
 			} else if nerr > 0 && ndelivered == 0 {

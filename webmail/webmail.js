@@ -5771,7 +5771,7 @@ const newMailboxlistView = (msglistView, requestNewView, updatePageTitle, setLoc
 		const trashmb = mailboxViews.find(mbv => mbv.mailbox.Trash)?.mailbox;
 		const junkmb = mailboxViews.find(mbv => mbv.mailbox.Junk)?.mailbox;
 		const stem = (s) => s.split('/')[0];
-		const specialUse = [
+		const special = [
 			(mb) => stem(mb.Name) === 'Inbox',
 			(mb) => introboxMailbox !== '' && stem(mb.Name) === stem(introboxMailbox),
 			(mb) => draftmb && stem(mb.Name) === stem(draftmb.Name),
@@ -5781,8 +5781,8 @@ const newMailboxlistView = (msglistView, requestNewView, updatePageTitle, setLoc
 			(mb) => junkmb && stem(mb.Name) === stem(junkmb.Name),
 		];
 		mailboxViews.sort((mbva, mbvb) => {
-			const ai = specialUse.findIndex(fn => fn(mbva.mailbox));
-			const bi = specialUse.findIndex(fn => fn(mbvb.mailbox));
+			const ai = special.findIndex(fn => fn(mbva.mailbox));
+			const bi = special.findIndex(fn => fn(mbvb.mailbox));
 			if (ai < 0 && bi >= 0) {
 				return 1;
 			}

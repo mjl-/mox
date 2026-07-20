@@ -2349,15 +2349,7 @@ func (a *Account) MessageAdd(log mlog.Log, tx *bstore.Tx, mb *Mailbox, m *Messag
 	}
 
 	conf, _ := a.Conf()
-	if mb.Name == conf.Introbox && m.MailboxDestinedID != 0 && m.MailboxDestinedID != mb.ID {
-		// Introbox is neutral until the user moves the message to its intended
-		// mailbox. In particular, do not let automatic mailbox rules mark a
-		// top-level Introbox as nonjunk immediately.
-		m.Junk = false
-		m.Notjunk = false
-	} else {
-		m.JunkFlagsForMailbox(*mb, conf)
-	}
+	m.JunkFlagsForMailbox(*mb, conf)
 
 	var part *message.Part
 	if m.ParsedBuf == nil {
