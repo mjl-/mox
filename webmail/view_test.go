@@ -155,6 +155,7 @@ func TestView(t *testing.T) {
 	evr := eventReader{t, bufio.NewReader(resp.Body), resp.Body}
 	var start EventStart
 	evr.Get("start", &start)
+	tcompare(t, start.Introbox, "Introbox")
 	var viewMsgs EventViewMsgs
 	evr.Get("viewMsgs", &viewMsgs)
 	tcompare(t, len(viewMsgs.MessageItems), 3)

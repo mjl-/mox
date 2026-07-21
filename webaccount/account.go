@@ -718,6 +718,50 @@ func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
 	xcheckf(ctx, err, "saving account rejects settings")
 }
 
+// IntroboxSave saves the mailbox for messages from senders with no established
+// reputation, creating it if it does not exist. The mailbox cannot be Inbox and
+// must be different from RejectsMailbox. If empty, the introbox is disabled.
+func (Account) IntroboxSave(ctx context.Context, mailbox string) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		acc.Introbox = mailbox
+	})
+	xcheckf(ctx, err, "saving account introbox settings")
+
+	if mailbox == "" {
+		return
+	}
+
+	accConf, ok := mox.Conf.Account(reqInfo.AccountName)
+	if !ok {
+		xcheckf(ctx, fmt.Errorf("account not found after saving introbox settings"), "getting account")
+	}
+	mailbox = accConf.Introbox
+	if mailbox == "" {
+		return
+	}
+
+	log := pkglog.WithContext(ctx)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName, false)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	acc.WithWLock(func() {
+		var changes []store.Change
+		err := acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+			var modseq store.ModSeq
+			var err error
+			_, changes, err = acc.MailboxEnsure(tx, mailbox, true, store.SpecialUse{}, &modseq)
+			return err
+		})
+		xcheckf(ctx, err, "creating introbox mailbox")
+		store.BroadcastChanges(acc, changes)
+	})
+}
+
 func (Account) TLSPublicKeys(ctx context.Context) ([]store.TLSPublicKey, error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	return store.TLSPublicKeyList(ctx, reqInfo.AccountName)

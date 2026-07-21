@@ -456,11 +456,11 @@ type Message struct {
 	// per-mailbox reputation.
 	//
 	// MailboxDestinedID is normally 0, but when a message is delivered to the Rejects
-	// mailbox, it is set to the intended mailbox according to delivery rules,
-	// typically that of Inbox. When such a message is moved out of Rejects, the
-	// MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the
-	// message is used for reputation calculation for future deliveries to that
-	// mailbox.
+	// mailbox or diverted to the Introbox, it is set to the intended mailbox according
+	// to delivery rules, typically that of Inbox. When such a message is moved to its
+	// intended mailbox, MailboxOrigID is corrected by setting it to MailboxDestinedID.
+	// This ensures the message is used for reputation calculation for future
+	// deliveries to that mailbox.
 	//
 	// These are not bstore references to prevent having to update all messages in a
 	// mailbox when the original mailbox is removed. Use of these fields requires
@@ -754,6 +754,30 @@ func (m *Message) JunkFlagsForMailbox(mb Mailbox, conf config.Account) {
 	} else if conf.JunkMailbox != nil && conf.NeutralMailbox != nil && conf.NotJunkMailbox == nil {
 		m.Junk = false
 		m.Notjunk = true
+	}
+}
+
+// JunkFlagsForMailboxMove sets Junk and Notjunk flags for a mailbox move. A
+// message moved or copied from Introbox to its originally intended mailbox is
+// marked as a positive interaction and used for reputation during future
+// deliveries. A move or copy to a junk mailbox records a negative interaction
+// for the intended mailbox.
+func (m *Message) JunkFlagsForMailboxMove(mbSrc, mbDst Mailbox, conf config.Account) {
+	m.JunkFlagsForMailbox(mbDst, conf)
+	if mbSrc.Name != conf.Introbox || m.MailboxDestinedID == 0 {
+		return
+	}
+	if m.MailboxDestinedID == mbDst.ID {
+		m.MailboxOrigID = m.MailboxDestinedID
+		m.MailboxDestinedID = 0
+		m.Junk = false
+		m.Notjunk = true
+	} else if m.Junk {
+		// Associate a negative decision with the intended mailbox too. Otherwise
+		// future messages would keep returning to Introbox without using it for
+		// reputation.
+		m.MailboxOrigID = m.MailboxDestinedID
+		m.MailboxDestinedID = 0
 	}
 }
 
@@ -2640,7 +2664,7 @@ func (a *Account) Subjectpass(email string) (key string, err error) {
 //
 // Modseq is used, and initialized if 0, for created mailboxes.
 //
-// Name must be in normalized form, see CheckMailboxName.
+// Name must be in normalized form, see config.CheckMailboxName.
 //
 // Caller must hold account wlock.
 // Caller must propagate changes if any.
@@ -2938,6 +2962,19 @@ func (a *Account) DeliverDestination(log mlog.Log, dest config.Destination, m *M
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
 func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFile *os.File) (rerr error) {
+	return a.deliverMailbox(log, mailbox, "", m, msgFile)
+}
+
+// DeliverMailboxDestined delivers an email to mailbox while recording
+// destinedMailbox as the mailbox to which it would otherwise have been delivered.
+// Both mailboxes are created if necessary.
+//
+// Caller must hold account wlock.
+func (a *Account) DeliverMailboxDestined(log mlog.Log, mailbox, destinedMailbox string, m *Message, msgFile *os.File) (rerr error) {
+	return a.deliverMailbox(log, mailbox, destinedMailbox, m, msgFile)
+}
+
+func (a *Account) deliverMailbox(log mlog.Log, mailbox, destinedMailbox string, m *Message, msgFile *os.File) (rerr error) {
 	var changes []Change
 
 	var commit bool
@@ -2951,6 +2988,15 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 	}()
 
 	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
+		if destinedMailbox != "" && destinedMailbox != mailbox {
+			mbDestined, chl, err := a.MailboxEnsure(tx, destinedMailbox, true, SpecialUse{}, &m.ModSeq)
+			if err != nil {
+				return fmt.Errorf("ensuring intended mailbox: %w", err)
+			}
+			m.MailboxDestinedID = mbDestined.ID
+			changes = append(changes, chl...)
+		}
+
 		mb, chl, err := a.MailboxEnsure(tx, mailbox, true, SpecialUse{}, &m.ModSeq)
 		if err != nil {
 			return fmt.Errorf("ensuring mailbox: %w", err)
@@ -3636,7 +3682,7 @@ func MailboxID(tx *bstore.Tx, id int64) (Mailbox, error) {
 // The mailbox is created with special-use flags, with those flags taken away from
 // other mailboxes if they have them, reflected in the returned changes.
 //
-// Name must be in normalized form, see CheckMailboxName.
+// Name must be in normalized form, see config.CheckMailboxName.
 func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (nmb Mailbox, changes []Change, created []string, exists bool, rerr error) {
 	elems := strings.Split(name, "/")
 	var p strings.Builder
@@ -3670,7 +3716,7 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUs
 // MailboxRename renames mailbox mbsrc to dst, including children of mbsrc, and
 // adds missing parents for dst.
 //
-// Name must be in normalized form, see CheckMailboxName, and cannot be Inbox.
+// Name must be in normalized form, see config.CheckMailboxName, and cannot be Inbox.
 func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc *Mailbox, dst string, modseq *ModSeq) (changes []Change, isInbox, alreadyExists bool, rerr error) {
 	if mbsrc.Name == "Inbox" || dst == "Inbox" {
 		return nil, true, false, fmt.Errorf("inbox cannot be renamed")
@@ -3861,56 +3907,4 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 
 	changes = append(changes, mb.ChangeRemoveMailbox())
 	return changes, false, nil
-}
-
-// CheckMailboxName checks if name is valid, returning an INBOX-normalized name.
-// I.e. it changes various casings of INBOX and INBOX/* to Inbox and Inbox/*.
-// Name is invalid if it contains leading/trailing/double slashes, or when it isn't
-// unicode-normalized, or when empty or has special characters.
-//
-// If name is the inbox, and allowInbox is false, this is indicated with the isInbox return parameter.
-// For that case, and for other invalid names, an error is returned.
-func CheckMailboxName(name string, allowInbox bool) (normalizedName string, isInbox bool, rerr error) {
-	t := strings.Split(name, "/")
-	if strings.EqualFold(t[0], "inbox") {
-		if len(name) == len("inbox") && !allowInbox {
-			return "", true, fmt.Errorf("special mailbox name Inbox not allowed")
-		}
-		name = "Inbox" + name[len("Inbox"):]
-	}
-
-	if norm.NFC.String(name) != name {
-		return "", false, errors.New("non-unicode-normalized mailbox names not allowed")
-	}
-
-	for _, e := range t {
-		switch e {
-		case "":
-			return "", false, errors.New("empty mailbox name")
-		case ".":
-			return "", false, errors.New(`"." not allowed`)
-		case "..":
-			return "", false, errors.New(`".." not allowed`)
-		}
-	}
-	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.Contains(name, "//") {
-		return "", false, errors.New("bad slashes in mailbox name")
-	}
-
-	// "%" and "*" are difficult to use with the IMAP LIST command, but we allow mostly
-	// allow them. ../rfc/3501:1002 ../rfc/9051:983
-	if strings.HasPrefix(name, "#") {
-		return "", false, errors.New("mailbox name cannot start with hash due to conflict with imap namespaces")
-	}
-
-	// "#" and "&" are special in IMAP mailbox names. "#" for namespaces, "&" for
-	// IMAP-UTF-7 encoding. We do allow them. ../rfc/3501:1018 ../rfc/9051:991
-
-	for _, c := range name {
-		// ../rfc/3501:999 ../rfc/6855:192 ../rfc/9051:979
-		if c <= 0x1f || c >= 0x7f && c <= 0x9f || c == 0x2028 || c == 0x2029 {
-			return "", false, errors.New("control characters not allowed in mailbox name")
-		}
-	}
-	return name, false, nil
 }

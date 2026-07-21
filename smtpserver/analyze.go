@@ -61,6 +61,7 @@ type analysis struct {
 	tlsReport           *tlsrpt.Report     // Validated TLS report, not yet stored.
 	reason              string             // If non-empty, reason for this decision. Values from reputationMethod and reason* below.
 	reasonText          []string           // Additional details for reason, human-readable, added to X-Mox-Reason header.
+	method              *reputationMethod  // Set if reputation-based analyis was done.
 	dmarcOverrideReason string             // If set, one of dmarcrpt.PolicyOverride
 	// Additional headers to add during delivery. Used for reasons a message to a
 	// dmarc/tls reporting address isn't processed.
@@ -185,12 +186,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		log.Errorx("checking delivery rates", err)
 		metricDelivery.WithLabelValues("checkrates", "").Inc()
 		addReasonText("checking delivery rates: %v", err)
-		return analysis{d, false, "", smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, "", headers}
+		return analysis{d, false, "", smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, nil, "", headers}
 	} else if err != nil {
 		log.Debugx("refusing due to high delivery rate", err)
 		metricDelivery.WithLabelValues("highrate", "").Inc()
 		addReasonText("high delivery rate")
-		return analysis{d, false, "", smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error(), err, nil, nil, reasonHighRate, reasonText, "", headers}
+		return analysis{d, false, "", smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error(), err, nil, nil, reasonHighRate, reasonText, nil, "", headers}
 	}
 
 	mailbox := d.destination.Mailbox
@@ -259,13 +260,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			return fmt.Errorf("finding destination mailbox: %w", err)
 		}
 		if mb != nil {
-			// We want to deliver to mb.ID, but this message may be rejected and sent to the
-			// Rejects mailbox instead, with MailboxID overwritten. Record the ID in
-			// MailboxDestinedID too. If the message is later moved out of the Rejects mailbox,
-			// we'll adjust the MailboxOrigID so it gets taken into account during reputation
-			// calculating in future deliveries. If we end up delivering to the intended
-			// mailbox (i.e. not rejecting), MailboxDestinedID is cleared during delivery so we
-			// don't store it unnecessarily.
+			// We want to deliver to mb.ID, but this message may instead be stored in the
+			// Rejects mailbox or diverted to the Introbox. Record the ID in
+			// MailboxDestinedID too. If the message is later moved to the intended mailbox,
+			// we'll adjust MailboxOrigID so it gets taken into account during reputation
+			// calculation for future deliveries. If we deliver directly to the intended
+			// mailbox, MailboxDestinedID is cleared during delivery.
 			d.m.MailboxID = mb.ID
 			d.m.MailboxDestinedID = mb.ID
 		} else {
@@ -274,7 +274,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		return nil
 	}
 
-	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
+	reject := func(code int, secode string, errmsg string, err error, reason string, method *reputationMethod) analysis {
 		// We may have set MailboxDestinedID below already while we had a transaction. If
 		// not, do it now. This makes it possible to use the per-mailbox reputation when a
 		// user moves the message out of the Rejects mailbox to the intended mailbox
@@ -288,7 +288,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			})
 			if mberr != nil {
 				addReasonText("error setting original destination mailbox for rejected message: %v", mberr)
-				return analysis{d, false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, dmarcOverrideReason, headers}
+				return analysis{d, false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, method, dmarcOverrideReason, headers}
 			}
 			d.m.MailboxID = 0 // We plan to reject, no need to set intended MailboxID.
 		}
@@ -303,12 +303,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			log.Info("accepting reject to configured mailbox due to ruleset")
 			addReasonText("accepting reject to mailbox due to ruleset")
 		}
-		return analysis{d, accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason, reasonText, dmarcOverrideReason, headers}
+		return analysis{d, accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason, reasonText, method, dmarcOverrideReason, headers}
 	}
 
 	if d.dmarcUse && d.dmarcResult.Reject {
 		addReasonText("message does not pass domain dmarc policy which asks to reject")
-		return reject(smtp.C550MailboxUnavail, smtp.SePol7MultiAuthFails26, "rejecting per dmarc policy", nil, reasonDMARCPolicy)
+		return reject(smtp.C550MailboxUnavail, smtp.SePol7MultiAuthFails26, "rejecting per dmarc policy", nil, reasonDMARCPolicy, nil)
 	} else if !d.dmarcUse {
 		addReasonText("not using any dmarc result")
 	} else {
@@ -407,7 +407,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			msg = "transient verification error: " + msg
 		}
 		addReasonText("message does not pass required aligned spf and/or dkim check required for destination")
-		return reject(code, smtp.SePol7MultiAuthFails26, msg, nil, reasonMsgAuthRequired)
+		return reject(code, smtp.SePol7MultiAuthFails26, msg, nil, reasonMsgAuthRequired, nil)
 	}
 
 	// Determine if message is acceptable based on DMARC domain, DKIM identities, or
@@ -444,7 +444,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	if err != nil {
 		log.Infox("determining reputation", err, slog.Any("message", d.m))
 		addReasonText("determining reputation: %v", err)
-		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonReputationError)
+		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonReputationError, nil)
 	}
 	log.Info("reputation analyzed",
 		slog.Bool("conclusive", conclusive),
@@ -460,11 +460,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 				tlsReport:           tlsReport,
 				reason:              reason,
 				reasonText:          reasonText,
+				method:              &method,
 				dmarcOverrideReason: dmarcOverrideReason,
 				headers:             headers,
 			}
 		}
-		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, string(method))
+		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, string(method), &method)
 	} else if dmarcReport != nil || tlsReport != nil {
 		log.Info("accepting message with dmarc aggregate report or tls report without reputation")
 		addReasonText("message inconclusive reputation but with dmarc or tls report")
@@ -476,6 +477,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			tlsReport:           tlsReport,
 			reason:              reasonReporting,
 			reasonText:          reasonText,
+			method:              &method,
 			dmarcOverrideReason: dmarcOverrideReason,
 			headers:             headers,
 		}
@@ -487,7 +489,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		switch d.m.MailFromValidation {
 		case store.ValidationFail, store.ValidationSoftfail:
 			addReasonText("no previous message from sender domain and spf result is (soft)fail")
-			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", nil, reasonSPFPolicy)
+			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", nil, reasonSPFPolicy, &method)
 		}
 	}
 
@@ -504,7 +506,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	// With already a mild junk signal, an iprev fail on top is enough to reject.
 	if suspiciousIPrevFail && isjunk != nil && *isjunk {
 		addReasonText("message has a mild junk signal and mismatching reverse ip")
-		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", nil, reasonIPrev)
+		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", nil, reasonIPrev, &method)
 	}
 
 	var subjectpassKey string
@@ -514,7 +516,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		if err != nil {
 			log.Errorx("get key for verifying subject token", err)
 			addReasonText("subject pass error: %v", err)
-			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonSubjectpassError)
+			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonSubjectpassError, &method)
 		}
 		err = subjectpass.Verify(log.Logger, d.dataFile, []byte(subjectpassKey), conf.SubjectPass.Period)
 		pass := err == nil
@@ -527,6 +529,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 				mailbox:             mailbox,
 				reason:              reasonSubjectpass,
 				reasonText:          reasonText,
+				method:              &method,
 				dmarcOverrideReason: dmarcOverrideReason,
 				headers:             headers,
 			}
@@ -546,7 +549,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		if err != nil {
 			log.Errorx("testing for spam", err)
 			addReasonText("classify message error: %v", err)
-			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkClassifyError)
+			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkClassifyError, &method)
 		}
 		// todo: if isjunk is not nil (i.e. there was inconclusive reputation), use it in the probability calculation. give reputation a score of 0.25 or .75 perhaps?
 		// todo: if there aren't enough historic messages, we should just let messages in.
@@ -647,7 +650,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	} else if err != store.ErrNoJunkFilter {
 		log.Errorx("open junkfilter", err)
 		addReasonText("open junkfilter: %v", err)
-		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkFilterError)
+		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkFilterError, &method)
 	} else {
 		addReasonText("no junk filter configured")
 	}
@@ -699,6 +702,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			mailbox:             mailbox,
 			reason:              reasonNoBadSignals,
 			reasonText:          reasonText,
+			method:              &method,
 			dmarcOverrideReason: dmarcOverrideReason,
 			headers:             headers,
 		}
@@ -708,10 +712,10 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		log.Info("permanent reject with subjectpass hint of moderately spammy email without reputation")
 		pass := subjectpass.Generate(log.Logger, d.msgFrom, []byte(subjectpassKey), time.Now())
 		addReasonText("reject with request to try again with subjectpass token in subject")
-		return reject(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, subjectpass.Explanation+pass, nil, reasonGiveSubjectpass)
+		return reject(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, subjectpass.Explanation+pass, nil, reasonGiveSubjectpass, &method)
 	}
 
-	return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", nil, reason)
+	return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", nil, reason, &method)
 }
 
 func isASCII(s string) bool {

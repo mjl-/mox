@@ -493,7 +493,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 			nm.Seen = true
 		}
 
-		nm.JunkFlagsForMailbox(mbDst, accConf)
+		nm.JunkFlagsForMailboxMove(mbSrc, mbDst, accConf)
 
 		err = tx.Update(&nm)
 		x.Checkf(ctx, err, "updating message with new mailbox")
