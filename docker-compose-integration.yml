@@ -48,7 +48,7 @@ services:
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
     healthcheck:
-      test: netstat -nlt | grep ':25 '
+      test: wget -q -O- http://127.0.0.1:80/healthz || exit 1
       interval: 1s
       timeout: 1s
       retries: 10
@@ -73,7 +73,7 @@ services:
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
     healthcheck:
-      test: netstat -nlt | grep ':25 '
+      test: wget -q -O- http://127.0.0.1:80/healthz || exit 1
       interval: 1s
       timeout: 1s
       retries: 10
@@ -101,7 +101,7 @@ services:
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
     healthcheck:
-      test: netstat -nlt | grep ':25 '
+      test: wget -q -O- http://127.0.0.1:80/healthz || exit 1
       interval: 1s
       timeout: 1s
       retries: 10
@@ -131,7 +131,7 @@ services:
     environment:
       GOCACHE: /.go/.cache/go-build
     healthcheck:
-      test: netstat -nlt | grep ':1025 '
+      test: wget -q -O- http://127.0.0.1:1080/healthz || exit 1
       interval: 1s
       timeout: 1s
       retries: 10
