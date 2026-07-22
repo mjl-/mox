@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/mjl-/bstore"
@@ -311,6 +312,15 @@ func TestAPI(t *testing.T) {
 	tdeliver(t, acc, testbox1Alt)
 	tdeliver(t, acc, inboxAltRel)
 
+	// MessageComposeQuoteHTML: returns cleaned HTML for a message that has an HTML part.
+	quote := api.MessageComposeQuoteHTML(ctx, inboxAltRel.ID)
+	if quote == "" {
+		t.Fatalf("expected non-empty cleaned html quote")
+	}
+	if strings.Contains(quote, "<script") {
+		t.Fatalf("quote must not contain scripts, got: %q", quote)
+	}
+
 	// MessageCompose
 	draftID := api.MessageCompose(ctx, ComposeMessage{
 		From:     "mjl@mox.example",
@@ -333,6 +343,15 @@ func TestAPI(t *testing.T) {
 		DraftMessageID: draftID,
 	}, drafts.ID)
 
+	// HTML draft.
+	htmlDraftID := api.MessageCompose(ctx, ComposeMessage{
+		From:     "mjl@mox.example",
+		To:       []string{"mjl+to@mox.example"},
+		Subject:  "html draft",
+		HTMLBody: `<p>draft <b>html</b></p>`,
+	}, drafts.ID)
+	_ = htmlDraftID
+
 	// MessageFindMessageID
 	msgID := api.MessageFindMessageID(ctx, "<absent@localhost>")
 	tcompare(t, msgID, int64(0))
@@ -354,6 +373,31 @@ func TestAPI(t *testing.T) {
 		DraftMessageID: draftID,
 	})
 	// todo: check delivery of 6 messages to inbox, 1 to sent
+
+	// Submit an HTML message: must produce multipart/alternative.
+	api.MessageSubmit(ctx, SubmitMessage{
+		From:      "mjl@mox.example",
+		To:        []string{"mjl+to@mox.example"},
+		Subject:   "html email",
+		HTMLBody:  `<p>this is <b>html</b></p><script>evil()</script>`,
+		UserAgent: "moxwebmail/dev",
+	})
+
+	// Submit an HTML message with an attachment: must nest multipart/alternative
+	// inside multipart/mixed.
+	api.MessageSubmit(ctx, SubmitMessage{
+		From:     "mjl@mox.example",
+		To:       []string{"mjl+to@mox.example"},
+		Subject:  "html email with attachment",
+		HTMLBody: `<p>see <b>attached</b></p>`,
+		Attachments: []File{
+			{
+				Filename: "test1.png",
+				DataURI:  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+			},
+		},
+		UserAgent: "moxwebmail/dev",
+	})
 
 	api.MessageSubmit(ctx, SubmitMessage{
 		From:      "mjl-altcatchall@mox.example",

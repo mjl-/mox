@@ -125,6 +125,16 @@ const autosizeStyle = css('autosize', {display: 'inline-grid', maxWidth: '90vw'}
 ensureCSS('.autosize.input', {gridArea: '1 / 2'})
 ensureCSS('.autosize::after', {content: 'attr(data-value)', marginRight: '1em', lineHeight: 0, visibility: 'hidden', whiteSpace: 'pre-wrap', overflowX: 'hidden'})
 
+// Content styling for the HTML compose editor (.htmleditor). The global reset
+// strips list markers/indentation and blockquote spacing, so restore them here
+// (descendant selectors override the reset) — otherwise lists and quotes look
+// like plain text in the editor.
+ensureCSS('.htmleditor ul', {listStyle: 'disc', margin: '.5em 0', paddingLeft: '2em'})
+ensureCSS('.htmleditor ol', {listStyle: 'decimal', margin: '.5em 0', paddingLeft: '2em'})
+ensureCSS('.htmleditor li', {margin: '.15em 0'})
+ensureCSS('.htmleditor p', {margin: '.5em 0'})
+ensureCSS('.htmleditor blockquote', {margin: '.5em 0', paddingLeft: '1ex', borderLeft: '2px solid #ccc'})
+
 
 // From HTML.
 declare let page: HTMLElement
@@ -144,6 +154,35 @@ try {
 } catch (err) {}
 
 let accountSettings: api.Settings
+
+// Squire rich-text editor, loaded as a global from webmail/squire.js (see webmail.html).
+declare class Squire {
+	constructor(root: HTMLElement, config?: {[key: string]: any})
+	getHTML(): string
+	setHTML(html: string): void
+	getRoot(): HTMLElement
+	getPath(): string
+	hasFormat(tag: string, attributes?: {[k: string]: string}): boolean
+	getSelection(): Range
+	setSelection(range: Range): void
+	setFontFace(name: string | null): void
+	setFontSize(size: string | null): void
+	setTextColor(color: string | null): void
+	focus(): Squire
+	bold(): void
+	removeBold(): void
+	italic(): void
+	removeItalic(): void
+	underline(): void
+	removeUnderline(): void
+	makeUnorderedList(): void
+	makeOrderedList(): void
+	removeList(): void
+	increaseQuoteLevel(): void
+	decreaseQuoteLevel(): void
+	makeLink(url: string): void
+	destroy(): void
+}
 
 const defaultSettings = {
 	mailboxesWidth: 240,
@@ -1116,6 +1155,7 @@ const cmdSettings = async () => {
 	let quoting: HTMLSelectElement
 	let showAddressSecurity: HTMLInputElement
 	let showHTML: HTMLInputElement
+	let composeHTML: HTMLInputElement
 	let showShortcuts: HTMLInputElement
 	let showHeaders: HTMLTextAreaElement
 
@@ -1137,6 +1177,7 @@ const cmdSettings = async () => {
 					Quoting: quoting.value as api.Quoting,
 					ShowAddressSecurity: showAddressSecurity.checked,
 					ShowHTML: showHTML.checked,
+					ComposeHTML: composeHTML.checked,
 					NoShowShortcuts: !showShortcuts.checked,
 					ShowHeaders: showHeaders.value.split('\n').map(s => s.trim()).filter(s => !!s),
 				}
@@ -1175,6 +1216,11 @@ const cmdSettings = async () => {
 					showHTML=dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []),
 					' Show email as HTML instead of text by default for first-time senders',
 					attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.'),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					composeHTML=dom.input(attr.type('checkbox'), accountSettings.ComposeHTML ? attr.checked('') : []),
+					' Compose new messages in HTML by default',
 				),
 
 				dom.label(
@@ -1428,6 +1474,8 @@ type ComposeOptions = {
 	editOffset?: number // For cursor, default at start.
 	draftMessageID?: number // For composing for existing draft message, to be removed when message is sent.
 	archiveReferenceMailboxID?: number // For "send and archive", the mailbox from which to move messages to the archive mailbox.
+	htmlBody?: string // Initial HTML body; when set (or modeHTML), compose opens in HTML mode.
+	modeHTML?: boolean // Open compose in HTML mode.
 }
 
 interface ComposeView {
@@ -1437,6 +1485,51 @@ interface ComposeView {
 }
 
 let composeView: ComposeView | null = null
+
+// plainToHTML converts plain text to simple HTML for the editor: escapes special
+// characters and turns newlines into <br>.
+const plainToHTML = (s: string): string => {
+	const esc = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+	return esc.split('\n').join('<br>')
+}
+// htmlToPlain converts editor HTML to plain text for the textarea, inserting
+// newlines for <br> and block elements and prefixing <blockquote> lines with
+// "> ", roughly mirroring the server's HTMLToText. Used for the editing buffer
+// when switching to plain text; the text/plain part actually sent is derived
+// server-side.
+const blockTags: {[tag: string]: boolean} = {
+	P: true, DIV: true, LI: true, TR: true, PRE: true, HR: true,
+	H1: true, H2: true, H3: true, H4: true, H5: true, H6: true,
+	UL: true, OL: true, TABLE: true, DL: true, DD: true, DT: true,
+}
+const htmlToPlain = (s: string): string => {
+	const render = (node: Node): string => {
+		let out = ''
+		for (let c = node.firstChild; c; c = c.nextSibling) {
+			if (c.nodeType === Node.TEXT_NODE) {
+				out += (c.textContent || '').replace(/\u00a0/g, ' ')
+			} else if (c.nodeType === Node.ELEMENT_NODE) {
+				const el = c as HTMLElement
+				if (el.tagName === 'BR') {
+					out += '\n'
+					continue
+				}
+				if (el.tagName === 'BLOCKQUOTE') {
+					const inner = render(el).replace(/\n+$/, '').split('\n').map(l => '> ' + l).join('\n')
+					out += (out && !out.endsWith('\n') ? '\n' : '') + inner + '\n'
+					continue
+				}
+				out += render(el)
+				if (blockTags[el.tagName] && !out.endsWith('\n')) {
+					out += '\n'
+				}
+			}
+		}
+		return out
+	}
+	const doc = new window.DOMParser().parseFromString(s, 'text/html')
+	return render(doc.body).replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim()
+}
 
 const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	log('compose', opts)
@@ -1466,6 +1559,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	let subjectAutosize: HTMLElement
 	let subject: HTMLInputElement
 	let body: HTMLTextAreaElement
+	let bodyhtml: HTMLDivElement // contenteditable host for Squire in HTML mode.
+	let htmltoolbar: HTMLElement // formatting toolbar, shown only in HTML mode.
+	let fontFamily: HTMLSelectElement, fontSize: HTMLSelectElement, fontColor: HTMLInputElement
+	let editor: Squire | null = null
+	let modeHTML = opts.modeHTML || !!opts.htmlBody || (accountSettings?.ComposeHTML ?? false)
 	let attachments: HTMLInputElement
 	let requiretls: HTMLSelectElement
 
@@ -1482,7 +1580,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	let draftMessageID = opts.draftMessageID || 0
 	let draftSaveTimer = 0
 	let draftSavePromise = Promise.resolve(0)
-	let draftLastText = opts.body
+	let draftLastText = (opts.body || '') + '\x00' + (opts.htmlBody || '')
 
 	const draftCancelSaveTimer = () => {
 		if (draftSaveTimer) {
@@ -1491,8 +1589,70 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		}
 	}
 
+	// Current body as plain text, regardless of mode.
+	const bodyText = (): string => modeHTML && editor ? htmlToPlain(editor.getHTML()) : body.value
+	// Current body as HTML when in HTML mode, else empty.
+	const bodyHTML = (): string => modeHTML && editor ? editor.getHTML() : ''
+
+	const ensureEditor = () => {
+		if (!editor) {
+			editor = new Squire(bodyhtml)
+			if (listMailboxes().find(mb => mb.Draft)) {
+				editor.getRoot().addEventListener('input', () => draftScheduleSave())
+			}
+		}
+	}
+	// A toolbar button that runs an editor command. The mousedown preventDefault is
+	// essential: a button click would otherwise move focus out of the contenteditable
+	// and collapse the selection, so block commands (lists, quote) would operate on
+	// nothing. With focus kept, the command runs on the live selection.
+	const fmtButton = (label: string, title: string, action: () => void) =>
+		dom.clickbutton(
+			label,
+			attr.title(title),
+			function mousedown(e: MouseEvent) { e.preventDefault() },
+			function click() { ensureEditor(); action(); editor!.focus() },
+		)
+	// <select>/<input> controls (font, size, colour) take focus from the editor,
+	// unlike buttons (which can preventDefault on mousedown). So we capture the
+	// editor selection when the control is touched and restore it before applying.
+	let savedRange: Range | null = null
+	const captureRange = () => { ensureEditor(); savedRange = editor!.getSelection() }
+	const fmtApply = (action: () => void) => {
+		ensureEditor()
+		if (savedRange) {
+			editor!.setSelection(savedRange)
+		}
+		action()
+		editor!.focus()
+	}
+	const setModeHTML = (on: boolean) => {
+		if (on === modeHTML) {
+			return
+		}
+		if (on) {
+			ensureEditor()
+			editor!.setHTML(plainToHTML(body.value))
+			body.style.display = 'none'
+			bodyhtml.style.display = ''
+			htmltoolbar.style.display = ''
+		} else {
+			if (editor && !window.confirm('Switch to plain text? HTML formatting will be lost.')) {
+				return
+			}
+			body.value = editor ? htmlToPlain(editor.getHTML()) : body.value
+			bodyhtml.style.display = 'none'
+			htmltoolbar.style.display = 'none'
+			body.style.display = ''
+		}
+		modeHTML = on
+	}
+
+	// Snapshot of the body used for unsaved-change detection across both modes.
+	const bodySnapshot = (): string => bodyText() + '\x00' + bodyHTML()
+
 	const draftScheduleSave = () => {
-		if (draftSaveTimer || body.value === draftLastText) {
+		if (draftSaveTimer || bodySnapshot() === draftLastText) {
 			return
 		}
 		draftSaveTimer = window.setTimeout(async () => {
@@ -1515,7 +1675,8 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			Bcc: bccViews.map(v => v.input.value).filter(s => s),
 			ReplyTo: replyTo,
 			Subject: subject.value,
-			TextBody: body.value,
+			TextBody: bodyText(),
+			HTMLBody: bodyHTML(),
 			ResponseMessageID: opts.responseMessageID || 0,
 			DraftMessageID: draftMessageID,
 		}
@@ -1529,13 +1690,13 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		} finally {
 			draftSavePromise = Promise.resolve(0)
 		}
-		draftLastText = cm.TextBody
+		draftLastText = cm.TextBody + '\x00' + (cm.HTMLBody || '')
 	}
 
 	// todo future: on visibilitychange with visibilityState "hidden", use navigator.sendBeacon to save latest modified draft message?
 
 	// When window is closed, ask user to cancel due to unsaved changes.
-	const unsavedChanges = () => opts.body !== body.value && (!draftMessageID || draftLastText !== body.value)
+	const unsavedChanges = () => ((opts.body || '') + '\x00' + (opts.htmlBody || '')) !== bodySnapshot() && (!draftMessageID || draftLastText !== bodySnapshot())
 
 	// In Firefox, ctrl-w doesn't seem interceptable when focus is on a button. It is
 	// when focus is on a textarea or not any specific UI element. So this isn't always
@@ -1629,7 +1790,8 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			ReplyTo: replyTo,
 			UserAgent: 'moxwebmail/'+moxversion,
 			Subject: subject.value,
-			TextBody: body.value,
+			TextBody: bodyText(),
+			HTMLBody: bodyHTML(),
 			Attachments: files,
 			ForwardAttachments: forwardAttachmentPaths.length === 0 ? {MessageID: 0, Paths: []} : {MessageID: opts.attachmentsMessageItem!.Message.ID, Paths: forwardAttachmentPaths},
 			IsForward: opts.isForward || false,
@@ -2083,6 +2245,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					style({
 						flexGrow: '1',
 						width: '100%',
+						display: modeHTML ? 'none' : '',
 					}),
 					initHeight === 0 ? attr.rows('15') : [], // Drives default size, removed on compose window resize.
 					// Explicit string object so it doesn't get the highlight-unicode-block-changes
@@ -2097,6 +2260,78 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					!listMailboxes().find(mb => mb.Draft) ? [] : function input() {
 						draftScheduleSave()
 					},
+				),
+				htmltoolbar=dom.div(
+					style({display: modeHTML ? '' : 'none', margin: '.25em 0'}),
+					fmtButton('B', 'Bold (Ctrl/Cmd+B). Toggles on the selection.', () => editor!.hasFormat('B') ? editor!.removeBold() : editor!.bold()),
+					' ',
+					fmtButton('I', 'Italic (Ctrl/Cmd+I).', () => editor!.hasFormat('I') ? editor!.removeItalic() : editor!.italic()),
+					' ',
+					fmtButton('U', 'Underline (Ctrl/Cmd+U).', () => editor!.hasFormat('U') ? editor!.removeUnderline() : editor!.underline()),
+					' ',
+					fmtButton('• List', 'Bulleted list (toggle).', () => editor!.hasFormat('UL') ? editor!.removeList() : editor!.makeUnorderedList()),
+					' ',
+					fmtButton('1. List', 'Numbered list (toggle).', () => editor!.hasFormat('OL') ? editor!.removeList() : editor!.makeOrderedList()),
+					' ',
+					fmtButton('Quote +', 'Increase quote level.', () => editor!.increaseQuoteLevel()),
+					' ',
+					fmtButton('Quote −', 'Decrease quote level.', () => editor!.decreaseQuoteLevel()),
+					' ',
+					fmtButton('Link', 'Insert link.', () => { const url = window.prompt('Link URL:', 'https://'); if (url) { editor!.makeLink(url) } }),
+					' ',
+					fontFamily=dom.select(
+						attr.title('Font family.'),
+						function mousedown() { captureRange() },
+						function focus() { captureRange() },
+						function change() { fmtApply(() => editor!.setFontFace(fontFamily.value || null)) },
+						dom.option('Font', attr.value('')),
+						dom.option('Sans-serif', attr.value('sans-serif')),
+						dom.option('Serif', attr.value('serif')),
+						dom.option('Monospace', attr.value('monospace')),
+						dom.option('Arial', attr.value('Arial')),
+						dom.option('Georgia', attr.value('Georgia')),
+						dom.option('Verdana', attr.value('Verdana')),
+						dom.option('Tahoma', attr.value('Tahoma')),
+					),
+					' ',
+					fontSize=dom.select(
+						attr.title('Font size.'),
+						function mousedown() { captureRange() },
+						function focus() { captureRange() },
+						function change() { fmtApply(() => editor!.setFontSize(fontSize.value || null)) },
+						dom.option('Size', attr.value('')),
+						dom.option('Small', attr.value('0.85em')),
+						dom.option('Normal', attr.value('1em')),
+						dom.option('Large', attr.value('1.35em')),
+						dom.option('Huge', attr.value('2em')),
+					),
+					' ',
+					fontColor=dom.input(
+						attr.type('color'),
+						attr.title('Text colour.'),
+						function mousedown() { captureRange() },
+						function focus() { captureRange() },
+						function change() { fmtApply(() => editor!.setTextColor(fontColor.value)) },
+					),
+				),
+				bodyhtml=dom.div(
+					dom._class('htmleditor'),
+					style({
+						flexGrow: '1',
+						// A contenteditable div, unlike <textarea>, has no intrinsic height and
+						// doesn't scroll its own content. Without a bounded height it grows with
+						// the (possibly huge quoted) content and pushes the form off-screen. So
+						// we give it a default height when the compose window hasn't been resized
+						// yet (mirroring the textarea's rows=15) and scroll the overflow; once
+						// the window is resized, flex-grow + min-height:0 size it to the window.
+						minHeight: '0',
+						width: '100%',
+						display: modeHTML ? '' : 'none',
+						overflow: 'auto',
+						border: '1px solid #ccc',
+						padding: '0 .25em',
+					}),
+					initHeight === 0 ? style({height: '15em'}) : [],
 				),
 				!(opts.attachmentsMessageItem && opts.attachmentsMessageItem.Attachments && opts.attachmentsMessageItem.Attachments.length > 0) ? [] : dom.div(
 					style({margin: '.5em 0'}),
@@ -2186,6 +2421,10 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					dom.submitbutton('Send'),
 					' ',
 					opts.responseMessageID && listMailboxes().find(mb => mb.Archive) ? dom.clickbutton('Send and archive thread', clickCmd(cmdSendArchive, shortcuts)) : [],
+					' ',
+					dom.clickbutton('Plain/HTML', attr.title('Toggle between plain text and HTML editing.'), function click() {
+						setModeHTML(!modeHTML)
+					}),
 				),
 			),
 			async function submit(e: SubmitEvent) {
@@ -2213,9 +2452,16 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		replyToRow.style.display = 'none'
 	}
 
+	if (modeHTML) {
+		ensureEditor()
+		editor!.setHTML(opts.htmlBody || plainToHTML(opts.body || ''))
+	}
+
 	document.body.appendChild(composeElem)
 	if (toViews.length > 0 && !toViews[0].input.value) {
 		toViews[0].input.focus()
+	} else if (modeHTML) {
+		editor!.focus()
 	} else {
 		body.focus()
 	}
@@ -2951,6 +3197,27 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			body = pm.Texts[0]
 		}
 		body = body.replace(/\r/g, '').replace(/\n\n\n\n*/g, '\n\n').trim()
+		// HTML mode if the account prefers it or the original has HTML we can quote.
+		const wantHTML = (accountSettings?.ComposeHTML ?? false) || pm.HasHTML
+		let htmlBody = ''
+		let savedQuoteHTML = ''
+		if (wantHTML) {
+			if (pm.HasHTML) {
+				savedQuoteHTML = await withStatus('Loading quote', client.MessageComposeQuoteHTML(m.ID))
+			}
+			if (!savedQuoteHTML) {
+				savedQuoteHTML = plainToHTML(body)
+			}
+			let attribution = ''
+			if (!forward && mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
+				const fa = mi.Envelope.From[0]
+				const name = fa.Name || formatEmail(fa)
+				const datetime = mi.Envelope.Date.toLocaleDateString(undefined, {weekday: "short", year: "numeric", month: "short", day: "numeric"}) + ' at ' + mi.Envelope.Date.toLocaleTimeString()
+				attribution = plainToHTML('On ' + datetime + ', ' + name + ' wrote:')
+			}
+			const sig = accountSettings?.Signature ? plainToHTML(accountSettings.Signature) : ''
+			htmlBody = '<p><br></p>' + (sig ? sig + '<br>' : '') + (attribution ? attribution + '<br>' : '') + '<blockquote>' + savedQuoteHTML + '</blockquote>'
+		}
 		let editOffset = 0
 		if (forward) {
 			const env = mi.Envelope
@@ -2985,6 +3252,11 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			add('To:', to)
 			add('Cc:', cc)
 
+			if (wantHTML) {
+				const sig = accountSettings?.Signature ? plainToHTML(accountSettings.Signature) : ''
+				htmlBody = '<p><br></p>' + (sig ? sig + '<br>' : '') + plainToHTML(prefix) + '<blockquote>' + savedQuoteHTML + '</blockquote>'
+			}
+
 			body = prefix+'\n'+body
 		} else {
 			body = body.split('\n').map(line => '> ' + line).join('\n')
@@ -3016,6 +3288,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			bcc: bcc.map(a => formatAddress(a)),
 			subject: subject,
 			body: body,
+			htmlBody: htmlBody || undefined,
+			modeHTML: wantHTML,
 			isForward: forward,
 			attachmentsMessageItem: forward ? mi : undefined,
 			responseMessageID: m.ID,
@@ -3116,6 +3390,10 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 
 		const pm = await parsedMessagePromise
+		let htmlBody = ''
+		if (pm.HasHTML) {
+			htmlBody = await withStatus('Loading draft body', client.MessageComposeQuoteHTML(m.ID))
+		}
 		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i)
 		const opts: ComposeOptions = {
 			from: (env.From || []),
@@ -3126,6 +3404,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			subject: env.Subject,
 			isForward: isForward,
 			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+			htmlBody: htmlBody || undefined,
+			modeHTML: !!htmlBody,
 			responseMessageID: refMsgID,
 			draftMessageID: m.ID,
 		}

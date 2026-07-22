@@ -149,6 +149,7 @@ export interface ComposeMessage {
 	ReplyTo: string  // If non-empty, Reply-To header to add to message.
 	Subject: string
 	TextBody: string
+	HTMLBody: string  // If non-empty, draft is stored as multipart/alternative.
 	ResponseMessageID: number  // If set, this was a reply or forward, based on IsForward.
 	DraftMessageID: number  // If set, previous draft message that will be removed after composing new message.
 }
@@ -164,6 +165,7 @@ export interface SubmitMessage {
 	ReplyTo: string  // If non-empty, Reply-To header to add to message.
 	Subject: string
 	TextBody: string
+	HTMLBody: string  // If non-empty, message is sent as multipart/alternative with a server-derived text/plain part.
 	Attachments?: File[] | null
 	ForwardAttachments: ForwardAttachments
 	IsForward: boolean
@@ -230,6 +232,7 @@ export interface Settings {
 	Quoting: Quoting
 	ShowAddressSecurity: boolean  // Whether to show the bars underneath the address input fields indicating starttls/dnssec/dane/mtasts/requiretls support by address.
 	ShowHTML: boolean  // Show HTML version of message by default, instead of plain text.
+	ComposeHTML: boolean  // Compose new messages in HTML by default, instead of plain text.
 	NoShowShortcuts: boolean  // If true, don't show shortcuts in webmail after mouse interaction.
 	ShowHeaders?: string[] | null  // Additional headers to display in message view. E.g. Delivered-To, User-Agent, X-Mox-Reason.
 }
@@ -623,13 +626,13 @@ export const types: TypenameMap = {
 	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
 	"FromAddressSettings": {"Name":"FromAddressSettings","Docs":"","Fields":[{"Name":"FromAddress","Docs":"","Typewords":["string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]}]},
-	"ComposeMessage": {"Name":"ComposeMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
-	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"ArchiveReferenceMailboxID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
+	"ComposeMessage": {"Name":"ComposeMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"HTMLBody","Docs":"","Typewords":["string"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
+	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"HTMLBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"ArchiveReferenceMailboxID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Expunged","Docs":"","Typewords":["bool"]},{"Name":"ParentID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
 	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
-	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]},{"Name":"ShowHTML","Docs":"","Typewords":["bool"]},{"Name":"NoShowShortcuts","Docs":"","Typewords":["bool"]},{"Name":"ShowHeaders","Docs":"","Typewords":["[]","string"]}]},
+	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]},{"Name":"ShowHTML","Docs":"","Typewords":["bool"]},{"Name":"ComposeHTML","Docs":"","Typewords":["bool"]},{"Name":"NoShowShortcuts","Docs":"","Typewords":["bool"]},{"Name":"ShowHeaders","Docs":"","Typewords":["[]","string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"Settings","Docs":"","Typewords":["Settings"]},{"Name":"AccountPath","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]}]},
 	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparators","Docs":"","Typewords":["[]","string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
@@ -849,6 +852,18 @@ export class Client {
 		const returnTypes: string[][] = [["int64"]]
 		const params: any[] = [m, mailboxID]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// MessageComposeQuoteHTML returns the first text/html part of the message with
+	// the given ID, cleaned to the safe "Balanced" HTML subset, for use as a quote
+	// when replying or forwarding. Returns an empty string if the message has no
+	// HTML part.
+	async MessageComposeQuoteHTML(messageID: number): Promise<string> {
+		const fn: string = "MessageComposeQuoteHTML"
+		const paramTypes: string[][] = [["int64"]]
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = [messageID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
 	}
 
 	// MessageSubmit sends a message by submitting it the outgoing email queue. The

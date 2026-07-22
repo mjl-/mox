@@ -157,3 +157,22 @@ col1 col2
 row2
 `)
 }
+
+func TestHTMLToText(t *testing.T) {
+	s, err := HTMLToText(strings.NewReader(`<p>Hello <b>world</b></p><blockquote>quoted line</blockquote><p>bye</p>`))
+	if err != nil {
+		t.Fatalf("HTMLToText: %v", err)
+	}
+	if !strings.Contains(s, "Hello world") {
+		t.Fatalf("missing paragraph text, got: %q", s)
+	}
+	if !strings.Contains(s, "> quoted line") {
+		t.Fatalf("blockquote not prefixed with %q, got: %q", "> ", s)
+	}
+	if !strings.Contains(s, "bye") {
+		t.Fatalf("missing trailing text, got: %q", s)
+	}
+	if strings.Contains(s, "<") {
+		t.Fatalf("output still contains tags, got: %q", s)
+	}
+}
