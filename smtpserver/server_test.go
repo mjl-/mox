@@ -602,6 +602,40 @@ func TestDelivery(t *testing.T) {
 		ts.smtpErr(err, &smtpclient.Error{Permanent: false, Code: smtp.C450MailboxUnavail, Secode: smtp.SeMailbox2Disabled1})
 	})
 
+	// Messages with an invalid/unparseable From header must be rejected, not
+	// accepted through the junk filter's "no bad signals" path.
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+
+		// From with placeholder template variables instead of an address.
+		msgInvalidFrom := strings.ReplaceAll(`From: "(domain)" <(email)(domain)>
+To: <mjl@mox.example>
+Subject: test
+Message-Id: <invalid-from@example.org>
+
+test email
+`, "\n", "\r\n")
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgInvalidFrom)), strings.NewReader(msgInvalidFrom), false, false, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeMsg6Other0})
+	})
+
+	// Also reject when From header has no address at all.
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+
+		msgNoFromAddr := strings.ReplaceAll(`From:
+To: <mjl@mox.example>
+Subject: test
+Message-Id: <no-from-addr@example.org>
+
+test email
+`, "\n", "\r\n")
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgNoFromAddr)), strings.NewReader(msgNoFromAddr), false, false, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeMsg6Other0})
+	})
+
 	ts.run(func(client *smtpclient.Client) {
 		recipients := []string{
 			"mjl@mox.example",

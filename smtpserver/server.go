@@ -2621,6 +2621,10 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	}
 	if err != nil {
 		c.log.Infox("parsing message for From address", err)
+		// A valid RFC 5322 message must have a valid From header with exactly one
+		// address. An unparseable From bypasses all authentication (DMARC, SPF)
+		// and is a strong spam signal. Reject during SMTP DATA.
+		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "cannot parse From address: %s", err.Error())
 	}
 
 	// Basic loop detection. ../rfc/5321:4065 ../rfc/5321:1526
