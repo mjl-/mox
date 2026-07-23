@@ -19,7 +19,7 @@ any parameters. Followed by the help and usage information for each command.
 # Usage
 
 	mox [-config config/mox.conf] [-pedantic] ...
-	mox serve
+	mox serve [-unprivileged]
 	mox quickstart [-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]
 	mox stop
 	mox setaccountpassword account
@@ -144,7 +144,9 @@ requested, other TLS certificates are requested on demand.
 
 Only implemented on unix systems, not Windows.
 
-	usage: mox serve
+	usage: mox serve [-unprivileged]
+	  -unprivileged
+	    	run mox as unprivileged user
 
 # mox quickstart
 
