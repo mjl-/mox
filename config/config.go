@@ -300,6 +300,7 @@ type Domain struct {
 	LocalpartCatchallSeparator  string           `sconf:"optional" sconf-doc:"If not empty, only the string before the separator is used to for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com."`
 	LocalpartCatchallSeparators []string         `sconf:"optional" sconf-doc:"Similar to LocalpartCatchallSeparator, but in case multiple are needed. For example both \"+\" and \"-\". Only of one LocalpartCatchallSeparator or LocalpartCatchallSeparators can be set. If set, the first separator is used to make unique addresses for outgoing SMTP connections with FromIDLoginAddresses."`
 	LocalpartCaseSensitive      bool             `sconf:"optional" sconf-doc:"If set, upper/lower case is relevant for email delivery."`
+	VoidSenderDomains           []string         `sconf:"optional" sconf-doc:"Domains whose messages should be silently accepted during SMTP but diverted to the void mailbox. Prefix with '.' to match the domain and its subdomains. Matching is done against the envelope MAIL FROM domain."`
 	DKIM                        DKIM             `sconf:"optional" sconf-doc:"With DKIM signing, a domain is taking responsibility for (content of) emails it sends, letting receiving mail servers build up a (hopefully positive) reputation of the domain, which can help with mail delivery."`
 	DMARC                       *DMARC           `sconf:"optional" sconf-doc:"With DMARC, a domain publishes, in DNS, a policy on how other mail servers should handle incoming messages with the From-header matching this domain and/or subdomain (depending on the configured alignment). Receiving mail servers use this to build up a reputation of this domain, which can help with mail delivery. A domain can also publish an email address to which reports about DMARC verification results can be sent by verifying mail servers, useful for monitoring. Incoming DMARC reports are automatically parsed, validated, added to metrics and stored in the reporting database for later display in the admin web pages."`
 	MTASTS                      *MTASTS          `sconf:"optional" sconf-doc:"MTA-STS is a mechanism that allows publishing a policy with requirements for WebPKI-verified SMTP STARTTLS connections for email delivered to a domain. Existence of a policy is announced in a DNS TXT record (often unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched with a WebPKI-verified HTTPS request. The policy can indicate that WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS (again, not necessarily protected/verified), but messages will only be delivered to domains matching the MX hosts from the published policy. Mail servers look up the MTA-STS policy when first delivering to a domain, then keep a cached copy, periodically checking the DNS record if a new policy is available, and fetching and caching it if so. To update a policy, first serve a new policy with an updated policy ID, then update the DNS record (not the other way around). To remove an enforced policy, publish an updated policy with mode \"none\" for a long enough period so all cached policies have been refreshed (taking DNS TTL and policy max age into account), then remove the policy from DNS, wait for TTL to expire, and stop serving the policy."`
@@ -313,8 +314,9 @@ type Domain struct {
 	// Set when DMARC and TLSRPT (when set) has an address with different domain (we're
 	// hosting the reporting), and there are no destination addresses configured for
 	// the domain. Disables some functionality related to hosting a domain.
-	ReportsOnly                          bool     `sconf:"-" json:"-"`
-	LocalpartCatchallSeparatorsEffective []string `sconf:"-"` // Either LocalpartCatchallSeparators, the value of LocalpartCatchallSeparator, or empty.
+	ReportsOnly                          bool               `sconf:"-" json:"-"`
+	LocalpartCatchallSeparatorsEffective []string           `sconf:"-"` // Either LocalpartCatchallSeparators, the value of LocalpartCatchallSeparator, or empty.
+	VoidSenderDomainsParsed              []VoidSenderDomain `sconf:"-" json:"-"`
 }
 
 // todo: allow external addresses as members of aliases. we would add messages for them to the queue for outgoing delivery. we should require an admin addresses to which delivery failures will be delivered (locally, and to use in smtp mail from, so dsns go there). also take care to evaluate smtputf8 (if external address requires utf8 and incoming transaction didn't).
@@ -475,6 +477,11 @@ type AddressAlias struct {
 type JunkFilter struct {
 	Threshold float64 `sconf-doc:"Approximate spaminess score between 0 and 1 above which emails are rejected as spam. Each delivery attempt adds a little noise to make it slightly harder for spammers to identify words that strongly indicate non-spaminess and use it to bypass the filter. E.g. 0.95."`
 	junk.Params
+}
+
+type VoidSenderDomain struct {
+	Domain            dns.Domain
+	IncludeSubdomains bool
 }
 
 type Destination struct {

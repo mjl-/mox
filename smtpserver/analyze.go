@@ -64,7 +64,8 @@ type analysis struct {
 	dmarcOverrideReason string             // If set, one of dmarcrpt.PolicyOverride
 	// Additional headers to add during delivery. Used for reasons a message to a
 	// dmarc/tls reporting address isn't processed.
-	headers string
+	headers     string
+	voidMailbox bool
 }
 
 const (
@@ -85,6 +86,7 @@ const (
 	reasonIPrev             = "iprev"     // No or mild junk reputation signals, and bad iprev.
 	reasonHighRate          = "high-rate" // Too many messages, not added to rejects.
 	reasonMsgAuthRequired   = "msg-auth-required"
+	reasonVoidSenderDomain  = "void-sender-domain"
 )
 
 func isListDomain(d delivery, ld dns.Domain) bool {
@@ -185,12 +187,36 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		log.Errorx("checking delivery rates", err)
 		metricDelivery.WithLabelValues("checkrates", "").Inc()
 		addReasonText("checking delivery rates: %v", err)
-		return analysis{d, false, "", smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, "", headers}
+		return analysis{
+			d:          d,
+			accept:     false,
+			mailbox:    "",
+			code:       smtp.C451LocalErr,
+			secode:     smtp.SeSys3Other0,
+			userError:  false,
+			errmsg:     "error processing",
+			err:        err,
+			reason:     reasonReputationError,
+			reasonText: reasonText,
+			headers:    headers,
+		}
 	} else if err != nil {
 		log.Debugx("refusing due to high delivery rate", err)
 		metricDelivery.WithLabelValues("highrate", "").Inc()
 		addReasonText("high delivery rate")
-		return analysis{d, false, "", smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error(), err, nil, nil, reasonHighRate, reasonText, "", headers}
+		return analysis{
+			d:          d,
+			accept:     false,
+			mailbox:    "",
+			code:       smtp.C452StorageFull,
+			secode:     smtp.SeMailbox2Full2,
+			userError:  true,
+			errmsg:     err.Error(),
+			err:        err,
+			reason:     reasonHighRate,
+			reasonText: reasonText,
+			headers:    headers,
+		}
 	}
 
 	mailbox := d.destination.Mailbox
@@ -249,6 +275,34 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		addReasonText("ruleset indicates forwarded message")
 	}
 
+	if !d.msgFrom.IsZero() {
+		if dom, ok := mox.Conf.Domain(d.deliverTo.IPDomain.Domain); ok && len(dom.VoidSenderDomainsParsed) > 0 {
+			msgFromASCII := d.msgFrom.Domain.ASCII
+			for _, voiddom := range dom.VoidSenderDomainsParsed {
+				match := msgFromASCII == voiddom.Domain.ASCII
+				if !match && voiddom.IncludeSubdomains {
+					suffix := "." + voiddom.Domain.ASCII
+					if strings.HasSuffix(msgFromASCII, suffix) {
+						match = true
+					}
+				}
+				if match {
+					addReasonText("void sender domain %s", voiddom.Domain.Name())
+					return analysis{
+						d:                   d,
+						accept:              true,
+						mailbox:             mailbox,
+						reason:              reasonVoidSenderDomain,
+						reasonText:          reasonText,
+						dmarcOverrideReason: dmarcOverrideReason,
+						headers:             headers,
+						voidMailbox:         true,
+					}
+				}
+			}
+		}
+	}
+
 	assignMailbox := func(tx *bstore.Tx) error {
 		// Set message MailboxID to which mail will be delivered. Reputation is
 		// per-mailbox. If referenced mailbox is not found (e.g. does not yet exist), we
@@ -288,7 +342,20 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			})
 			if mberr != nil {
 				addReasonText("error setting original destination mailbox for rejected message: %v", mberr)
-				return analysis{d, false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, dmarcOverrideReason, headers}
+				return analysis{
+					d:                   d,
+					accept:              false,
+					mailbox:             mailbox,
+					code:                smtp.C451LocalErr,
+					secode:              smtp.SeSys3Other0,
+					userError:           false,
+					errmsg:              "error processing",
+					err:                 err,
+					reason:              reasonReputationError,
+					reasonText:          reasonText,
+					dmarcOverrideReason: dmarcOverrideReason,
+					headers:             headers,
+				}
 			}
 			d.m.MailboxID = 0 // We plan to reject, no need to set intended MailboxID.
 		}
@@ -303,7 +370,20 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			log.Info("accepting reject to configured mailbox due to ruleset")
 			addReasonText("accepting reject to mailbox due to ruleset")
 		}
-		return analysis{d, accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason, reasonText, dmarcOverrideReason, headers}
+		return analysis{
+			d:                   d,
+			accept:              accept,
+			mailbox:             mailbox,
+			code:                code,
+			secode:              secode,
+			userError:           err == nil,
+			errmsg:              errmsg,
+			err:                 err,
+			reason:              reason,
+			reasonText:          reasonText,
+			dmarcOverrideReason: dmarcOverrideReason,
+			headers:             headers,
+		}
 	}
 
 	if d.dmarcUse && d.dmarcResult.Reject {

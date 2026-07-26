@@ -641,6 +641,29 @@ func TestDelivery(t *testing.T) {
 	checkEvaluationCount(t, 0)
 }
 
+func TestVoidSenderDomain(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"void.example.": {"127.0.0.10"},
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"void.example."},
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
+	defer ts.close()
+
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "noise@void.example"
+		rcptTo := "mjl@mox.example"
+		msg := strings.ReplaceAll(deliverMessage, "remote@example.org", mailFrom)
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, true, false)
+		tcheck(t, err, "deliver from void sender")
+	})
+
+	ts.checkCount("Inbox", 0)
+}
+
 func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Message, msg string) {
 	mf, err := store.CreateMessageTemp(pkglog, "insertmsg")
 	tcheck(t, err, "temp message")
