@@ -5426,7 +5426,7 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 				'p', 'P',
 				'u', 'U',
 			];
-			if (!e.altKey && moveKeys.includes(e.key)) {
+			if (!e.altKey && !e.metaKey && moveKeys.includes(e.key)) {
 				const moveclick = (index, clip) => {
 					if (clip && index < 0) {
 						index = 0;
