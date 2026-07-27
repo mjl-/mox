@@ -5034,7 +5034,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 				'p', 'P',
 				'u', 'U',
 			]
-			if (!e.altKey && moveKeys.includes(e.key)) {
+			if (!e.altKey && !e.metaKey && moveKeys.includes(e.key)) {
 				const moveclick = (index: number, clip: boolean) => {
 					if (clip && index < 0) {
 						index = 0
