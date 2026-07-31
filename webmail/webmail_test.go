@@ -281,7 +281,7 @@ func tdeliver(t *testing.T, acc *store.Account, tm *testmsg) {
 			Keywords:         tm.Keywords,
 			Size:             int64(size),
 		}
-		err = acc.DeliverMailbox(pkglog, tm.Mailbox, &m, msgFile)
+		err = acc.DeliverMailbox(pkglog, tm.Mailbox, "", &m, msgFile)
 		tcheck(t, err, "deliver test message")
 		err = msgFile.Close()
 		tcheck(t, err, "closing test message")

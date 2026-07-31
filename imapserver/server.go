@@ -1748,7 +1748,7 @@ func (c *conn) ok(tag, cmd string) {
 // Name is invalid if it contains leading/trailing/double slashes, or when it isn't
 // unicode-normalized, or when empty or has special characters.
 func xcheckmailboxname(name string, allowInbox bool) string {
-	name, isinbox, err := store.CheckMailboxName(name, allowInbox)
+	name, isinbox, err := config.CheckMailboxName(name, allowInbox)
 	if isinbox {
 		xuserErrorf("special mailboxname Inbox not allowed")
 	} else if err != nil {
@@ -4793,7 +4793,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 					m.IsReject = false
 				}
 				m.TrainedJunk = nil
-				m.JunkFlagsForMailbox(mbDst, conf)
+				m.JunkFlagsForMailboxMove(mbSrc, mbDst, conf)
 				m.SaveDate = &now
 				err := tx.Insert(&m)
 				xcheckf(err, "inserting message")
@@ -5056,7 +5056,7 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 			nm.Seen = false
 		}
 
-		nm.JunkFlagsForMailbox(*mbDst, accConf)
+		nm.JunkFlagsForMailboxMove(*mbSrc, *mbDst, accConf)
 
 		err = tx.Update(&nm)
 		xcheckf(err, "updating message with new mailbox")

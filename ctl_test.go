@@ -458,7 +458,7 @@ func TestCtl(t *testing.T) {
 			tcheck(t, err, "write message file")
 
 			acc.WithWLock(func() {
-				err = acc.DeliverMailbox(xctl.log, "Inbox", m, msgf)
+				err = acc.DeliverMailbox(xctl.log, "Inbox", "", m, msgf)
 				tcheck(t, err, "deliver message")
 			})
 		}

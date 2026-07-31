@@ -3446,7 +3446,19 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 							mbrej = &nmb
 						}
-						a.d.m.MailboxID = mbrej.ID
+
+						mailbox := a.mailboxDestined
+						if mailbox == "" {
+							mailbox = a.mailbox
+						}
+						var modseq store.ModSeq
+						mbDest, chl, err := a.d.acc.MailboxEnsure(tx, mailbox, true, store.SpecialUse{}, &modseq)
+						if err != nil {
+							return fmt.Errorf("ensuring destined mailbox exists: %v", err)
+						}
+						a.d.m.MailboxDestinedID = mbDest.ID
+						changes = append(changes, chl...)
+
 						if err := a.d.acc.MessageAdd(log, tx, mbrej, a.d.m, dataFile, store.AddOpts{}); err != nil {
 							return fmt.Errorf("delivering spammy mail to rejects mailbox: %v", err)
 						}
@@ -3548,7 +3560,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 			var delivered bool
 			a.d.acc.WithWLock(func() {
-				if err := a.d.acc.DeliverMailbox(log, a.mailbox, a.d.m, dataFile); err != nil {
+				if err := a.d.acc.DeliverMailbox(log, a.mailbox, a.mailboxDestined, a.d.m, dataFile); err != nil {
 					log.Errorx("delivering", err)
 					metricDelivery.WithLabelValues("delivererror", a0.reason).Inc()
 					if errors.Is(err, store.ErrOverQuota) {

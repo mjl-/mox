@@ -99,7 +99,7 @@ const (
 // ../rfc/6376:1915
 // ../rfc/6376:3716
 // ../rfc/7208:2167
-func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message, smtputf8 bool) (rjunk *bool, rconclusive bool, rmethod reputationMethod, reasonText string, rerr error) {
+func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message, mailboxID int64, smtputf8 bool) (rjunk *bool, rconclusive bool, rmethod reputationMethod, reasonText string, rerr error) {
 	boolptr := func(v bool) *bool {
 		return &v
 	}
@@ -126,7 +126,7 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message, smtputf8 bool) (r
 	// mailbox, at most maxAge old, and at most maxCount messages.
 	messageQuery := func(fm *store.Message, maxAge time.Duration, maxCount int) *bstore.Query[store.Message] {
 		q := bstore.QueryTx[store.Message](tx)
-		q.FilterEqual("MailboxOrigID", m.MailboxID)
+		q.FilterEqual("MailboxOrigID", mailboxID)
 		q.FilterEqual("Expunged", false)
 		q.FilterFn(func(m store.Message) bool {
 			return m.Junk || m.Notjunk

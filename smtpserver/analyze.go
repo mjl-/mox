@@ -51,7 +51,8 @@ type delivery struct {
 type analysis struct {
 	d                   delivery
 	accept              bool
-	mailbox             string
+	mailbox             string // Where to deliver to.
+	mailboxDestined     string // Non-empty when message would normally be delivered to mailbox, but introbox or rejects rule affected delivery.
 	code                int
 	secode              string
 	userError           bool
@@ -185,14 +186,15 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		log.Errorx("checking delivery rates", err)
 		metricDelivery.WithLabelValues("checkrates", "").Inc()
 		addReasonText("checking delivery rates: %v", err)
-		return analysis{d, false, "", smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, "", headers}
+		return analysis{d, false, "", "", smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, "", headers}
 	} else if err != nil {
 		log.Debugx("refusing due to high delivery rate", err)
 		metricDelivery.WithLabelValues("highrate", "").Inc()
 		addReasonText("high delivery rate")
-		return analysis{d, false, "", smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error(), err, nil, nil, reasonHighRate, reasonText, "", headers}
+		return analysis{d, false, "", "", smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error(), err, nil, nil, reasonHighRate, reasonText, "", headers}
 	}
 
+	var mailboxDestined string // Only set when we change mailbox, e.g. due to introbox or reject.
 	mailbox := d.destination.Mailbox
 	if mailbox == "" {
 		mailbox = "Inbox"
@@ -249,51 +251,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		addReasonText("ruleset indicates forwarded message")
 	}
 
-	assignMailbox := func(tx *bstore.Tx) error {
-		// Set message MailboxID to which mail will be delivered. Reputation is
-		// per-mailbox. If referenced mailbox is not found (e.g. does not yet exist), we
-		// can still determine a reputation because we also base it on outgoing
-		// messages and those are account-global.
-		mb, err := d.acc.MailboxFind(tx, mailbox)
-		if err != nil {
-			return fmt.Errorf("finding destination mailbox: %w", err)
-		}
-		if mb != nil {
-			// We want to deliver to mb.ID, but this message may be rejected and sent to the
-			// Rejects mailbox instead, with MailboxID overwritten. Record the ID in
-			// MailboxDestinedID too. If the message is later moved out of the Rejects mailbox,
-			// we'll adjust the MailboxOrigID so it gets taken into account during reputation
-			// calculating in future deliveries. If we end up delivering to the intended
-			// mailbox (i.e. not rejecting), MailboxDestinedID is cleared during delivery so we
-			// don't store it unnecessarily.
-			d.m.MailboxID = mb.ID
-			d.m.MailboxDestinedID = mb.ID
-		} else {
-			log.Debug("mailbox not found in database", slog.String("mailbox", mailbox))
-		}
-		return nil
-	}
-
 	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
-		// We may have set MailboxDestinedID below already while we had a transaction. If
-		// not, do it now. This makes it possible to use the per-mailbox reputation when a
-		// user moves the message out of the Rejects mailbox to the intended mailbox
-		// (typically Inbox).
-		if d.m.MailboxDestinedID == 0 {
-			var mberr error
-			d.acc.WithRLock(func() {
-				mberr = d.acc.DB.Read(ctx, func(tx *bstore.Tx) error {
-					return assignMailbox(tx)
-				})
-			})
-			if mberr != nil {
-				addReasonText("error setting original destination mailbox for rejected message: %v", mberr)
-				return analysis{d, false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, reasonText, dmarcOverrideReason, headers}
-			}
-			d.m.MailboxID = 0 // We plan to reject, no need to set intended MailboxID.
-		}
-
 		accept := false
+		// mailboxDestined may already have been set because of Introbox.
+		if mailboxDestined == "" {
+			mailboxDestined = mailbox
+		}
 		if rs != nil && rs.AcceptRejectsToMailbox != "" {
 			accept = true
 			mailbox = rs.AcceptRejectsToMailbox
@@ -302,8 +265,11 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			d.m.Seen = true
 			log.Info("accepting reject to configured mailbox due to ruleset")
 			addReasonText("accepting reject to mailbox due to ruleset")
+		} else {
+			conf, _ := d.acc.Conf()
+			mailbox = conf.RejectsMailbox
 		}
-		return analysis{d, accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason, reasonText, dmarcOverrideReason, headers}
+		return analysis{d, accept, mailbox, mailboxDestined, code, secode, err == nil, errmsg, err, nil, nil, reason, reasonText, dmarcOverrideReason, headers}
 	}
 
 	if d.dmarcUse && d.dmarcResult.Reject {
@@ -418,12 +384,17 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	var reason string
 	d.acc.WithRLock(func() {
 		err = d.acc.DB.Read(ctx, func(tx *bstore.Tx) error {
-			if err := assignMailbox(tx); err != nil {
-				return err
+			var mailboxID int64 = -1
+			mb, err := d.acc.MailboxFind(tx, mailbox)
+			if err != nil {
+				return fmt.Errorf("finding destination mailbox: %w", err)
+			}
+			if mb != nil {
+				mailboxID = mb.ID
 			}
 
 			var text string
-			isjunk, conclusive, method, text, err = reputation(tx, log, d.m, d.smtputf8)
+			isjunk, conclusive, method, text, err = reputation(tx, log, d.m, mailboxID, d.smtputf8)
 			reason = string(method)
 			s := "address/dkim/spf/ip-based reputation ("
 			if isjunk != nil && *isjunk {
@@ -450,12 +421,23 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		slog.Bool("conclusive", conclusive),
 		slog.Any("isjunk", isjunk),
 		slog.String("method", string(method)))
+
+	// todo: we may want to add an Introbox field to rulesets, to enable it for destination mailboxes other than Inbox
+	// todo: we may want to look at referenced message-id's (from the thread), see if this message-from address was in a to/cc header in a message for the same mailbox the account marked as non-junk, and allow the message through. should help for regular messages (not intended for introbox) too.
+	conf, _ := d.acc.Conf()
+	introbox := mailbox == "Inbox" && conf.Introbox != "" && method != methodMsgfromFull && method != methodMsgtoFull && !d.m.IsForward && dmarcReport == nil && tlsReport == nil
+	if introbox {
+		mailbox, mailboxDestined = conf.Introbox, mailbox
+		log.Info("delivering message without established reputation to introbox", slog.String("mailbox", mailbox), slog.String("method", string(method)))
+	}
+
 	if conclusive {
 		if !*isjunk {
 			return analysis{
 				d:                   d,
 				accept:              true,
 				mailbox:             mailbox,
+				mailboxDestined:     mailboxDestined,
 				dmarcReport:         dmarcReport,
 				tlsReport:           tlsReport,
 				reason:              reason,
@@ -472,6 +454,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			d:                   d,
 			accept:              true,
 			mailbox:             mailbox,
+			mailboxDestined:     mailboxDestined,
 			dmarcReport:         dmarcReport,
 			tlsReport:           tlsReport,
 			reason:              reasonReporting,
@@ -508,7 +491,6 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	}
 
 	var subjectpassKey string
-	conf, _ := d.acc.Conf()
 	if conf.SubjectPass.Period > 0 {
 		subjectpassKey, err = d.acc.Subjectpass(d.canonicalAddress)
 		if err != nil {
@@ -525,6 +507,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 				d:                   d,
 				accept:              true,
 				mailbox:             mailbox,
+				mailboxDestined:     mailboxDestined,
 				reason:              reasonSubjectpass,
 				reasonText:          reasonText,
 				dmarcOverrideReason: dmarcOverrideReason,
@@ -697,6 +680,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			d:                   d,
 			accept:              true,
 			mailbox:             mailbox,
+			mailboxDestined:     mailboxDestined,
 			reason:              reasonNoBadSignals,
 			reasonText:          reasonText,
 			dmarcOverrideReason: dmarcOverrideReason,

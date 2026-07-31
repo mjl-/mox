@@ -215,6 +215,7 @@ type EventStart struct {
 	DomainAddressConfigs map[string]DomainAddressConfig // ASCII domain to address config.
 	MailboxName          string
 	Mailboxes            []store.Mailbox
+	Introbox             string
 	RejectsMailbox       string
 	Settings             store.Settings
 	AccountPath          string // If nonempty, the path on same host to webaccount interface.
@@ -764,7 +765,19 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 	}
 
 	// Write first event, allowing client to fill its UI with mailboxes.
-	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox, settings, accountPath, moxvar.Version}
+	start := EventStart{
+		SSEID:                sse.ID,
+		LoginAddress:         loginAddress,
+		Addresses:            addresses,
+		DomainAddressConfigs: domainAddressConfigs,
+		MailboxName:          mailbox.Name,
+		Mailboxes:            mbl,
+		Introbox:             accConf.Introbox,
+		RejectsMailbox:       accConf.RejectsMailbox,
+		Settings:             settings,
+		AccountPath:          accountPath,
+		Version:              moxvar.Version,
+	}
 	writer.xsendEvent(ctx, log, "start", start)
 
 	// The goroutine doing the querying will send messages on these channels, which

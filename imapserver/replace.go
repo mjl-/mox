@@ -8,6 +8,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/store"
@@ -160,7 +161,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		c.xwritelinef("+ ")
 	} else {
 		var err error
-		name, _, err = store.CheckMailboxName(name, true)
+		name, _, err = config.CheckMailboxName(name, true)
 		if err != nil {
 			errfn = func() { xusercodeErrorf("CANNOT", "%s", err) }
 		} else {

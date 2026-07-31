@@ -1213,7 +1213,7 @@ func (Webmail) MailboxCreate(ctx context.Context, name string) {
 	acc := reqInfo.Account
 
 	var err error
-	name, _, err = store.CheckMailboxName(name, false)
+	name, _, err = config.CheckMailboxName(name, false)
 	xcheckuserf(ctx, err, "checking mailbox name")
 
 	acc.WithWLock(func() {
@@ -1309,7 +1309,7 @@ func (Webmail) MailboxRename(ctx context.Context, mailboxID int64, newName strin
 	// Renaming Inbox is special for IMAP. For IMAP we have to implement it per the
 	// standard. We can just say no.
 	var err error
-	newName, _, err = store.CheckMailboxName(newName, false)
+	newName, _, err = config.CheckMailboxName(newName, false)
 	xcheckuserf(ctx, err, "checking new mailbox name")
 
 	acc.WithWLock(func() {

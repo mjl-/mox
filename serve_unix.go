@@ -337,7 +337,7 @@ Only implemented on unix systems, not Windows.
 
 			var derr error
 			a.WithWLock(func() {
-				derr = a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, &m, f)
+				derr = a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, "", &m, f)
 			})
 			if derr != nil {
 				log.Errorx("changelog delivery", derr)

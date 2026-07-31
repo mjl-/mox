@@ -17,6 +17,7 @@ export interface Account {
 	QuotaMessageSize: number
 	RejectsMailbox: string
 	KeepRejects: boolean
+	Introbox: string
 	AutomaticJunkFlags: AutomaticJunkFlags
 	JunkFilter?: JunkFilter | null  // todo: sane defaults for junkfilter
 	MaxOutgoingMessagesPerDay: number
@@ -297,7 +298,7 @@ export const structTypes: {[typename: string]: boolean} = {"Account":true,"Addre
 export const stringsTypes: {[typename: string]: boolean} = {"AuthResult":true,"CSRFToken":true,"Localpart":true,"OutgoingEvent":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
-	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"OutgoingWebhook","Docs":"","Typewords":["nullable","OutgoingWebhook"]},{"Name":"IncomingWebhook","Docs":"","Typewords":["nullable","IncomingWebhook"]},{"Name":"FromIDLoginAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"KeepRetiredMessagePeriod","Docs":"","Typewords":["int64"]},{"Name":"KeepRetiredWebhookPeriod","Docs":"","Typewords":["int64"]},{"Name":"LoginDisabled","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"NoCustomPassword","Docs":"","Typewords":["bool"]},{"Name":"IMAPCapabilitiesDisabled","Docs":"","Typewords":["[]","string"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"Aliases","Docs":"","Typewords":["[]","AddressAlias"]}]},
+	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"OutgoingWebhook","Docs":"","Typewords":["nullable","OutgoingWebhook"]},{"Name":"IncomingWebhook","Docs":"","Typewords":["nullable","IncomingWebhook"]},{"Name":"FromIDLoginAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"KeepRetiredMessagePeriod","Docs":"","Typewords":["int64"]},{"Name":"KeepRetiredWebhookPeriod","Docs":"","Typewords":["int64"]},{"Name":"LoginDisabled","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"Introbox","Docs":"","Typewords":["string"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"NoCustomPassword","Docs":"","Typewords":["bool"]},{"Name":"IMAPCapabilitiesDisabled","Docs":"","Typewords":["[]","string"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"Aliases","Docs":"","Typewords":["[]","AddressAlias"]}]},
 	"OutgoingWebhook": {"Name":"OutgoingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]},{"Name":"Events","Docs":"","Typewords":["[]","string"]}]},
 	"IncomingWebhook": {"Name":"IncomingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]}]},
 	"Destination": {"Name":"Destination","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Rulesets","Docs":"","Typewords":["[]","Ruleset"]},{"Name":"SMTPError","Docs":"","Typewords":["string"]},{"Name":"MessageAuthRequiredSMTPError","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]}]},
@@ -620,6 +621,17 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailbox, keep]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// IntroboxSave saves the mailbox for messages from senders with no established
+	// reputation, creating it if it does not exist. The mailbox cannot be Inbox and
+	// must be different from RejectsMailbox. If empty, the introbox is disabled.
+	async IntroboxSave(mailbox: string): Promise<void> {
+		const fn: string = "IntroboxSave"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [mailbox]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 

@@ -336,6 +336,9 @@ const index = async () => {
 	let rejectsMailbox: HTMLInputElement
 	let keepRejects: HTMLInputElement
 
+	let introboxFieldset: HTMLFieldSetElement
+	let introboxMailbox: HTMLInputElement
+
 	let outgoingWebhookFieldset: HTMLFieldSetElement
 	let outgoingWebhookURL: HTMLInputElement
 	let outgoingWebhookAuthorization: HTMLInputElement
@@ -1201,6 +1204,27 @@ openssl pkcs12 \\
 						'Rare words',
 						attr.title('Occurrences in word database until a word is considered rare and its influence in calculating probability reduced. E.g. 1 or 2.'),
 						dom.div(junkRareWords=dom.input(attr.value('' + (acc.JunkFilter?.RareWords || 2)))),
+					),
+					dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
+				),
+			),
+		),
+		dom.br(),
+
+		dom.h2('Introbox'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				await check(introboxFieldset, client.IntroboxSave(introboxMailbox.value))
+			},
+			introboxFieldset=dom.fieldset(
+				dom.div(style({display: 'flex', gap: '1em'}),
+					dom.label(
+						'Mailbox',
+						attr.title('Mailbox for delivering messages to Inbox from new first-time message-from addresses (without established reputation). Useful for deprioritizing mail from unknown correspondents while keeping mail from known correspondents in Inbox. Must be different from Inbox and the RejectsMailbox. Moving a message from Introbox to its originally intended mailbox marks it as nonjunk, so future messages from the sender are delivered to their regular destination. Ensure this mailbox is matched by NeutralMailboxRegexp for proper automatic junk flags handling.'),
+						dom.div(introboxMailbox=dom.input(attr.value(acc.Introbox))),
 					),
 					dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
 				),
