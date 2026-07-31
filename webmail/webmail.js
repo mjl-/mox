@@ -4234,8 +4234,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}
 		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
 			const tid = window.setTimeout(async () => {
-				const mailboxIsReject = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && mb.Name === rejectsMailbox);
-				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
+				const mailboxSpecial = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && (mb.Name === rejectsMailbox || mb.Name == introboxMailbox));
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxSpecial()) {
 					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']));
 				}
 				tidRemove(tid);
