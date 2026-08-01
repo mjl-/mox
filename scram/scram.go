@@ -307,7 +307,7 @@ func (s *Server) Finish(clientFinal []byte, saltedPassword []byte) (serverFinal 
 
 	clientSig := hmac0(s.h, storedKey, authMsg)
 	xor(clientSig, clientKey) // Now clientProof.
-	if !bytes.Equal(clientSig, proof) {
+	if !hmac.Equal(clientSig, proof) {
 		return "e=" + string(ErrInvalidProof), ErrInvalidProof
 	}
 
@@ -490,7 +490,7 @@ func (c *Client) ServerFinal(serverFinal []byte) (rerr error) {
 
 	serverKey := hmac0(c.h, c.saltedPassword, "Server Key")
 	serverSig := hmac0(c.h, serverKey, c.authMessage)
-	if !bytes.Equal(verifier, serverSig) {
+	if !hmac.Equal(verifier, serverSig) {
 		return fmt.Errorf("incorrect server signature")
 	}
 	return nil
