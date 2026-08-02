@@ -477,7 +477,7 @@ const config = async () => {
 const loglevels = async () => {
 	const loglevels = await client.LogLevels()
 
-	const levels = ['error', 'info', 'warn', 'debug', 'trace', 'traceauth', 'tracedata']
+	const levels = ['error', 'warn', 'info', 'debug', 'trace', 'traceauth', 'tracedata']
 
 	let form: HTMLFormElement
 	let fieldset: HTMLFieldSetElement
