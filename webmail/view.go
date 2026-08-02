@@ -1003,7 +1003,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 
 		select {
 		case <-mox.Shutdown.Done():
-			writer.xsendEvent(ctx, log, "fatalErr", "server is shutting down")
+			writer.xsendEvent(ctx, log, "serverShutdown", "server is shutting down")
 			// Work around go vet, it doesn't see defer cancelDrain.
 			if reqctxcancel != nil {
 				reqctxcancel()

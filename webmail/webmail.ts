@@ -399,7 +399,7 @@ const showShortcut = (c: string) => {
 	shortcutElem.remove()
 	dom._kids(shortcutElem, c)
 	document.body.appendChild(shortcutElem)
-	shortcutTimer = setTimeout(() => {
+	shortcutTimer = window.setTimeout(() => {
 		shortcutElem.remove()
 		shortcutTimer = 0
 	}, 1500)
@@ -875,22 +875,35 @@ const focusPlaceholder = (s: string): any[] => {
 }
 
 // Parse a location hash, with either mailbox or search terms, and optional
-// selected message id. The special "#compose " hash, used for handling
-// "mailto:"-links, must be handled before calling this function.
+// selected message id, and/or draft message to compose. The special "#compose "
+// hash, used for handling "mailto:"-links, must be handled before calling this
+// function.
 //
 // Examples:
 // #Inbox
 // #Inbox,1
+// #Inbox,1,compose:123
 // #search mb:Inbox
 // #search mb:Inbox,1
-const parseLocationHash = (mailboxlistView: MailboxlistView): [string | undefined, number, api.Filter, api.NotFilter] => {
+const parseLocationHash = (mailboxlistView: MailboxlistView): [string | undefined, number, number, api.Filter, api.NotFilter] => {
 	let hash = decodeURIComponent((window.location.hash || '#').substring(1))
+
+	// Pick off ",compose:<number>" at the end.
+	let editMsgid = 0
+	const em = hash.match(/,compose:([0-9]+)$/)
+	if (em) {
+		editMsgid = parseInt(em[1])
+		hash = hash.substring(0, hash.length-em[0].length)
+	}
+
+	// Pick off ",<number>" at the end, for selected message.
 	const m = hash.match(/,([0-9]+)$/)
 	let msgid = 0
 	if (m) {
 		msgid = parseInt(m[1])
-		hash = hash.substring(0, hash.length-(','.length+m[1].length))
+		hash = hash.substring(0, hash.length-m[0].length)
 	}
+
 	let initmailbox, initsearch
 	if (hash.startsWith('search ')) {
 		initsearch = hash.substring('search '.length).trim()
@@ -912,7 +925,7 @@ const parseLocationHash = (mailboxlistView: MailboxlistView): [string | undefine
 		}
 		notf = newNotFilter()
 	}
-	return [initsearch, msgid, f, notf]
+	return [initsearch, msgid, editMsgid, f, notf]
 }
 
 // For HTMLElements like fieldset, input, buttons. We make it easy to disable
@@ -1442,13 +1455,15 @@ type ComposeOptions = {
 
 interface ComposeView {
 	root: HTMLElement
+	MsgID: number // Of saved draft. Used in URL hash.
 	key: (k: string, e: KeyboardEvent) => Promise<void>
 	unsavedChanges: () => boolean
+	save: () => Promise<void>
 }
 
 let composeView: ComposeView | null = null
 
-const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
+const compose = (opts: ComposeOptions, listMailboxes: listMailboxes, setLocationHash: setLocationHash) => {
 	log('compose', opts)
 
 	if (composeView) {
@@ -1536,6 +1551,8 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID)
 		try {
 			draftMessageID = await draftSavePromise
+			cv.MsgID = draftMessageID
+			setLocationHash() // For ',compose:<number>' suffix.
 		} finally {
 			draftSavePromise = Promise.resolve(0)
 		}
@@ -1591,6 +1608,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		}
 		composeElem.remove()
 		composeView = null
+		setLocationHash()
 	}
 
 	const cmdSave = async () => {
@@ -1653,6 +1671,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		await client.MessageSubmit(message)
 		composeElem.remove()
 		composeView = null
+		setLocationHash()
 	}
 
 	const cmdSend = async () => {
@@ -2230,12 +2249,48 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		body.focus()
 	}
 
-	composeView = {
+	const cv = {
 		root: composeElem,
+		MsgID: draftMessageID,
 		key: keyHandler(shortcuts),
 		unsavedChanges: unsavedChanges,
+		save: cmdSave,
 	}
-	return composeView
+	composeView = cv
+	setLocationHash()
+}
+
+const composeDraft = async (mi: api.MessageItem, pm: api.ParsedMessage, listMailboxes: listMailboxes, setLocationHash: setLocationHash) => {
+	const m = mi.Message
+	const draftMailboxID = listMailboxes().find(mb => mb.Draft)?.ID
+
+	if (m.MailboxID !== draftMailboxID) {
+		throw new Error('only messages in draft mailbox can be edited')
+	}
+
+	// Compose based on message. Most information is available, we just need to find
+	// the ID of the stored message this is a reply/forward to, based in In-Reply-To
+	// header.
+	const env = mi.Envelope
+	let refMsgID = 0
+	if (env.InReplyTo) {
+		refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo))
+	}
+
+	const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i)
+	const opts: ComposeOptions = {
+		from: (env.From || []),
+		to: (env.To || []).map(a => formatAddress(a)),
+		cc: (env.CC || []).map(a => formatAddress(a)),
+		bcc: (env.BCC || []).map(a => formatAddress(a)),
+		replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
+		subject: env.Subject,
+		isForward: isForward,
+		body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+		responseMessageID: refMsgID,
+		draftMessageID: m.ID,
+	}
+	compose(opts, listMailboxes, setLocationHash)
 }
 
 // Show popover to edit labels for msgs.
@@ -2929,7 +2984,7 @@ let attachmentView: {key: (k: string, e: KeyboardEvent) => Promise<void>} | null
 
 // MsgView is the display of a single message.
 // refineKeyword is called when a user clicks a label, to filter on those.
-const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: listMailboxes, possibleLabels: possibleLabels, messageLoaded: () => void, refineKeyword: (kw: string) => Promise<void>, parsedMessageOpt?: api.ParsedMessage): MsgView => {
+const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: listMailboxes, setLocationHash: setLocationHash, possibleLabels: possibleLabels, messageLoaded: () => void, refineKeyword: (kw: string) => Promise<void>, parsedMessageOpt?: api.ParsedMessage): MsgView => {
 	const mi = miv.messageitem
 	const m = mi.Message
 
@@ -3037,7 +3092,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			// for cross-posted messages in other mailboxes.
 			archiveReferenceMailboxID: msglistView.activeMailbox()?.ID || m.MailboxID,
 		}
-		compose(opts, listMailboxes)
+		compose(opts, listMailboxes, setLocationHash)
 	}
 
 	const reply = async (all: boolean) => {
@@ -3112,34 +3167,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 	}
 	const cmdComposeDraft = async () => {
-		if (m.MailboxID !== draftMailboxID) {
-			return
-		}
-
-		// Compose based on message. Most information is available, we just need to find
-		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
-		// header.
-		const env = mi.Envelope
-		let refMsgID = 0
-		if (env.InReplyTo) {
-			refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo))
-		}
-
 		const pm = await parsedMessagePromise
-		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i)
-		const opts: ComposeOptions = {
-			from: (env.From || []),
-			to: (env.To || []).map(a => formatAddress(a)),
-			cc: (env.CC || []).map(a => formatAddress(a)),
-			bcc: (env.BCC || []).map(a => formatAddress(a)),
-			replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
-			subject: env.Subject,
-			isForward: isForward,
-			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
-			responseMessageID: refMsgID,
-			draftMessageID: m.ID,
-		}
-		compose(opts, listMailboxes)
+		composeDraft(mi, pm, listMailboxes, setLocationHash)
 	}
 
 	const cmdToggleHeaders = async () => {
@@ -4161,7 +4190,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 		} else if (effselected.length === 1) {
 			msgElem.classList.toggle('loading', true)
 			const loaded = () => { msgElem.classList.toggle('loading', false) }
-			msgView = newMsgView(effselected[0], mlv, listMailboxes, possibleLabels, loaded, refineKeyword, parsedMessageOpt)
+			msgView = newMsgView(effselected[0], mlv, listMailboxes, setLocationHash, possibleLabels, loaded, refineKeyword, parsedMessageOpt)
 			dom._kids(msgElem, msgView)
 		} else {
 			const trashMailboxID = listMailboxes().find(mb => mb.Trash)?.ID
@@ -6436,13 +6465,16 @@ const init = async () => {
 
 	const setLocationHash = () => {
 		const msgid = requestMsgID || msglistView.activeMessageID()
-		const msgidstr = msgid ? ','+msgid : ''
+		let trail = msgid ? ','+msgid : ''
+		if (composeView && composeView.MsgID) {
+			trail += ',compose:'+composeView.MsgID
+		}
 		let hash
 		const mb = mailboxlistView && mailboxlistView.activeMailbox()
 		if (mb) {
-			hash = '#'+mb.Name + msgidstr
+			hash = '#'+mb.Name + trail
 		} else if (search.active) {
-			hash = '#search ' + search.query + msgidstr
+			hash = '#search ' + search.query + trail
 		} else {
 			hash = '#'
 		}
@@ -6851,7 +6883,7 @@ const init = async () => {
 		if (sig) {
 			body += '\n\n' + sig
 		}
-		compose({body: body, editOffset: 0}, listMailboxes)
+		compose({body: body, editOffset: 0}, listMailboxes, setLocationHash)
 	}
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox')
@@ -7275,7 +7307,7 @@ const init = async () => {
 					if (opts.subject && opts.subject.includes('=?')) {
 						opts.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(opts.subject))
 					}
-					compose(opts, listMailboxes)
+					compose(opts, listMailboxes, setLocationHash)
 				})()
 			} catch (err) {
 				window.alert('Error parsing compose mailto URL: '+errmsg(err))
@@ -7284,7 +7316,7 @@ const init = async () => {
 			return
 		}
 
-		const [search, msgid, f, notf] = parseLocationHash(mailboxlistView)
+		const [search, msgid, editMsgid, f, notf] = parseLocationHash(mailboxlistView)
 
 		requestMsgID = msgid
 		if (search) {
@@ -7294,6 +7326,17 @@ const init = async () => {
 			unloadSearch()
 			await mailboxlistView.openMailboxID(f.MailboxID, false)
 		}
+		if (editMsgid) {
+			// Open compose window for draft message in parallel, not failing on error.
+			(async () => {
+				try {
+					const [mi, pm] = await withStatus('Loading compose message', Promise.all([client.MessageItem(editMsgid), client.ParsedMessage(editMsgid)]))
+					await composeDraft(mi, pm, listMailboxes, setLocationHash)
+				} catch (err) {
+					window.alert('Error opening draft message: '+errmsg(err))
+				}
+			})()
+		}
 		await withStatus('Requesting messages', requestNewView(false, f, notf))
 	})
 
@@ -7302,6 +7345,9 @@ const init = async () => {
 	let connecting = false // Check before reconnecting.
 	let noreconnect = false // Set after one reconnect attempt fails.
 	let noreconnectTimer = 0 // Timer ID for resetting noreconnect.
+	// Set to timer when we plan to reconnect after a server shutdown. Cleared when we
+	// try to connect.
+	let shutdownReconnectTimer = 0
 
 	// Don't show disconnection just before user navigates away.
 	let leaving = false
@@ -7354,8 +7400,15 @@ const init = async () => {
 	// Set to compose options when we were opened with a mailto URL. We open the
 	// compose window after we received the "start" message with our addresses.
 	let openComposeOptions: ComposeOptions | undefined
+	// Set during connect when we need to open a message for composing after getting
+	// connected.
+	let connectOpenComposeMessageID = 0
 
 	const connect = async (isreconnect: boolean) => {
+		if (shutdownReconnectTimer) {
+			window.clearTimeout(shutdownReconnectTimer)
+			shutdownReconnectTimer = 0
+		}
 		connectionElem.classList.toggle('loading', true)
 		dom._kids(connectionElem)
 		connectionElem.classList.toggle('loading', false)
@@ -7386,7 +7439,10 @@ const init = async () => {
 			window.location.hash = ''
 		}
 
-		let [searchQuery, msgid, f, notf] = parseLocationHash(mailboxlistView)
+		let [searchQuery, msgid, editMsgid, f, notf] = parseLocationHash(mailboxlistView)
+		if (editMsgid && !composeView) {
+			connectOpenComposeMessageID = editMsgid
+		}
 		requestMsgID = msgid
 		requestFilter = f
 		requestNotFilter = notf
@@ -7445,7 +7501,7 @@ const init = async () => {
 			dom._kids(connectionElem)
 		})
 
-		const sseError = (errmsg: string) => {
+		const sseError = (errmsg: string, addNotRetrying: boolean) => {
 			sseID = 0
 			eventSource!.close()
 			eventSource = null
@@ -7464,7 +7520,11 @@ const init = async () => {
 			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+formatDomain(loginAddress.Domain)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
 			dom._kids(connectionElem)
 			if (noreconnect) {
-				dom._kids(statusElem, capitalizeFirst(errmsg)+', not automatically retrying. ')
+				let msg = capitalizeFirst(errmsg)
+				if (addNotRetrying) {
+					msg += ', not automatically retrying. '
+				}
+				dom._kids(statusElem, msg)
 				showNotConnected()
 				listloadingElem.remove()
 				listendElem.remove()
@@ -7475,12 +7535,21 @@ const init = async () => {
 		// EventSource-connection error. No details.
 		eventSource.addEventListener('error', (e: Event) => {
 			log('eventsource error', {e}, JSON.stringify(e))
-			sseError('Connection failed')
+			sseError('Connection failed', true)
 		})
 		// Fatal error on the server side, error message propagated, but connection needs to be closed.
 		eventSource.addEventListener('fatalErr', (e: MessageEvent) => {
 			const errmsg = JSON.parse(e.data) as string || '(no error message)'
-			sseError('Server error: "' + errmsg + '"')
+			sseError('Server error: "' + errmsg + '"', true)
+		})
+		// Server is stopping, we'll assume for a restart, and will try to reconnect with some jitter.
+		eventSource.addEventListener('serverShutdown', (_: MessageEvent) => {
+			noreconnect = true
+			sseError('Server shutting down, will try to reconnect in a few seconds', false)
+
+			shutdownReconnectTimer = window.setTimeout(() => {
+				connect(true)
+			}, 3000 + Math.floor(Math.random()*5000))
 		})
 
 		const checkParse = <T>(fn: () => T): T => {
@@ -7495,7 +7564,17 @@ const init = async () => {
 		eventSource.addEventListener('start', (e: MessageEvent) => {
 			const data = JSON.parse(e.data)
 			if (lastServerVersion && data.Version !== lastServerVersion) {
-				if (window.confirm('Server has been updated to a new version. Reload?')) {
+				let reload = true
+				// Save changes to draft before reload.
+				if (composeView && composeView.unsavedChanges()) {
+					try {
+						withStatus('Saving before reloading due to server update', composeView.save())
+					} catch (err) {
+						window.alert('Server was updated, and webmail wants to reload to get the latest changes, but encountered an error while saving changes your open draft message. Please reload at your earliest convenience.')
+						reload = false
+					}
+				}
+				if (reload) {
 					// Cannot use location.reload, must use a cache buster, otherwise browser may use
 					// the same HTML/JS. We remove the '?v=...' again on page load.
 					const u = URL.parse(window.location.href)!
@@ -7542,8 +7621,21 @@ const init = async () => {
 					if (openComposeOptions.subject && openComposeOptions.subject.includes('=?')) {
 						openComposeOptions.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(openComposeOptions.subject))
 					}
-					compose(openComposeOptions, listMailboxes)
+					compose(openComposeOptions, listMailboxes, setLocationHash)
 					openComposeOptions = undefined
+				})()
+			}
+			if (connectOpenComposeMessageID) {
+				// Open compose window for draft message in parallel, not failing on error.
+				(async () => {
+					const editMsgid = connectOpenComposeMessageID
+					connectOpenComposeMessageID = 0
+					try {
+						const [mi, pm] = await withStatus('Loading compose message', Promise.all([client.MessageItem(editMsgid), client.ParsedMessage(editMsgid)]))
+						await composeDraft(mi, pm, listMailboxes, setLocationHash)
+					} catch (err) {
+						window.alert('Error opening draft message: '+errmsg(err))
+					}
 				})()
 			}
 
@@ -7569,7 +7661,7 @@ const init = async () => {
 			// We'll clear noreconnect when we've held a connection for 5 seconds. Firefox
 			// disconnects often, on any network change including with docker container starts,
 			// such as for integration tests.
-			noreconnectTimer = setTimeout(() => {
+			noreconnectTimer = window.setTimeout(() => {
 				noreconnect = false
 				noreconnectTimer = 0
 			}, 5*1000)

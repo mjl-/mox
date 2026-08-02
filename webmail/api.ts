@@ -57,19 +57,130 @@ export interface Page {
 	DestMessageID: number  // If > 0, return messages until DestMessageID is found. More than Count messages can be returned. For long-running searches, it may take a while before this message if found.
 }
 
-// ParsedMessage has more parsed/derived information about a message, intended
-// for rendering the (contents of the) message. Information from MessageItem is
-// not duplicated.
-export interface ParsedMessage {
-	ID: number
+// MessageItem is sent by queries, it has derived information analyzed from
+// message.Part, made for the needs of the message items in the message list.
+// messages.
+export interface MessageItem {
+	Message: Message  // Without ParsedBuf and MsgPrefix, for size. With Preview, even if it isn't stored yet in the database.
+	Envelope: MessageEnvelope
+	Attachments?: Attachment[] | null
+	IsSigned: boolean
+	IsEncrypted: boolean
+	MatchQuery: boolean  // If message does not match query, it can still be included because of threading.
+	MoreHeaders?: (string[] | null)[] | null  // All headers from store.Settings.ShowHeaders that are present.
+}
+
+// Message stored in database and per-message file on disk.
+// 
+// Contents are always the combined data from MsgPrefix and the on-disk file named
+// based on ID.
+// 
+// Messages always have a header section, even if empty. Incoming messages without
+// header section must get an empty header section added before inserting.
+export interface Message {
+	ID: number  // ID of the message, determines path to on-disk message file. Set when adding to a mailbox. When a message is moved to another mailbox, the mailbox ID is changed, but for synchronization purposes, a new Message record is inserted (which gets a new ID) with the Expunged field set and the MailboxID and UID copied.
+	UID: UID  // UID, for IMAP. Set when adding to mailbox. Strictly increasing values, per mailbox. The UID of a message can never change (though messages can be copied), and the contents of a message/UID also never changes.
+	MailboxID: number
+	ModSeq: ModSeq  // Modification sequence, for faster syncing with IMAP QRESYNC and JMAP. ModSeq is the last modification. CreateSeq is the Seq the message was inserted, always <= ModSeq. If Expunged is set, the message has been removed and should not be returned to the user. In this case, ModSeq is the Seq where the message is removed, and will never be changed again. We have an index on both ModSeq (for JMAP that synchronizes per account) and MailboxID+ModSeq (for IMAP that synchronizes per mailbox). The index on CreateSeq helps efficiently finding created messages for JMAP. The value of ModSeq is special for IMAP. Messages that existed before ModSeq was added have 0 as value. But modseq 0 in IMAP is special, so we return it as 1. If we get modseq 1 from a client, the IMAP server will translate it to 0. When we return modseq to clients, we turn 0 into 1.
+	CreateSeq: ModSeq
+	Expunged: boolean
+	IsReject: boolean  // If set, this message was delivered to a Rejects mailbox. When it is moved to a different mailbox, its MailboxOrigID is set to the destination mailbox and this flag cleared.
+	IsForward: boolean  // If set, this is a forwarded message (through a ruleset with IsForward). This causes fields used during junk analysis to be moved to their Orig variants, and masked IP fields cleared, so they aren't used in junk classifications for incoming messages. This ensures the forwarded messages don't cause negative reputation for the forwarding mail server, which may also be sending regular messages.
+	MailboxOrigID: number  // MailboxOrigID is the mailbox the message was originally delivered to. Typically Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the message is moved to another mailbox, e.g. Archive/Trash/Junk. Used for per-mailbox reputation.  MailboxDestinedID is normally 0, but when a message is delivered to the Rejects mailbox or diverted to the Introbox, it is set to the intended mailbox according to delivery rules, typically that of Inbox. When such a message is moved to its intended mailbox, MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the message is used for reputation calculation for future deliveries to that mailbox.  These are not bstore references to prevent having to update all messages in a mailbox when the original mailbox is removed. Use of these fields requires checking if the mailbox still exists.
+	MailboxDestinedID: number
+	Received: Date  // Received indicates time of receival over SMTP, or of IMAP APPEND.
+	SaveDate?: Date | null  // SaveDate is the time of copy/move/save to a mailbox, used with IMAP SAVEDATE extension. Must be updated each time a message is copied/moved to another mailbox. Can be nil for messages from before this functionality was introduced.
+	RemoteIP: string  // Full IP address of remote SMTP server. Empty if not delivered over SMTP. The masked IPs are used to classify incoming messages. They are left empty for messages matching a ruleset for forwarded messages.
+	RemoteIPMasked1: string  // For IPv4 /32, for IPv6 /64, for reputation.
+	RemoteIPMasked2: string  // For IPv4 /26, for IPv6 /48.
+	RemoteIPMasked3: string  // For IPv4 /21, for IPv6 /32.
+	EHLODomain: string  // Only set if present and not an IP address. Unicode string. Empty for forwarded messages.
+	MailFrom: string  // With localpart and domain. Can be empty.
+	MailFromLocalpart: Localpart  // SMTP "MAIL FROM", can be empty.
+	MailFromDomain: string  // Only set if it is a domain, not an IP. Unicode string. Empty for forwarded messages, but see OrigMailFromDomain.
+	RcptToLocalpart: Localpart  // SMTP "RCPT TO", can be empty.
+	RcptToDomain: string  // Unicode string.
+	MsgFromLocalpart: Localpart  // Parsed "From" message header, used for reputation along with domain validation.
+	MsgFromDomain: string  // Unicode string.
+	MsgFromOrgDomain: string  // Unicode string.
+	EHLOValidated: boolean  // Simplified statements of the Validation fields below, used for incoming messages to check reputation.
+	MailFromValidated: boolean
+	MsgFromValidated: boolean
+	EHLOValidation: Validation  // Validation can also take reverse IP lookup into account, not only SPF.
+	MailFromValidation: Validation  // Can have SPF-specific validations like ValidationSoftfail.
+	MsgFromValidation: Validation  // Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.
+	DKIMDomains?: string[] | null  // Domains with verified DKIM signatures. Unicode string. For forwarded messages, a DKIM domain that matched a ruleset's verified domain is left out, but included in OrigDKIMDomains.
+	OrigEHLODomain: string  // For forwarded messages,
+	OrigDKIMDomains?: string[] | null
+	MessageID: string  // Canonicalized Message-Id, always lower-case and normalized quoting, without <>'s. Empty if missing. Used for matching message threads, and to prevent duplicate reject delivery.
+	SubjectBase: string  // For matching threads in case there is no References/In-Reply-To header. It is lower-cased, white-space collapsed, mailing list tags and re/fwd tags removed.
+	MessageHash?: string | null  // Hash of message. For rejects delivery in case there is no Message-ID, only set when delivered as reject.
+	ThreadID: number  // ID of message starting this thread.
+	ThreadParentIDs?: number[] | null  // IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors. Moving a message to another mailbox keeps the message ID and changes the MailboxID (and UID) of the message, leaving threading parent ids intact.
+	ThreadMissingLink: boolean  // ThreadMissingLink is true if there is no match with a direct parent. E.g. first ID in ThreadParentIDs is not the direct ancestor (an intermediate message may have been deleted), or subject-based matching was done.
+	ThreadMuted: boolean  // If set, newly delivered child messages are automatically marked as read. This field is copied to new child messages. Changes are propagated to the webmail client.
+	ThreadCollapsed: boolean  // If set, this (sub)thread is collapsed in the webmail client, for threading mode "on" (mode "unread" ignores it). This field is copied to new child message. Changes are propagated to the webmail client.
+	IsMailingList: boolean  // If received message was known to match a mailing list rule (with modified junk filtering).
+	DSN: boolean  // If this message is a DSN, generated by us or received. For DSNs, we don't look at the subject when matching threads.
+	ReceivedTLSVersion: number  // 0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.
+	ReceivedTLSCipherSuite: number
+	ReceivedRequireTLS: boolean  // Whether RequireTLS was known to be used for incoming delivery.
+	Seen: boolean
+	Answered: boolean
+	Flagged: boolean
+	Forwarded: boolean
+	Junk: boolean
+	Notjunk: boolean
+	Deleted: boolean
+	Draft: boolean
+	Phishing: boolean
+	MDNSent: boolean
+	Keywords?: string[] | null  // For keywords other than system flags or the basic well-known $-flags. Only in "atom" syntax (IMAP), they are case-insensitive, always stored in lower-case (for JMAP), sorted.
+	Size: number
+	TrainedJunk?: boolean | null  // If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.
+	MsgPrefix?: string | null  // Typically holds received headers and/or header separator.
+	Preview?: string | null  // If non-nil, a preview of the message based on text and/or html parts of the message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty if no preview could be created, or the message has not textual content or couldn't be parsed. Previews are typically created when delivering a message, but not when importing messages, for speed. Previews are generated on first request (in the webmail, or through the IMAP fetch attribute "PREVIEW" (without "LAZY")), and stored with the message at that time. The preview is at most 256 characters (can be more bytes), with detected quoted text replaced with "[...]". Previews typically end with a newline, callers may want to strip whitespace.
+	ParsedBuf?: string | null  // ParsedBuf message structure. Currently saved as JSON of message.Part because bstore wasn't able to store recursive types when this was implemented. Created when first needed, and saved in the database. todo: once replaced with non-json storage, remove date fixup in ../message/part.go.
+}
+
+// MessageEnvelope is like message.Envelope, as used in message.Part, but including
+// unicode host names for IDNA names.
+export interface MessageEnvelope {
+	Date: Date  // todo: should get sherpadoc to understand type embeds and embed the non-MessageAddress fields from message.Envelope.
+	Subject: string
+	From?: MessageAddress[] | null
+	Sender?: MessageAddress[] | null
+	ReplyTo?: MessageAddress[] | null
+	To?: MessageAddress[] | null
+	CC?: MessageAddress[] | null
+	BCC?: MessageAddress[] | null
+	InReplyTo: string
+	MessageID: string
+}
+
+// MessageAddress is like message.Address, but with a dns.Domain, with unicode name
+// included.
+export interface MessageAddress {
+	Name: string  // Free-form name for display in mail applications.
+	User: string  // Localpart, encoded.
+	Domain: Domain
+}
+
+// Domain is a domain name, with one or more labels, with at least an ASCII
+// representation, and for IDNA non-ASCII domains a unicode representation.
+// The ASCII string must be used for DNS lookups. The strings do not have a
+// trailing dot. When using with StrictResolver, add the trailing dot.
+export interface Domain {
+	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
+	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
+}
+
+// Attachment is a MIME part is an existing message that is not intended as
+// viewable text or HTML part.
+export interface Attachment {
+	Path?: number[] | null  // Indices into top-level message.Part.Parts.
+	Filename: string  // File name based on "name" attribute of "Content-Type", or the "filename" attribute of "Content-Disposition".
 	Part: Part
-	Headers?: { [key: string]: string[] | null }
-	ViewMode: ViewMode
-	Texts?: string[] | null  // Contents of text parts, can be empty.
-	HasHTML: boolean  // Whether there is an HTML part. The webclient renders HTML message parts through an iframe and a separate request with strict CSP headers to prevent script execution and loading of external resources, which isn't possible when loading in iframe with inline HTML because not all browsers support the iframe csp attribute.
-	ListReplyAddress?: MessageAddress | null  // From List-Post.
-	TextPaths?: (number[] | null)[] | null  // Paths to text parts.
-	HTMLPath?: number[] | null  // Path to HTML part.
 }
 
 // Part represents a whole mail message, or a part of a multipart message. It
@@ -117,21 +228,19 @@ export interface Address {
 	Host: string  // Domain in ASCII.
 }
 
-// MessageAddress is like message.Address, but with a dns.Domain, with unicode name
-// included.
-export interface MessageAddress {
-	Name: string  // Free-form name for display in mail applications.
-	User: string  // Localpart, encoded.
-	Domain: Domain
-}
-
-// Domain is a domain name, with one or more labels, with at least an ASCII
-// representation, and for IDNA non-ASCII domains a unicode representation.
-// The ASCII string must be used for DNS lookups. The strings do not have a
-// trailing dot. When using with StrictResolver, add the trailing dot.
-export interface Domain {
-	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
-	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
+// ParsedMessage has more parsed/derived information about a message, intended
+// for rendering the (contents of the) message. Information from MessageItem is
+// not duplicated.
+export interface ParsedMessage {
+	ID: number
+	Part: Part
+	Headers?: { [key: string]: string[] | null }
+	ViewMode: ViewMode
+	Texts?: string[] | null  // Contents of text parts, can be empty.
+	HasHTML: boolean  // Whether there is an HTML part. The webclient renders HTML message parts through an iframe and a separate request with strict CSP headers to prevent script execution and loading of external resources, which isn't possible when loading in iframe with inline HTML because not all browsers support the iframe csp attribute.
+	ListReplyAddress?: MessageAddress | null  // From List-Post.
+	TextPaths?: (number[] | null)[] | null  // Paths to text parts.
+	HTMLPath?: number[] | null  // Path to HTML part.
 }
 
 // FromAddressSettings are webmail client settings per "From" address.
@@ -300,115 +409,6 @@ export interface EventViewMsgs {
 	ViewEnd: boolean  // If set, there are no more messages in this view at this moment. Messages can be added, typically via Change messages, e.g. for new deliveries.
 }
 
-// MessageItem is sent by queries, it has derived information analyzed from
-// message.Part, made for the needs of the message items in the message list.
-// messages.
-export interface MessageItem {
-	Message: Message  // Without ParsedBuf and MsgPrefix, for size. With Preview, even if it isn't stored yet in the database.
-	Envelope: MessageEnvelope
-	Attachments?: Attachment[] | null
-	IsSigned: boolean
-	IsEncrypted: boolean
-	MatchQuery: boolean  // If message does not match query, it can still be included because of threading.
-	MoreHeaders?: (string[] | null)[] | null  // All headers from store.Settings.ShowHeaders that are present.
-}
-
-// Message stored in database and per-message file on disk.
-// 
-// Contents are always the combined data from MsgPrefix and the on-disk file named
-// based on ID.
-// 
-// Messages always have a header section, even if empty. Incoming messages without
-// header section must get an empty header section added before inserting.
-export interface Message {
-	ID: number  // ID of the message, determines path to on-disk message file. Set when adding to a mailbox. When a message is moved to another mailbox, the mailbox ID is changed, but for synchronization purposes, a new Message record is inserted (which gets a new ID) with the Expunged field set and the MailboxID and UID copied.
-	UID: UID  // UID, for IMAP. Set when adding to mailbox. Strictly increasing values, per mailbox. The UID of a message can never change (though messages can be copied), and the contents of a message/UID also never changes.
-	MailboxID: number
-	ModSeq: ModSeq  // Modification sequence, for faster syncing with IMAP QRESYNC and JMAP. ModSeq is the last modification. CreateSeq is the Seq the message was inserted, always <= ModSeq. If Expunged is set, the message has been removed and should not be returned to the user. In this case, ModSeq is the Seq where the message is removed, and will never be changed again. We have an index on both ModSeq (for JMAP that synchronizes per account) and MailboxID+ModSeq (for IMAP that synchronizes per mailbox). The index on CreateSeq helps efficiently finding created messages for JMAP. The value of ModSeq is special for IMAP. Messages that existed before ModSeq was added have 0 as value. But modseq 0 in IMAP is special, so we return it as 1. If we get modseq 1 from a client, the IMAP server will translate it to 0. When we return modseq to clients, we turn 0 into 1.
-	CreateSeq: ModSeq
-	Expunged: boolean
-	IsReject: boolean  // If set, this message was delivered to a Rejects mailbox. When it is moved to a different mailbox, its MailboxOrigID is set to the destination mailbox and this flag cleared.
-	IsForward: boolean  // If set, this is a forwarded message (through a ruleset with IsForward). This causes fields used during junk analysis to be moved to their Orig variants, and masked IP fields cleared, so they aren't used in junk classifications for incoming messages. This ensures the forwarded messages don't cause negative reputation for the forwarding mail server, which may also be sending regular messages.
-	MailboxOrigID: number  // MailboxOrigID is the mailbox the message was originally delivered to. Typically Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the message is moved to another mailbox, e.g. Archive/Trash/Junk. Used for per-mailbox reputation.  MailboxDestinedID is normally 0, but when a message is delivered to the Rejects mailbox or diverted to the Introbox, it is set to the intended mailbox according to delivery rules, typically that of Inbox. When such a message is moved to its intended mailbox, MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the message is used for reputation calculation for future deliveries to that mailbox.  These are not bstore references to prevent having to update all messages in a mailbox when the original mailbox is removed. Use of these fields requires checking if the mailbox still exists.
-	MailboxDestinedID: number
-	Received: Date  // Received indicates time of receival over SMTP, or of IMAP APPEND.
-	SaveDate?: Date | null  // SaveDate is the time of copy/move/save to a mailbox, used with IMAP SAVEDATE extension. Must be updated each time a message is copied/moved to another mailbox. Can be nil for messages from before this functionality was introduced.
-	RemoteIP: string  // Full IP address of remote SMTP server. Empty if not delivered over SMTP. The masked IPs are used to classify incoming messages. They are left empty for messages matching a ruleset for forwarded messages.
-	RemoteIPMasked1: string  // For IPv4 /32, for IPv6 /64, for reputation.
-	RemoteIPMasked2: string  // For IPv4 /26, for IPv6 /48.
-	RemoteIPMasked3: string  // For IPv4 /21, for IPv6 /32.
-	EHLODomain: string  // Only set if present and not an IP address. Unicode string. Empty for forwarded messages.
-	MailFrom: string  // With localpart and domain. Can be empty.
-	MailFromLocalpart: Localpart  // SMTP "MAIL FROM", can be empty.
-	MailFromDomain: string  // Only set if it is a domain, not an IP. Unicode string. Empty for forwarded messages, but see OrigMailFromDomain.
-	RcptToLocalpart: Localpart  // SMTP "RCPT TO", can be empty.
-	RcptToDomain: string  // Unicode string.
-	MsgFromLocalpart: Localpart  // Parsed "From" message header, used for reputation along with domain validation.
-	MsgFromDomain: string  // Unicode string.
-	MsgFromOrgDomain: string  // Unicode string.
-	EHLOValidated: boolean  // Simplified statements of the Validation fields below, used for incoming messages to check reputation.
-	MailFromValidated: boolean
-	MsgFromValidated: boolean
-	EHLOValidation: Validation  // Validation can also take reverse IP lookup into account, not only SPF.
-	MailFromValidation: Validation  // Can have SPF-specific validations like ValidationSoftfail.
-	MsgFromValidation: Validation  // Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.
-	DKIMDomains?: string[] | null  // Domains with verified DKIM signatures. Unicode string. For forwarded messages, a DKIM domain that matched a ruleset's verified domain is left out, but included in OrigDKIMDomains.
-	OrigEHLODomain: string  // For forwarded messages,
-	OrigDKIMDomains?: string[] | null
-	MessageID: string  // Canonicalized Message-Id, always lower-case and normalized quoting, without <>'s. Empty if missing. Used for matching message threads, and to prevent duplicate reject delivery.
-	SubjectBase: string  // For matching threads in case there is no References/In-Reply-To header. It is lower-cased, white-space collapsed, mailing list tags and re/fwd tags removed.
-	MessageHash?: string | null  // Hash of message. For rejects delivery in case there is no Message-ID, only set when delivered as reject.
-	ThreadID: number  // ID of message starting this thread.
-	ThreadParentIDs?: number[] | null  // IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors. Moving a message to another mailbox keeps the message ID and changes the MailboxID (and UID) of the message, leaving threading parent ids intact.
-	ThreadMissingLink: boolean  // ThreadMissingLink is true if there is no match with a direct parent. E.g. first ID in ThreadParentIDs is not the direct ancestor (an intermediate message may have been deleted), or subject-based matching was done.
-	ThreadMuted: boolean  // If set, newly delivered child messages are automatically marked as read. This field is copied to new child messages. Changes are propagated to the webmail client.
-	ThreadCollapsed: boolean  // If set, this (sub)thread is collapsed in the webmail client, for threading mode "on" (mode "unread" ignores it). This field is copied to new child message. Changes are propagated to the webmail client.
-	IsMailingList: boolean  // If received message was known to match a mailing list rule (with modified junk filtering).
-	DSN: boolean  // If this message is a DSN, generated by us or received. For DSNs, we don't look at the subject when matching threads.
-	ReceivedTLSVersion: number  // 0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.
-	ReceivedTLSCipherSuite: number
-	ReceivedRequireTLS: boolean  // Whether RequireTLS was known to be used for incoming delivery.
-	Seen: boolean
-	Answered: boolean
-	Flagged: boolean
-	Forwarded: boolean
-	Junk: boolean
-	Notjunk: boolean
-	Deleted: boolean
-	Draft: boolean
-	Phishing: boolean
-	MDNSent: boolean
-	Keywords?: string[] | null  // For keywords other than system flags or the basic well-known $-flags. Only in "atom" syntax (IMAP), they are case-insensitive, always stored in lower-case (for JMAP), sorted.
-	Size: number
-	TrainedJunk?: boolean | null  // If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.
-	MsgPrefix?: string | null  // Typically holds received headers and/or header separator.
-	Preview?: string | null  // If non-nil, a preview of the message based on text and/or html parts of the message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty if no preview could be created, or the message has not textual content or couldn't be parsed. Previews are typically created when delivering a message, but not when importing messages, for speed. Previews are generated on first request (in the webmail, or through the IMAP fetch attribute "PREVIEW" (without "LAZY")), and stored with the message at that time. The preview is at most 256 characters (can be more bytes), with detected quoted text replaced with "[...]". Previews typically end with a newline, callers may want to strip whitespace.
-	ParsedBuf?: string | null  // ParsedBuf message structure. Currently saved as JSON of message.Part because bstore wasn't able to store recursive types when this was implemented. Created when first needed, and saved in the database. todo: once replaced with non-json storage, remove date fixup in ../message/part.go.
-}
-
-// MessageEnvelope is like message.Envelope, as used in message.Part, but including
-// unicode host names for IDNA names.
-export interface MessageEnvelope {
-	Date: Date  // todo: should get sherpadoc to understand type embeds and embed the non-MessageAddress fields from message.Envelope.
-	Subject: string
-	From?: MessageAddress[] | null
-	Sender?: MessageAddress[] | null
-	ReplyTo?: MessageAddress[] | null
-	To?: MessageAddress[] | null
-	CC?: MessageAddress[] | null
-	BCC?: MessageAddress[] | null
-	InReplyTo: string
-	MessageID: string
-}
-
-// Attachment is a MIME part is an existing message that is not intended as
-// viewable text or HTML part.
-export interface Attachment {
-	Path?: number[] | null  // Indices into top-level message.Part.Parts.
-	Filename: string  // File name based on "name" attribute of "Content-Type", or the "filename" attribute of "Content-Disposition".
-	Part: Part
-}
-
 // EventViewChanges contain one or more changes relevant for the client, either
 // with new mailbox total/unseen message counts, or messages added/removed/modified
 // (flags) for the current view.
@@ -532,13 +532,13 @@ export interface ChangeMailboxKeywords {
 	Keywords?: string[] | null
 }
 
+// IMAP UID.
+export type UID = number
+
 // ModSeq represents a modseq as stored in the database. ModSeq 0 in the
 // database is sent to the client as 1, because modseq 0 is special in IMAP.
 // ModSeq coming from the client are of type int64.
 export type ModSeq = number
-
-// IMAP UID.
-export type UID = number
 
 // Validation of "message From" domain.
 export enum Validation {
@@ -576,6 +576,12 @@ export enum AttachmentType {
 	AttachmentPresentation = "presentation",  // odp, pptx, ...
 }
 
+// Localpart is a decoded local part of an email address, before the "@".
+// For quoted strings, values do not hold the double quote or escaping backslashes.
+// An empty string can be a valid localpart.
+// Localparts are in Unicode NFC.
+export type Localpart = string
+
 // ViewMode how a message should be viewed: its text parts, html parts, or html
 // with loading external resources.
 export enum ViewMode {
@@ -602,12 +608,6 @@ export enum Quoting {
 	Top = "top",
 }
 
-// Localpart is a decoded local part of an email address, before the "@".
-// For quoted strings, values do not hold the double quote or escaping backslashes.
-// An empty string can be a valid localpart.
-// Localparts are in Unicode NFC.
-export type Localpart = string
-
 export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"ComposeMessage":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"FromAddressSettings":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Ruleset":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
 export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"CSRFToken":true,"Localpart":true,"Quoting":true,"SecurityResult":true,"ThreadMode":true,"ViewMode":true}
 export const intsTypes: {[typename: string]: boolean} = {"ModSeq":true,"UID":true,"Validation":true}
@@ -617,12 +617,16 @@ export const types: TypenameMap = {
 	"Filter": {"Name":"Filter","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxChildrenIncluded","Docs":"","Typewords":["bool"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Words","Docs":"","Typewords":["[]","string"]},{"Name":"From","Docs":"","Typewords":["[]","string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Oldest","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Newest","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Subject","Docs":"","Typewords":["[]","string"]},{"Name":"Attachments","Docs":"","Typewords":["AttachmentType"]},{"Name":"Labels","Docs":"","Typewords":["[]","string"]},{"Name":"Headers","Docs":"","Typewords":["[]","[]","string"]},{"Name":"SizeMin","Docs":"","Typewords":["int64"]},{"Name":"SizeMax","Docs":"","Typewords":["int64"]}]},
 	"NotFilter": {"Name":"NotFilter","Docs":"","Fields":[{"Name":"Words","Docs":"","Typewords":["[]","string"]},{"Name":"From","Docs":"","Typewords":["[]","string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["[]","string"]},{"Name":"Attachments","Docs":"","Typewords":["AttachmentType"]},{"Name":"Labels","Docs":"","Typewords":["[]","string"]}]},
 	"Page": {"Name":"Page","Docs":"","Fields":[{"Name":"AnchorMessageID","Docs":"","Typewords":["int64"]},{"Name":"Count","Docs":"","Typewords":["int32"]},{"Name":"DestMessageID","Docs":"","Typewords":["int64"]}]},
-	"ParsedMessage": {"Name":"ParsedMessage","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Part","Docs":"","Typewords":["Part"]},{"Name":"Headers","Docs":"","Typewords":["{}","[]","string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]},{"Name":"Texts","Docs":"","Typewords":["[]","string"]},{"Name":"HasHTML","Docs":"","Typewords":["bool"]},{"Name":"ListReplyAddress","Docs":"","Typewords":["nullable","MessageAddress"]},{"Name":"TextPaths","Docs":"","Typewords":["[]","[]","int32"]},{"Name":"HTMLPath","Docs":"","Typewords":["[]","int32"]}]},
+	"MessageItem": {"Name":"MessageItem","Docs":"","Fields":[{"Name":"Message","Docs":"","Typewords":["Message"]},{"Name":"Envelope","Docs":"","Typewords":["MessageEnvelope"]},{"Name":"Attachments","Docs":"","Typewords":["[]","Attachment"]},{"Name":"IsSigned","Docs":"","Typewords":["bool"]},{"Name":"IsEncrypted","Docs":"","Typewords":["bool"]},{"Name":"MatchQuery","Docs":"","Typewords":["bool"]},{"Name":"MoreHeaders","Docs":"","Typewords":["[]","[]","string"]}]},
+	"Message": {"Name":"Message","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Expunged","Docs":"","Typewords":["bool"]},{"Name":"IsReject","Docs":"","Typewords":["bool"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"MailboxOrigID","Docs":"","Typewords":["int64"]},{"Name":"MailboxDestinedID","Docs":"","Typewords":["int64"]},{"Name":"Received","Docs":"","Typewords":["timestamp"]},{"Name":"SaveDate","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked1","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked2","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked3","Docs":"","Typewords":["string"]},{"Name":"EHLODomain","Docs":"","Typewords":["string"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"MailFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MailFromDomain","Docs":"","Typewords":["string"]},{"Name":"RcptToLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RcptToDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MsgFromDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromOrgDomain","Docs":"","Typewords":["string"]},{"Name":"EHLOValidated","Docs":"","Typewords":["bool"]},{"Name":"MailFromValidated","Docs":"","Typewords":["bool"]},{"Name":"MsgFromValidated","Docs":"","Typewords":["bool"]},{"Name":"EHLOValidation","Docs":"","Typewords":["Validation"]},{"Name":"MailFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"MsgFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"DKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"OrigEHLODomain","Docs":"","Typewords":["string"]},{"Name":"OrigDKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"SubjectBase","Docs":"","Typewords":["string"]},{"Name":"MessageHash","Docs":"","Typewords":["nullable","string"]},{"Name":"ThreadID","Docs":"","Typewords":["int64"]},{"Name":"ThreadParentIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"ThreadMissingLink","Docs":"","Typewords":["bool"]},{"Name":"ThreadMuted","Docs":"","Typewords":["bool"]},{"Name":"ThreadCollapsed","Docs":"","Typewords":["bool"]},{"Name":"IsMailingList","Docs":"","Typewords":["bool"]},{"Name":"DSN","Docs":"","Typewords":["bool"]},{"Name":"ReceivedTLSVersion","Docs":"","Typewords":["uint16"]},{"Name":"ReceivedTLSCipherSuite","Docs":"","Typewords":["uint16"]},{"Name":"ReceivedRequireTLS","Docs":"","Typewords":["bool"]},{"Name":"Seen","Docs":"","Typewords":["bool"]},{"Name":"Answered","Docs":"","Typewords":["bool"]},{"Name":"Flagged","Docs":"","Typewords":["bool"]},{"Name":"Forwarded","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Notjunk","Docs":"","Typewords":["bool"]},{"Name":"Deleted","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Phishing","Docs":"","Typewords":["bool"]},{"Name":"MDNSent","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"TrainedJunk","Docs":"","Typewords":["nullable","bool"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"Preview","Docs":"","Typewords":["nullable","string"]},{"Name":"ParsedBuf","Docs":"","Typewords":["nullable","string"]}]},
+	"MessageEnvelope": {"Name":"MessageEnvelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"Sender","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"To","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"CC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"BCC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
+	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
+	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
+	"Attachment": {"Name":"Attachment","Docs":"","Fields":[{"Name":"Path","Docs":"","Typewords":["[]","int32"]},{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"Part","Docs":"","Typewords":["Part"]}]},
 	"Part": {"Name":"Part","Docs":"","Fields":[{"Name":"BoundaryOffset","Docs":"","Typewords":["int64"]},{"Name":"HeaderOffset","Docs":"","Typewords":["int64"]},{"Name":"BodyOffset","Docs":"","Typewords":["int64"]},{"Name":"EndOffset","Docs":"","Typewords":["int64"]},{"Name":"RawLineCount","Docs":"","Typewords":["int64"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"MediaType","Docs":"","Typewords":["string"]},{"Name":"MediaSubType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentDescription","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentTransferEncoding","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentDisposition","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentMD5","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentLanguage","Docs":"","Typewords":["nullable","string"]},{"Name":"ContentLocation","Docs":"","Typewords":["nullable","string"]},{"Name":"Envelope","Docs":"","Typewords":["nullable","Envelope"]},{"Name":"Parts","Docs":"","Typewords":["[]","Part"]},{"Name":"Message","Docs":"","Typewords":["nullable","Part"]}]},
 	"Envelope": {"Name":"Envelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","Address"]},{"Name":"Sender","Docs":"","Typewords":["[]","Address"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","Address"]},{"Name":"To","Docs":"","Typewords":["[]","Address"]},{"Name":"CC","Docs":"","Typewords":["[]","Address"]},{"Name":"BCC","Docs":"","Typewords":["[]","Address"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
 	"Address": {"Name":"Address","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["string"]}]},
-	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
-	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
+	"ParsedMessage": {"Name":"ParsedMessage","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Part","Docs":"","Typewords":["Part"]},{"Name":"Headers","Docs":"","Typewords":["{}","[]","string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]},{"Name":"Texts","Docs":"","Typewords":["[]","string"]},{"Name":"HasHTML","Docs":"","Typewords":["bool"]},{"Name":"ListReplyAddress","Docs":"","Typewords":["nullable","MessageAddress"]},{"Name":"TextPaths","Docs":"","Typewords":["[]","[]","int32"]},{"Name":"HTMLPath","Docs":"","Typewords":["[]","int32"]}]},
 	"FromAddressSettings": {"Name":"FromAddressSettings","Docs":"","Fields":[{"Name":"FromAddress","Docs":"","Typewords":["string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]}]},
 	"ComposeMessage": {"Name":"ComposeMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"ArchiveReferenceMailboxID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
@@ -637,10 +641,6 @@ export const types: TypenameMap = {
 	"EventViewErr": {"Name":"EventViewErr","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"Err","Docs":"","Typewords":["string"]}]},
 	"EventViewReset": {"Name":"EventViewReset","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]}]},
 	"EventViewMsgs": {"Name":"EventViewMsgs","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"MessageItems","Docs":"","Typewords":["[]","[]","MessageItem"]},{"Name":"ParsedMessage","Docs":"","Typewords":["nullable","ParsedMessage"]},{"Name":"ViewEnd","Docs":"","Typewords":["bool"]}]},
-	"MessageItem": {"Name":"MessageItem","Docs":"","Fields":[{"Name":"Message","Docs":"","Typewords":["Message"]},{"Name":"Envelope","Docs":"","Typewords":["MessageEnvelope"]},{"Name":"Attachments","Docs":"","Typewords":["[]","Attachment"]},{"Name":"IsSigned","Docs":"","Typewords":["bool"]},{"Name":"IsEncrypted","Docs":"","Typewords":["bool"]},{"Name":"MatchQuery","Docs":"","Typewords":["bool"]},{"Name":"MoreHeaders","Docs":"","Typewords":["[]","[]","string"]}]},
-	"Message": {"Name":"Message","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Expunged","Docs":"","Typewords":["bool"]},{"Name":"IsReject","Docs":"","Typewords":["bool"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"MailboxOrigID","Docs":"","Typewords":["int64"]},{"Name":"MailboxDestinedID","Docs":"","Typewords":["int64"]},{"Name":"Received","Docs":"","Typewords":["timestamp"]},{"Name":"SaveDate","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked1","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked2","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked3","Docs":"","Typewords":["string"]},{"Name":"EHLODomain","Docs":"","Typewords":["string"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"MailFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MailFromDomain","Docs":"","Typewords":["string"]},{"Name":"RcptToLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RcptToDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MsgFromDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromOrgDomain","Docs":"","Typewords":["string"]},{"Name":"EHLOValidated","Docs":"","Typewords":["bool"]},{"Name":"MailFromValidated","Docs":"","Typewords":["bool"]},{"Name":"MsgFromValidated","Docs":"","Typewords":["bool"]},{"Name":"EHLOValidation","Docs":"","Typewords":["Validation"]},{"Name":"MailFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"MsgFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"DKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"OrigEHLODomain","Docs":"","Typewords":["string"]},{"Name":"OrigDKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"SubjectBase","Docs":"","Typewords":["string"]},{"Name":"MessageHash","Docs":"","Typewords":["nullable","string"]},{"Name":"ThreadID","Docs":"","Typewords":["int64"]},{"Name":"ThreadParentIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"ThreadMissingLink","Docs":"","Typewords":["bool"]},{"Name":"ThreadMuted","Docs":"","Typewords":["bool"]},{"Name":"ThreadCollapsed","Docs":"","Typewords":["bool"]},{"Name":"IsMailingList","Docs":"","Typewords":["bool"]},{"Name":"DSN","Docs":"","Typewords":["bool"]},{"Name":"ReceivedTLSVersion","Docs":"","Typewords":["uint16"]},{"Name":"ReceivedTLSCipherSuite","Docs":"","Typewords":["uint16"]},{"Name":"ReceivedRequireTLS","Docs":"","Typewords":["bool"]},{"Name":"Seen","Docs":"","Typewords":["bool"]},{"Name":"Answered","Docs":"","Typewords":["bool"]},{"Name":"Flagged","Docs":"","Typewords":["bool"]},{"Name":"Forwarded","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Notjunk","Docs":"","Typewords":["bool"]},{"Name":"Deleted","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Phishing","Docs":"","Typewords":["bool"]},{"Name":"MDNSent","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"TrainedJunk","Docs":"","Typewords":["nullable","bool"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"Preview","Docs":"","Typewords":["nullable","string"]},{"Name":"ParsedBuf","Docs":"","Typewords":["nullable","string"]}]},
-	"MessageEnvelope": {"Name":"MessageEnvelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"Sender","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"To","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"CC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"BCC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
-	"Attachment": {"Name":"Attachment","Docs":"","Fields":[{"Name":"Path","Docs":"","Typewords":["[]","int32"]},{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"Part","Docs":"","Typewords":["Part"]}]},
 	"EventViewChanges": {"Name":"EventViewChanges","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Changes","Docs":"","Typewords":["[]","[]","any"]}]},
 	"ChangeMsgAdd": {"Name":"ChangeMsgAdd","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"MessageCountIMAP","Docs":"","Typewords":["uint32"]},{"Name":"Unseen","Docs":"","Typewords":["uint32"]},{"Name":"MessageItems","Docs":"","Typewords":["[]","MessageItem"]}]},
 	"Flags": {"Name":"Flags","Docs":"","Fields":[{"Name":"Seen","Docs":"","Typewords":["bool"]},{"Name":"Answered","Docs":"","Typewords":["bool"]},{"Name":"Flagged","Docs":"","Typewords":["bool"]},{"Name":"Forwarded","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Notjunk","Docs":"","Typewords":["bool"]},{"Name":"Deleted","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Phishing","Docs":"","Typewords":["bool"]},{"Name":"MDNSent","Docs":"","Typewords":["bool"]}]},
@@ -654,16 +654,16 @@ export const types: TypenameMap = {
 	"ChangeMailboxSpecialUse": {"Name":"ChangeMailboxSpecialUse","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"SpecialUse","Docs":"","Typewords":["SpecialUse"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
 	"SpecialUse": {"Name":"SpecialUse","Docs":"","Fields":[{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]}]},
 	"ChangeMailboxKeywords": {"Name":"ChangeMailboxKeywords","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]}]},
-	"ModSeq": {"Name":"ModSeq","Docs":"","Values":null},
 	"UID": {"Name":"UID","Docs":"","Values":null},
+	"ModSeq": {"Name":"ModSeq","Docs":"","Values":null},
 	"Validation": {"Name":"Validation","Docs":"","Values":[{"Name":"ValidationUnknown","Value":0,"Docs":""},{"Name":"ValidationStrict","Value":1,"Docs":""},{"Name":"ValidationDMARC","Value":2,"Docs":""},{"Name":"ValidationRelaxed","Value":3,"Docs":""},{"Name":"ValidationPass","Value":4,"Docs":""},{"Name":"ValidationNeutral","Value":5,"Docs":""},{"Name":"ValidationTemperror","Value":6,"Docs":""},{"Name":"ValidationPermerror","Value":7,"Docs":""},{"Name":"ValidationFail","Value":8,"Docs":""},{"Name":"ValidationSoftfail","Value":9,"Docs":""},{"Name":"ValidationNone","Value":10,"Docs":""}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"ThreadMode": {"Name":"ThreadMode","Docs":"","Values":[{"Name":"ThreadOff","Value":"off","Docs":""},{"Name":"ThreadOn","Value":"on","Docs":""},{"Name":"ThreadUnread","Value":"unread","Docs":""}]},
 	"AttachmentType": {"Name":"AttachmentType","Docs":"","Values":[{"Name":"AttachmentIndifferent","Value":"","Docs":""},{"Name":"AttachmentNone","Value":"none","Docs":""},{"Name":"AttachmentAny","Value":"any","Docs":""},{"Name":"AttachmentImage","Value":"image","Docs":""},{"Name":"AttachmentPDF","Value":"pdf","Docs":""},{"Name":"AttachmentArchive","Value":"archive","Docs":""},{"Name":"AttachmentSpreadsheet","Value":"spreadsheet","Docs":""},{"Name":"AttachmentDocument","Value":"document","Docs":""},{"Name":"AttachmentPresentation","Value":"presentation","Docs":""}]},
+	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 	"ViewMode": {"Name":"ViewMode","Docs":"","Values":[{"Name":"ModeText","Value":"text","Docs":""},{"Name":"ModeHTML","Value":"html","Docs":""},{"Name":"ModeHTMLExt","Value":"htmlext","Docs":""}]},
 	"SecurityResult": {"Name":"SecurityResult","Docs":"","Values":[{"Name":"SecurityResultError","Value":"error","Docs":""},{"Name":"SecurityResultNo","Value":"no","Docs":""},{"Name":"SecurityResultYes","Value":"yes","Docs":""},{"Name":"SecurityResultUnknown","Value":"unknown","Docs":""}]},
 	"Quoting": {"Name":"Quoting","Docs":"","Values":[{"Name":"Default","Value":"","Docs":""},{"Name":"Bottom","Value":"bottom","Docs":""},{"Name":"Top","Value":"top","Docs":""}]},
-	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 }
 
 export const parser = {
@@ -672,12 +672,16 @@ export const parser = {
 	Filter: (v: any) => parse("Filter", v) as Filter,
 	NotFilter: (v: any) => parse("NotFilter", v) as NotFilter,
 	Page: (v: any) => parse("Page", v) as Page,
-	ParsedMessage: (v: any) => parse("ParsedMessage", v) as ParsedMessage,
+	MessageItem: (v: any) => parse("MessageItem", v) as MessageItem,
+	Message: (v: any) => parse("Message", v) as Message,
+	MessageEnvelope: (v: any) => parse("MessageEnvelope", v) as MessageEnvelope,
+	MessageAddress: (v: any) => parse("MessageAddress", v) as MessageAddress,
+	Domain: (v: any) => parse("Domain", v) as Domain,
+	Attachment: (v: any) => parse("Attachment", v) as Attachment,
 	Part: (v: any) => parse("Part", v) as Part,
 	Envelope: (v: any) => parse("Envelope", v) as Envelope,
 	Address: (v: any) => parse("Address", v) as Address,
-	MessageAddress: (v: any) => parse("MessageAddress", v) as MessageAddress,
-	Domain: (v: any) => parse("Domain", v) as Domain,
+	ParsedMessage: (v: any) => parse("ParsedMessage", v) as ParsedMessage,
 	FromAddressSettings: (v: any) => parse("FromAddressSettings", v) as FromAddressSettings,
 	ComposeMessage: (v: any) => parse("ComposeMessage", v) as ComposeMessage,
 	SubmitMessage: (v: any) => parse("SubmitMessage", v) as SubmitMessage,
@@ -692,10 +696,6 @@ export const parser = {
 	EventViewErr: (v: any) => parse("EventViewErr", v) as EventViewErr,
 	EventViewReset: (v: any) => parse("EventViewReset", v) as EventViewReset,
 	EventViewMsgs: (v: any) => parse("EventViewMsgs", v) as EventViewMsgs,
-	MessageItem: (v: any) => parse("MessageItem", v) as MessageItem,
-	Message: (v: any) => parse("Message", v) as Message,
-	MessageEnvelope: (v: any) => parse("MessageEnvelope", v) as MessageEnvelope,
-	Attachment: (v: any) => parse("Attachment", v) as Attachment,
 	EventViewChanges: (v: any) => parse("EventViewChanges", v) as EventViewChanges,
 	ChangeMsgAdd: (v: any) => parse("ChangeMsgAdd", v) as ChangeMsgAdd,
 	Flags: (v: any) => parse("Flags", v) as Flags,
@@ -709,16 +709,16 @@ export const parser = {
 	ChangeMailboxSpecialUse: (v: any) => parse("ChangeMailboxSpecialUse", v) as ChangeMailboxSpecialUse,
 	SpecialUse: (v: any) => parse("SpecialUse", v) as SpecialUse,
 	ChangeMailboxKeywords: (v: any) => parse("ChangeMailboxKeywords", v) as ChangeMailboxKeywords,
-	ModSeq: (v: any) => parse("ModSeq", v) as ModSeq,
 	UID: (v: any) => parse("UID", v) as UID,
+	ModSeq: (v: any) => parse("ModSeq", v) as ModSeq,
 	Validation: (v: any) => parse("Validation", v) as Validation,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	ThreadMode: (v: any) => parse("ThreadMode", v) as ThreadMode,
 	AttachmentType: (v: any) => parse("AttachmentType", v) as AttachmentType,
+	Localpart: (v: any) => parse("Localpart", v) as Localpart,
 	ViewMode: (v: any) => parse("ViewMode", v) as ViewMode,
 	SecurityResult: (v: any) => parse("SecurityResult", v) as SecurityResult,
 	Quoting: (v: any) => parse("Quoting", v) as Quoting,
-	Localpart: (v: any) => parse("Localpart", v) as Localpart,
 }
 
 let defaultOptions: ClientOptions = {slicesNullable: true, mapsNullable: true, nullableOptional: true}
@@ -809,6 +809,15 @@ export class Client {
 		const returnTypes: string[][] = []
 		const params: any[] = [req]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// MessageItem returns a MessageItem for a message.
+	async MessageItem(msgID: number): Promise<MessageItem> {
+		const fn: string = "MessageItem"
+		const paramTypes: string[][] = [["int64"]]
+		const returnTypes: string[][] = [["MessageItem"]]
+		const params: any[] = [msgID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as MessageItem
 	}
 
 	// ParsedMessage returns enough to render the textual body of a message. It is

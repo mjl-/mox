@@ -249,6 +249,16 @@ func TestAPI(t *testing.T) {
 	tneedError(t, func() { api.MailboxRename(ctx, inbox.ID, "Binbox") })      // Inbox not allowed.
 	tneedError(t, func() { api.MailboxRename(ctx, testbox1.ID, "Archive") })  // Exists.
 
+	// MessageItem
+	// todo: verify contents
+	api.MessageItem(ctx, inboxMinimal.ID)
+	api.MessageItem(ctx, inboxHTML.ID)
+	api.MessageItem(ctx, inboxAlt.ID)
+	api.MessageItem(ctx, inboxAltRel.ID)
+	api.MessageItem(ctx, testbox1Alt.ID)
+	tneedError(t, func() { api.MessageItem(ctx, 0) })
+	tneedError(t, func() { api.MessageItem(ctx, testmsgs[len(testmsgs)-1].ID+1) })
+
 	// ParsedMessage
 	// todo: verify contents
 	api.ParsedMessage(ctx, inboxMinimal.ID)

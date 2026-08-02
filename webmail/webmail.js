@@ -298,12 +298,16 @@ var api;
 		"Filter": { "Name": "Filter", "Docs": "", "Fields": [{ "Name": "MailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailboxChildrenIncluded", "Docs": "", "Typewords": ["bool"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Words", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "From", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Oldest", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "Newest", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "Subject", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["AttachmentType"] }, { "Name": "Labels", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Headers", "Docs": "", "Typewords": ["[]", "[]", "string"] }, { "Name": "SizeMin", "Docs": "", "Typewords": ["int64"] }, { "Name": "SizeMax", "Docs": "", "Typewords": ["int64"] }] },
 		"NotFilter": { "Name": "NotFilter", "Docs": "", "Fields": [{ "Name": "Words", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "From", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["AttachmentType"] }, { "Name": "Labels", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Page": { "Name": "Page", "Docs": "", "Fields": [{ "Name": "AnchorMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Count", "Docs": "", "Typewords": ["int32"] }, { "Name": "DestMessageID", "Docs": "", "Typewords": ["int64"] }] },
-		"ParsedMessage": { "Name": "ParsedMessage", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Part", "Docs": "", "Typewords": ["Part"] }, { "Name": "Headers", "Docs": "", "Typewords": ["{}", "[]", "string"] }, { "Name": "ViewMode", "Docs": "", "Typewords": ["ViewMode"] }, { "Name": "Texts", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HasHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListReplyAddress", "Docs": "", "Typewords": ["nullable", "MessageAddress"] }, { "Name": "TextPaths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }, { "Name": "HTMLPath", "Docs": "", "Typewords": ["[]", "int32"] }] },
+		"MessageItem": { "Name": "MessageItem", "Docs": "", "Fields": [{ "Name": "Message", "Docs": "", "Typewords": ["Message"] }, { "Name": "Envelope", "Docs": "", "Typewords": ["MessageEnvelope"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "Attachment"] }, { "Name": "IsSigned", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsEncrypted", "Docs": "", "Typewords": ["bool"] }, { "Name": "MatchQuery", "Docs": "", "Typewords": ["bool"] }, { "Name": "MoreHeaders", "Docs": "", "Typewords": ["[]", "[]", "string"] }] },
+		"Message": { "Name": "Message", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UID", "Docs": "", "Typewords": ["UID"] }, { "Name": "MailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "CreateSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "Expunged", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsReject", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "MailboxOrigID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailboxDestinedID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Received", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SaveDate", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "RemoteIP", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked1", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked2", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked3", "Docs": "", "Typewords": ["string"] }, { "Name": "EHLODomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFrom", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFromLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "MailFromDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "RcptToLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RcptToDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "MsgFromDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromOrgDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "EHLOValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MailFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MsgFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "EHLOValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "MailFromValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "MsgFromValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "DKIMDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "OrigEHLODomain", "Docs": "", "Typewords": ["string"] }, { "Name": "OrigDKIMDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "SubjectBase", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageHash", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ThreadID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ThreadParentIDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "ThreadMissingLink", "Docs": "", "Typewords": ["bool"] }, { "Name": "ThreadMuted", "Docs": "", "Typewords": ["bool"] }, { "Name": "ThreadCollapsed", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsMailingList", "Docs": "", "Typewords": ["bool"] }, { "Name": "DSN", "Docs": "", "Typewords": ["bool"] }, { "Name": "ReceivedTLSVersion", "Docs": "", "Typewords": ["uint16"] }, { "Name": "ReceivedTLSCipherSuite", "Docs": "", "Typewords": ["uint16"] }, { "Name": "ReceivedRequireTLS", "Docs": "", "Typewords": ["bool"] }, { "Name": "Seen", "Docs": "", "Typewords": ["bool"] }, { "Name": "Answered", "Docs": "", "Typewords": ["bool"] }, { "Name": "Flagged", "Docs": "", "Typewords": ["bool"] }, { "Name": "Forwarded", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Notjunk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Phishing", "Docs": "", "Typewords": ["bool"] }, { "Name": "MDNSent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "TrainedJunk", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Preview", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ParsedBuf", "Docs": "", "Typewords": ["nullable", "string"] }] },
+		"MessageEnvelope": { "Name": "MessageEnvelope", "Docs": "", "Fields": [{ "Name": "Date", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "Sender", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "CC", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "BCC", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "InReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }] },
+		"MessageAddress": { "Name": "MessageAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
+		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
+		"Attachment": { "Name": "Attachment", "Docs": "", "Fields": [{ "Name": "Path", "Docs": "", "Typewords": ["[]", "int32"] }, { "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "Part", "Docs": "", "Typewords": ["Part"] }] },
 		"Part": { "Name": "Part", "Docs": "", "Fields": [{ "Name": "BoundaryOffset", "Docs": "", "Typewords": ["int64"] }, { "Name": "HeaderOffset", "Docs": "", "Typewords": ["int64"] }, { "Name": "BodyOffset", "Docs": "", "Typewords": ["int64"] }, { "Name": "EndOffset", "Docs": "", "Typewords": ["int64"] }, { "Name": "RawLineCount", "Docs": "", "Typewords": ["int64"] }, { "Name": "DecodedSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "MediaType", "Docs": "", "Typewords": ["string"] }, { "Name": "MediaSubType", "Docs": "", "Typewords": ["string"] }, { "Name": "ContentTypeParams", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "ContentID", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ContentDescription", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ContentTransferEncoding", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ContentDisposition", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ContentMD5", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ContentLanguage", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ContentLocation", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Envelope", "Docs": "", "Typewords": ["nullable", "Envelope"] }, { "Name": "Parts", "Docs": "", "Typewords": ["[]", "Part"] }, { "Name": "Message", "Docs": "", "Typewords": ["nullable", "Part"] }] },
 		"Envelope": { "Name": "Envelope", "Docs": "", "Fields": [{ "Name": "Date", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["[]", "Address"] }, { "Name": "Sender", "Docs": "", "Typewords": ["[]", "Address"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["[]", "Address"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "Address"] }, { "Name": "CC", "Docs": "", "Typewords": ["[]", "Address"] }, { "Name": "BCC", "Docs": "", "Typewords": ["[]", "Address"] }, { "Name": "InReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }] },
 		"Address": { "Name": "Address", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["string"] }] },
-		"MessageAddress": { "Name": "MessageAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
-		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
+		"ParsedMessage": { "Name": "ParsedMessage", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Part", "Docs": "", "Typewords": ["Part"] }, { "Name": "Headers", "Docs": "", "Typewords": ["{}", "[]", "string"] }, { "Name": "ViewMode", "Docs": "", "Typewords": ["ViewMode"] }, { "Name": "Texts", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HasHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListReplyAddress", "Docs": "", "Typewords": ["nullable", "MessageAddress"] }, { "Name": "TextPaths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }, { "Name": "HTMLPath", "Docs": "", "Typewords": ["[]", "int32"] }] },
 		"FromAddressSettings": { "Name": "FromAddressSettings", "Docs": "", "Fields": [{ "Name": "FromAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "ViewMode", "Docs": "", "Typewords": ["ViewMode"] }] },
 		"ComposeMessage": { "Name": "ComposeMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
 		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "ArchiveThread", "Docs": "", "Typewords": ["bool"] }, { "Name": "ArchiveReferenceMailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
@@ -318,10 +322,6 @@ var api;
 		"EventViewErr": { "Name": "EventViewErr", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Err", "Docs": "", "Typewords": ["string"] }] },
 		"EventViewReset": { "Name": "EventViewReset", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }] },
 		"EventViewMsgs": { "Name": "EventViewMsgs", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageItems", "Docs": "", "Typewords": ["[]", "[]", "MessageItem"] }, { "Name": "ParsedMessage", "Docs": "", "Typewords": ["nullable", "ParsedMessage"] }, { "Name": "ViewEnd", "Docs": "", "Typewords": ["bool"] }] },
-		"MessageItem": { "Name": "MessageItem", "Docs": "", "Fields": [{ "Name": "Message", "Docs": "", "Typewords": ["Message"] }, { "Name": "Envelope", "Docs": "", "Typewords": ["MessageEnvelope"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "Attachment"] }, { "Name": "IsSigned", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsEncrypted", "Docs": "", "Typewords": ["bool"] }, { "Name": "MatchQuery", "Docs": "", "Typewords": ["bool"] }, { "Name": "MoreHeaders", "Docs": "", "Typewords": ["[]", "[]", "string"] }] },
-		"Message": { "Name": "Message", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UID", "Docs": "", "Typewords": ["UID"] }, { "Name": "MailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "CreateSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "Expunged", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsReject", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "MailboxOrigID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailboxDestinedID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Received", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SaveDate", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "RemoteIP", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked1", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked2", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked3", "Docs": "", "Typewords": ["string"] }, { "Name": "EHLODomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFrom", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFromLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "MailFromDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "RcptToLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RcptToDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "MsgFromDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromOrgDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "EHLOValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MailFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MsgFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "EHLOValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "MailFromValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "MsgFromValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "DKIMDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "OrigEHLODomain", "Docs": "", "Typewords": ["string"] }, { "Name": "OrigDKIMDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "SubjectBase", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageHash", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ThreadID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ThreadParentIDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "ThreadMissingLink", "Docs": "", "Typewords": ["bool"] }, { "Name": "ThreadMuted", "Docs": "", "Typewords": ["bool"] }, { "Name": "ThreadCollapsed", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsMailingList", "Docs": "", "Typewords": ["bool"] }, { "Name": "DSN", "Docs": "", "Typewords": ["bool"] }, { "Name": "ReceivedTLSVersion", "Docs": "", "Typewords": ["uint16"] }, { "Name": "ReceivedTLSCipherSuite", "Docs": "", "Typewords": ["uint16"] }, { "Name": "ReceivedRequireTLS", "Docs": "", "Typewords": ["bool"] }, { "Name": "Seen", "Docs": "", "Typewords": ["bool"] }, { "Name": "Answered", "Docs": "", "Typewords": ["bool"] }, { "Name": "Flagged", "Docs": "", "Typewords": ["bool"] }, { "Name": "Forwarded", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Notjunk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Phishing", "Docs": "", "Typewords": ["bool"] }, { "Name": "MDNSent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "TrainedJunk", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Preview", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ParsedBuf", "Docs": "", "Typewords": ["nullable", "string"] }] },
-		"MessageEnvelope": { "Name": "MessageEnvelope", "Docs": "", "Fields": [{ "Name": "Date", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "Sender", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "CC", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "BCC", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "InReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }] },
-		"Attachment": { "Name": "Attachment", "Docs": "", "Fields": [{ "Name": "Path", "Docs": "", "Typewords": ["[]", "int32"] }, { "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "Part", "Docs": "", "Typewords": ["Part"] }] },
 		"EventViewChanges": { "Name": "EventViewChanges", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Changes", "Docs": "", "Typewords": ["[]", "[]", "any"] }] },
 		"ChangeMsgAdd": { "Name": "ChangeMsgAdd", "Docs": "", "Fields": [{ "Name": "MailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UID", "Docs": "", "Typewords": ["UID"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "Flags", "Docs": "", "Typewords": ["Flags"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MessageCountIMAP", "Docs": "", "Typewords": ["uint32"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["uint32"] }, { "Name": "MessageItems", "Docs": "", "Typewords": ["[]", "MessageItem"] }] },
 		"Flags": { "Name": "Flags", "Docs": "", "Fields": [{ "Name": "Seen", "Docs": "", "Typewords": ["bool"] }, { "Name": "Answered", "Docs": "", "Typewords": ["bool"] }, { "Name": "Flagged", "Docs": "", "Typewords": ["bool"] }, { "Name": "Forwarded", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Notjunk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Phishing", "Docs": "", "Typewords": ["bool"] }, { "Name": "MDNSent", "Docs": "", "Typewords": ["bool"] }] },
@@ -335,16 +335,16 @@ var api;
 		"ChangeMailboxSpecialUse": { "Name": "ChangeMailboxSpecialUse", "Docs": "", "Fields": [{ "Name": "MailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "SpecialUse", "Docs": "", "Typewords": ["SpecialUse"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }] },
 		"SpecialUse": { "Name": "SpecialUse", "Docs": "", "Fields": [{ "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }] },
 		"ChangeMailboxKeywords": { "Name": "ChangeMailboxKeywords", "Docs": "", "Fields": [{ "Name": "MailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }] },
-		"ModSeq": { "Name": "ModSeq", "Docs": "", "Values": null },
 		"UID": { "Name": "UID", "Docs": "", "Values": null },
+		"ModSeq": { "Name": "ModSeq", "Docs": "", "Values": null },
 		"Validation": { "Name": "Validation", "Docs": "", "Values": [{ "Name": "ValidationUnknown", "Value": 0, "Docs": "" }, { "Name": "ValidationStrict", "Value": 1, "Docs": "" }, { "Name": "ValidationDMARC", "Value": 2, "Docs": "" }, { "Name": "ValidationRelaxed", "Value": 3, "Docs": "" }, { "Name": "ValidationPass", "Value": 4, "Docs": "" }, { "Name": "ValidationNeutral", "Value": 5, "Docs": "" }, { "Name": "ValidationTemperror", "Value": 6, "Docs": "" }, { "Name": "ValidationPermerror", "Value": 7, "Docs": "" }, { "Name": "ValidationFail", "Value": 8, "Docs": "" }, { "Name": "ValidationSoftfail", "Value": 9, "Docs": "" }, { "Name": "ValidationNone", "Value": 10, "Docs": "" }] },
 		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"ThreadMode": { "Name": "ThreadMode", "Docs": "", "Values": [{ "Name": "ThreadOff", "Value": "off", "Docs": "" }, { "Name": "ThreadOn", "Value": "on", "Docs": "" }, { "Name": "ThreadUnread", "Value": "unread", "Docs": "" }] },
 		"AttachmentType": { "Name": "AttachmentType", "Docs": "", "Values": [{ "Name": "AttachmentIndifferent", "Value": "", "Docs": "" }, { "Name": "AttachmentNone", "Value": "none", "Docs": "" }, { "Name": "AttachmentAny", "Value": "any", "Docs": "" }, { "Name": "AttachmentImage", "Value": "image", "Docs": "" }, { "Name": "AttachmentPDF", "Value": "pdf", "Docs": "" }, { "Name": "AttachmentArchive", "Value": "archive", "Docs": "" }, { "Name": "AttachmentSpreadsheet", "Value": "spreadsheet", "Docs": "" }, { "Name": "AttachmentDocument", "Value": "document", "Docs": "" }, { "Name": "AttachmentPresentation", "Value": "presentation", "Docs": "" }] },
+		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 		"ViewMode": { "Name": "ViewMode", "Docs": "", "Values": [{ "Name": "ModeText", "Value": "text", "Docs": "" }, { "Name": "ModeHTML", "Value": "html", "Docs": "" }, { "Name": "ModeHTMLExt", "Value": "htmlext", "Docs": "" }] },
 		"SecurityResult": { "Name": "SecurityResult", "Docs": "", "Values": [{ "Name": "SecurityResultError", "Value": "error", "Docs": "" }, { "Name": "SecurityResultNo", "Value": "no", "Docs": "" }, { "Name": "SecurityResultYes", "Value": "yes", "Docs": "" }, { "Name": "SecurityResultUnknown", "Value": "unknown", "Docs": "" }] },
 		"Quoting": { "Name": "Quoting", "Docs": "", "Values": [{ "Name": "Default", "Value": "", "Docs": "" }, { "Name": "Bottom", "Value": "bottom", "Docs": "" }, { "Name": "Top", "Value": "top", "Docs": "" }] },
-		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 	};
 	api.parser = {
 		Request: (v) => api.parse("Request", v),
@@ -352,12 +352,16 @@ var api;
 		Filter: (v) => api.parse("Filter", v),
 		NotFilter: (v) => api.parse("NotFilter", v),
 		Page: (v) => api.parse("Page", v),
-		ParsedMessage: (v) => api.parse("ParsedMessage", v),
+		MessageItem: (v) => api.parse("MessageItem", v),
+		Message: (v) => api.parse("Message", v),
+		MessageEnvelope: (v) => api.parse("MessageEnvelope", v),
+		MessageAddress: (v) => api.parse("MessageAddress", v),
+		Domain: (v) => api.parse("Domain", v),
+		Attachment: (v) => api.parse("Attachment", v),
 		Part: (v) => api.parse("Part", v),
 		Envelope: (v) => api.parse("Envelope", v),
 		Address: (v) => api.parse("Address", v),
-		MessageAddress: (v) => api.parse("MessageAddress", v),
-		Domain: (v) => api.parse("Domain", v),
+		ParsedMessage: (v) => api.parse("ParsedMessage", v),
 		FromAddressSettings: (v) => api.parse("FromAddressSettings", v),
 		ComposeMessage: (v) => api.parse("ComposeMessage", v),
 		SubmitMessage: (v) => api.parse("SubmitMessage", v),
@@ -372,10 +376,6 @@ var api;
 		EventViewErr: (v) => api.parse("EventViewErr", v),
 		EventViewReset: (v) => api.parse("EventViewReset", v),
 		EventViewMsgs: (v) => api.parse("EventViewMsgs", v),
-		MessageItem: (v) => api.parse("MessageItem", v),
-		Message: (v) => api.parse("Message", v),
-		MessageEnvelope: (v) => api.parse("MessageEnvelope", v),
-		Attachment: (v) => api.parse("Attachment", v),
 		EventViewChanges: (v) => api.parse("EventViewChanges", v),
 		ChangeMsgAdd: (v) => api.parse("ChangeMsgAdd", v),
 		Flags: (v) => api.parse("Flags", v),
@@ -389,16 +389,16 @@ var api;
 		ChangeMailboxSpecialUse: (v) => api.parse("ChangeMailboxSpecialUse", v),
 		SpecialUse: (v) => api.parse("SpecialUse", v),
 		ChangeMailboxKeywords: (v) => api.parse("ChangeMailboxKeywords", v),
-		ModSeq: (v) => api.parse("ModSeq", v),
 		UID: (v) => api.parse("UID", v),
+		ModSeq: (v) => api.parse("ModSeq", v),
 		Validation: (v) => api.parse("Validation", v),
 		CSRFToken: (v) => api.parse("CSRFToken", v),
 		ThreadMode: (v) => api.parse("ThreadMode", v),
 		AttachmentType: (v) => api.parse("AttachmentType", v),
+		Localpart: (v) => api.parse("Localpart", v),
 		ViewMode: (v) => api.parse("ViewMode", v),
 		SecurityResult: (v) => api.parse("SecurityResult", v),
 		Quoting: (v) => api.parse("Quoting", v),
-		Localpart: (v) => api.parse("Localpart", v),
 	};
 	let defaultOptions = { slicesNullable: true, mapsNullable: true, nullableOptional: true };
 	class Client {
@@ -477,6 +477,14 @@ var api;
 			const paramTypes = [["Request"]];
 			const returnTypes = [];
 			const params = [req];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// MessageItem returns a MessageItem for a message.
+		async MessageItem(msgID) {
+			const fn = "MessageItem";
+			const paramTypes = [["int64"]];
+			const returnTypes = [["MessageItem"]];
+			const params = [msgID];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// ParsedMessage returns enough to render the textual body of a message. It is
@@ -1797,7 +1805,7 @@ const showShortcut = (c) => {
 	shortcutElem.remove();
 	dom._kids(shortcutElem, c);
 	document.body.appendChild(shortcutElem);
-	shortcutTimer = setTimeout(() => {
+	shortcutTimer = window.setTimeout(() => {
 		shortcutElem.remove();
 		shortcutTimer = 0;
 	}, 1500);
@@ -2256,21 +2264,31 @@ const focusPlaceholder = (s) => {
 	];
 };
 // Parse a location hash, with either mailbox or search terms, and optional
-// selected message id. The special "#compose " hash, used for handling
-// "mailto:"-links, must be handled before calling this function.
+// selected message id, and/or draft message to compose. The special "#compose "
+// hash, used for handling "mailto:"-links, must be handled before calling this
+// function.
 //
 // Examples:
 // #Inbox
 // #Inbox,1
+// #Inbox,1,compose:123
 // #search mb:Inbox
 // #search mb:Inbox,1
 const parseLocationHash = (mailboxlistView) => {
 	let hash = decodeURIComponent((window.location.hash || '#').substring(1));
+	// Pick off ",compose:<number>" at the end.
+	let editMsgid = 0;
+	const em = hash.match(/,compose:([0-9]+)$/);
+	if (em) {
+		editMsgid = parseInt(em[1]);
+		hash = hash.substring(0, hash.length - em[0].length);
+	}
+	// Pick off ",<number>" at the end, for selected message.
 	const m = hash.match(/,([0-9]+)$/);
 	let msgid = 0;
 	if (m) {
 		msgid = parseInt(m[1]);
-		hash = hash.substring(0, hash.length - (','.length + m[1].length));
+		hash = hash.substring(0, hash.length - m[0].length);
 	}
 	let initmailbox, initsearch;
 	if (hash.startsWith('search ')) {
@@ -2295,7 +2313,7 @@ const parseLocationHash = (mailboxlistView) => {
 		}
 		notf = newNotFilter();
 	}
-	return [initsearch, msgid, f, notf];
+	return [initsearch, msgid, editMsgid, f, notf];
 };
 // When API calls are made, we start displaying what we're doing after 1 second.
 // Hopefully the command has completed by then, but slow operations, or in case of
@@ -2634,7 +2652,7 @@ const cmdTooltip = async () => {
 	}));
 };
 let composeView = null;
-const compose = (opts, listMailboxes) => {
+const compose = (opts, listMailboxes, setLocationHash) => {
 	log('compose', opts);
 	if (composeView) {
 		// todo: should allow multiple
@@ -2701,6 +2719,8 @@ const compose = (opts, listMailboxes) => {
 		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID);
 		try {
 			draftMessageID = await draftSavePromise;
+			cv.MsgID = draftMessageID;
+			setLocationHash(); // For ',compose:<number>' suffix.
 		}
 		finally {
 			draftSavePromise = Promise.resolve(0);
@@ -2747,6 +2767,7 @@ const compose = (opts, listMailboxes) => {
 		}
 		composeElem.remove();
 		composeView = null;
+		setLocationHash();
 	};
 	const cmdSave = async () => {
 		draftCancelSaveTimer();
@@ -2803,6 +2824,7 @@ const compose = (opts, listMailboxes) => {
 		await client.MessageSubmit(message);
 		composeElem.remove();
 		composeView = null;
+		setLocationHash();
 	};
 	const cmdSend = async () => {
 		await withStatus('Sending email', submit(false), fieldset);
@@ -3209,12 +3231,44 @@ const compose = (opts, listMailboxes) => {
 	else {
 		body.focus();
 	}
-	composeView = {
+	const cv = {
 		root: composeElem,
+		MsgID: draftMessageID,
 		key: keyHandler(shortcuts),
 		unsavedChanges: unsavedChanges,
+		save: cmdSave,
 	};
-	return composeView;
+	composeView = cv;
+	setLocationHash();
+};
+const composeDraft = async (mi, pm, listMailboxes, setLocationHash) => {
+	const m = mi.Message;
+	const draftMailboxID = listMailboxes().find(mb => mb.Draft)?.ID;
+	if (m.MailboxID !== draftMailboxID) {
+		throw new Error('only messages in draft mailbox can be edited');
+	}
+	// Compose based on message. Most information is available, we just need to find
+	// the ID of the stored message this is a reply/forward to, based in In-Reply-To
+	// header.
+	const env = mi.Envelope;
+	let refMsgID = 0;
+	if (env.InReplyTo) {
+		refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo));
+	}
+	const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i);
+	const opts = {
+		from: (env.From || []),
+		to: (env.To || []).map(a => formatAddress(a)),
+		cc: (env.CC || []).map(a => formatAddress(a)),
+		bcc: (env.BCC || []).map(a => formatAddress(a)),
+		replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
+		subject: env.Subject,
+		isForward: isForward,
+		body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+		responseMessageID: refMsgID,
+		draftMessageID: m.ID,
+	};
+	compose(opts, listMailboxes, setLocationHash);
 };
 // Show popover to edit labels for msgs.
 const labelsPopover = (e, msgs, possibleLabels) => {
@@ -3684,7 +3738,7 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 let attachmentView = null;
 // MsgView is the display of a single message.
 // refineKeyword is called when a user clicks a label, to filter on those.
-const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoaded, refineKeyword, parsedMessageOpt) => {
+const newMsgView = (miv, msglistView, listMailboxes, setLocationHash, possibleLabels, messageLoaded, refineKeyword, parsedMessageOpt) => {
 	const mi = miv.messageitem;
 	const m = mi.Message;
 	const fromAddress = mi.Envelope.From && mi.Envelope.From.length === 1 ? formatEmail(mi.Envelope.From[0]) : '';
@@ -3789,7 +3843,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			// for cross-posted messages in other mailboxes.
 			archiveReferenceMailboxID: msglistView.activeMailbox()?.ID || m.MailboxID,
 		};
-		compose(opts, listMailboxes);
+		compose(opts, listMailboxes, setLocationHash);
 	};
 	const reply = async (all) => {
 		const contains = (l, a) => !!l.find(e => equalAddress(e, a));
@@ -3865,32 +3919,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}
 	};
 	const cmdComposeDraft = async () => {
-		if (m.MailboxID !== draftMailboxID) {
-			return;
-		}
-		// Compose based on message. Most information is available, we just need to find
-		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
-		// header.
-		const env = mi.Envelope;
-		let refMsgID = 0;
-		if (env.InReplyTo) {
-			refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo));
-		}
 		const pm = await parsedMessagePromise;
-		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i);
-		const opts = {
-			from: (env.From || []),
-			to: (env.To || []).map(a => formatAddress(a)),
-			cc: (env.CC || []).map(a => formatAddress(a)),
-			bcc: (env.BCC || []).map(a => formatAddress(a)),
-			replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
-			subject: env.Subject,
-			isForward: isForward,
-			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
-			responseMessageID: refMsgID,
-			draftMessageID: m.ID,
-		};
-		compose(opts, listMailboxes);
+		composeDraft(mi, pm, listMailboxes, setLocationHash);
 	};
 	const cmdToggleHeaders = async () => {
 		settingsPut({ ...settings, showAllHeaders: !settings.showAllHeaders });
@@ -4613,7 +4643,7 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 		else if (effselected.length === 1) {
 			msgElem.classList.toggle('loading', true);
 			const loaded = () => { msgElem.classList.toggle('loading', false); };
-			msgView = newMsgView(effselected[0], mlv, listMailboxes, possibleLabels, loaded, refineKeyword, parsedMessageOpt);
+			msgView = newMsgView(effselected[0], mlv, listMailboxes, setLocationHash, possibleLabels, loaded, refineKeyword, parsedMessageOpt);
 			dom._kids(msgElem, msgView);
 		}
 		else {
@@ -6429,14 +6459,17 @@ const init = async () => {
 	};
 	const setLocationHash = () => {
 		const msgid = requestMsgID || msglistView.activeMessageID();
-		const msgidstr = msgid ? ',' + msgid : '';
+		let trail = msgid ? ',' + msgid : '';
+		if (composeView && composeView.MsgID) {
+			trail += ',compose:' + composeView.MsgID;
+		}
 		let hash;
 		const mb = mailboxlistView && mailboxlistView.activeMailbox();
 		if (mb) {
-			hash = '#' + mb.Name + msgidstr;
+			hash = '#' + mb.Name + trail;
 		}
 		else if (search.active) {
-			hash = '#search ' + search.query + msgidstr;
+			hash = '#search ' + search.query + trail;
 		}
 		else {
 			hash = '#';
@@ -6721,7 +6754,7 @@ const init = async () => {
 		if (sig) {
 			body += '\n\n' + sig;
 		}
-		compose({ body: body, editOffset: 0 }, listMailboxes);
+		compose({ body: body, editOffset: 0 }, listMailboxes, setLocationHash);
 	};
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox');
@@ -7013,7 +7046,7 @@ const init = async () => {
 					if (opts.subject && opts.subject.includes('=?')) {
 						opts.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(opts.subject));
 					}
-					compose(opts, listMailboxes);
+					compose(opts, listMailboxes, setLocationHash);
 				})();
 			}
 			catch (err) {
@@ -7022,7 +7055,7 @@ const init = async () => {
 			}
 			return;
 		}
-		const [search, msgid, f, notf] = parseLocationHash(mailboxlistView);
+		const [search, msgid, editMsgid, f, notf] = parseLocationHash(mailboxlistView);
 		requestMsgID = msgid;
 		if (search) {
 			mailboxlistView.closeMailbox();
@@ -7032,12 +7065,27 @@ const init = async () => {
 			unloadSearch();
 			await mailboxlistView.openMailboxID(f.MailboxID, false);
 		}
+		if (editMsgid) {
+			// Open compose window for draft message in parallel, not failing on error.
+			(async () => {
+				try {
+					const [mi, pm] = await withStatus('Loading compose message', Promise.all([client.MessageItem(editMsgid), client.ParsedMessage(editMsgid)]));
+					await composeDraft(mi, pm, listMailboxes, setLocationHash);
+				}
+				catch (err) {
+					window.alert('Error opening draft message: ' + errmsg(err));
+				}
+			})();
+		}
 		await withStatus('Requesting messages', requestNewView(false, f, notf));
 	});
 	let eventSource = null; // If set, we have a connection.
 	let connecting = false; // Check before reconnecting.
 	let noreconnect = false; // Set after one reconnect attempt fails.
 	let noreconnectTimer = 0; // Timer ID for resetting noreconnect.
+	// Set to timer when we plan to reconnect after a server shutdown. Cleared when we
+	// try to connect.
+	let shutdownReconnectTimer = 0;
 	// Don't show disconnection just before user navigates away.
 	let leaving = false;
 	window.addEventListener('beforeunload', (e) => {
@@ -7080,7 +7128,14 @@ const init = async () => {
 	// Set to compose options when we were opened with a mailto URL. We open the
 	// compose window after we received the "start" message with our addresses.
 	let openComposeOptions;
+	// Set during connect when we need to open a message for composing after getting
+	// connected.
+	let connectOpenComposeMessageID = 0;
 	const connect = async (isreconnect) => {
+		if (shutdownReconnectTimer) {
+			window.clearTimeout(shutdownReconnectTimer);
+			shutdownReconnectTimer = 0;
+		}
 		connectionElem.classList.toggle('loading', true);
 		dom._kids(connectionElem);
 		connectionElem.classList.toggle('loading', false);
@@ -7109,7 +7164,10 @@ const init = async () => {
 			}
 			window.location.hash = '';
 		}
-		let [searchQuery, msgid, f, notf] = parseLocationHash(mailboxlistView);
+		let [searchQuery, msgid, editMsgid, f, notf] = parseLocationHash(mailboxlistView);
+		if (editMsgid && !composeView) {
+			connectOpenComposeMessageID = editMsgid;
+		}
 		requestMsgID = msgid;
 		requestFilter = f;
 		requestNotFilter = notf;
@@ -7163,7 +7221,7 @@ const init = async () => {
 			dom._kids(statusElem);
 			dom._kids(connectionElem);
 		});
-		const sseError = (errmsg) => {
+		const sseError = (errmsg, addNotRetrying) => {
 			sseID = 0;
 			eventSource.close();
 			eventSource = null;
@@ -7182,7 +7240,11 @@ const init = async () => {
 			document.title = ['(not connected)', loginAddress ? (loginAddress.User + '@' + formatDomain(loginAddress.Domain)) : '', 'Mox Webmail'].filter(s => s).join(' - ');
 			dom._kids(connectionElem);
 			if (noreconnect) {
-				dom._kids(statusElem, capitalizeFirst(errmsg) + ', not automatically retrying. ');
+				let msg = capitalizeFirst(errmsg);
+				if (addNotRetrying) {
+					msg += ', not automatically retrying. ';
+				}
+				dom._kids(statusElem, msg);
 				showNotConnected();
 				listloadingElem.remove();
 				listendElem.remove();
@@ -7194,12 +7256,20 @@ const init = async () => {
 		// EventSource-connection error. No details.
 		eventSource.addEventListener('error', (e) => {
 			log('eventsource error', { e }, JSON.stringify(e));
-			sseError('Connection failed');
+			sseError('Connection failed', true);
 		});
 		// Fatal error on the server side, error message propagated, but connection needs to be closed.
 		eventSource.addEventListener('fatalErr', (e) => {
 			const errmsg = JSON.parse(e.data) || '(no error message)';
-			sseError('Server error: "' + errmsg + '"');
+			sseError('Server error: "' + errmsg + '"', true);
+		});
+		// Server is stopping, we'll assume for a restart, and will try to reconnect with some jitter.
+		eventSource.addEventListener('serverShutdown', (_) => {
+			noreconnect = true;
+			sseError('Server shutting down, will try to reconnect in a few seconds', false);
+			shutdownReconnectTimer = window.setTimeout(() => {
+				connect(true);
+			}, 3000 + Math.floor(Math.random() * 5000));
 		});
 		const checkParse = (fn) => {
 			try {
@@ -7213,7 +7283,18 @@ const init = async () => {
 		eventSource.addEventListener('start', (e) => {
 			const data = JSON.parse(e.data);
 			if (lastServerVersion && data.Version !== lastServerVersion) {
-				if (window.confirm('Server has been updated to a new version. Reload?')) {
+				let reload = true;
+				// Save changes to draft before reload.
+				if (composeView && composeView.unsavedChanges()) {
+					try {
+						withStatus('Saving before reloading due to server update', composeView.save());
+					}
+					catch (err) {
+						window.alert('Server was updated, and webmail wants to reload to get the latest changes, but encountered an error while saving changes your open draft message. Please reload at your earliest convenience.');
+						reload = false;
+					}
+				}
+				if (reload) {
 					// Cannot use location.reload, must use a cache buster, otherwise browser may use
 					// the same HTML/JS. We remove the '?v=...' again on page load.
 					const u = URL.parse(window.location.href);
@@ -7256,8 +7337,22 @@ const init = async () => {
 					if (openComposeOptions.subject && openComposeOptions.subject.includes('=?')) {
 						openComposeOptions.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(openComposeOptions.subject));
 					}
-					compose(openComposeOptions, listMailboxes);
+					compose(openComposeOptions, listMailboxes, setLocationHash);
 					openComposeOptions = undefined;
+				})();
+			}
+			if (connectOpenComposeMessageID) {
+				// Open compose window for draft message in parallel, not failing on error.
+				(async () => {
+					const editMsgid = connectOpenComposeMessageID;
+					connectOpenComposeMessageID = 0;
+					try {
+						const [mi, pm] = await withStatus('Loading compose message', Promise.all([client.MessageItem(editMsgid), client.ParsedMessage(editMsgid)]));
+						await composeDraft(mi, pm, listMailboxes, setLocationHash);
+					}
+					catch (err) {
+						window.alert('Error opening draft message: ' + errmsg(err));
+					}
 				})();
 			}
 			let mailboxName = start.MailboxName;
@@ -7280,7 +7375,7 @@ const init = async () => {
 			// We'll clear noreconnect when we've held a connection for 5 seconds. Firefox
 			// disconnects often, on any network change including with docker container starts,
 			// such as for integration tests.
-			noreconnectTimer = setTimeout(() => {
+			noreconnectTimer = window.setTimeout(() => {
 				noreconnect = false;
 				noreconnectTimer = 0;
 			}, 5 * 1000);

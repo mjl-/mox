@@ -163,6 +163,24 @@ func (Webmail) Request(ctx context.Context, req Request) {
 	sse.Request <- req
 }
 
+// MessageItem returns a MessageItem for a message.
+func (Webmail) MessageItem(ctx context.Context, msgID int64) (mi MessageItem) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := reqInfo.Log
+	acc := reqInfo.Account
+
+	xdbread(ctx, acc, func(tx *bstore.Tx) {
+		m := xmessageID(ctx, tx, msgID)
+
+		state := msgState{acc: acc}
+		defer state.clear()
+		var err error
+		mi, err = messageItem(log, m, &state, nil)
+		xcheckf(ctx, err, "parsing message")
+	})
+	return
+}
+
 // ParsedMessage returns enough to render the textual body of a message. It is
 // assumed the client already has other fields through MessageItem.
 func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage) {

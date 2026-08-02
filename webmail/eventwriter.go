@@ -74,7 +74,7 @@ func (ew *eventWriter) write(name string, v any) error {
 // Schedule an event for writing to the connection. If events get a delay, this
 // function still returns immediately.
 func (ew *eventWriter) xsendEvent(ctx context.Context, log mlog.Log, name string, v any) {
-	if name != "fatalErr" {
+	if name != "fatalErr" && name != "serverShutdown" {
 		if _, err := store.SessionUse(ctx, log, ew.accountName, ew.sessionToken, ""); err != nil {
 			ew.xsendEvent(ctx, log, "fatalErr", "session no longer valid")
 			return
