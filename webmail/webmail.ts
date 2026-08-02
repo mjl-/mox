@@ -4934,6 +4934,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			focus = null
 			selected = []
 			dom._kids(msgElem)
+			msgView = null
 			setLocationHash()
 		},
 

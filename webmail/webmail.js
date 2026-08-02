@@ -5323,6 +5323,7 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 			focus = null;
 			selected = [];
 			dom._kids(msgElem);
+			msgView = null;
 			setLocationHash();
 		},
 		unselect: () => {
