@@ -83,6 +83,15 @@ Enable consistency checking in UI updates:
 - todo: mobile-friendly version. should perhaps be a completely different app, because it is so different.
 */
 
+// If we had to reload with a cache buster after a server update, the URL will
+// start with ?v=.... Remove it and load again.
+const reloadURL = URL.parse(window.location.href)
+if (reloadURL?.search.startsWith('?v=')) {
+	const l = reloadURL.search.split('&', 2)
+	reloadURL.search = l.length === 2 ? '?'+l[1] : ''
+	window.location.href = reloadURL.toString()
+}
+
 class ConsistencyError extends Error {
 }
 
@@ -7487,7 +7496,11 @@ const init = async () => {
 			const data = JSON.parse(e.data)
 			if (lastServerVersion && data.Version !== lastServerVersion) {
 				if (window.confirm('Server has been updated to a new version. Reload?')) {
-					window.location.reload()
+					// Cannot use location.reload, must use a cache buster, otherwise browser may use
+					// the same HTML/JS. We remove the '?v=...' again on page load.
+					const u = URL.parse(window.location.href)!
+					u.search = '?v='+data.Version + (u.search ? '&'+u.search.substring(1) : '')
+					window.location.href = u.toString()
 					return
 				}
 			}
