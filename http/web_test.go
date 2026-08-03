@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -72,4 +73,49 @@ func TestServeHTTP(t *testing.T) {
 	test("GET", "http://localhost/", http.StatusNotFound, "", nil)
 	test("GET", "http://mox.example/", http.StatusNotFound, "", nil)
 	test("GET", "http://mail.mox.example/", http.StatusNotFound, "", nil)
+}
+
+func TestHealthz(t *testing.T) {
+	os.RemoveAll("../testdata/web/data")
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/web/mox.conf")
+	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
+	mox.MustLoadConfig(true, false)
+
+	portSrvs := portServes("local", mox.Conf.Static.Listeners["local"])
+	srv := portSrvs[80]
+
+	// /healthz returns 200 when not shutting down.
+	req := httptest.NewRequest("GET", "http://localhost/healthz", nil)
+	rw := httptest.NewRecorder()
+	rw.Body = &bytes.Buffer{}
+	srv.ServeHTTP(rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("healthz: got status %d, expected %d", rw.Code, http.StatusOK)
+	}
+	if rw.Body.String() != "ok" {
+		t.Fatalf("healthz: got body %q, expected %q", rw.Body.String(), "ok")
+	}
+
+	// /healthz returns 503 after shutdown is signaled.
+	origCtx, origCancel := mox.Shutdown, mox.ShutdownCancel
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+	mox.ShutdownCancel() // Signal shutdown.
+	req = httptest.NewRequest("GET", "http://localhost/healthz", nil)
+	rw = httptest.NewRecorder()
+	rw.Body = &bytes.Buffer{}
+	srv.ServeHTTP(rw, req)
+	if rw.Code != http.StatusServiceUnavailable {
+		t.Fatalf("healthz during shutdown: got status %d, expected %d", rw.Code, http.StatusServiceUnavailable)
+	}
+	// Restore original shutdown context.
+	mox.Shutdown, mox.ShutdownCancel = origCtx, origCancel
+
+	// POST to /healthz returns 405.
+	req = httptest.NewRequest("POST", "http://localhost/healthz", nil)
+	rw = httptest.NewRecorder()
+	rw.Body = &bytes.Buffer{}
+	srv.ServeHTTP(rw, req)
+	if rw.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("healthz POST: got status %d, expected %d", rw.Code, http.StatusMethodNotAllowed)
+	}
 }
