@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# Author: Thorsten Mühlfelder
+
+# PROVIDE: mox
+# REQUIRE: FILESYSTEMS netif
+# KEYWORD: shutdown
+
+# To enable mox run: service mox enable
+# Or add the following lines to /etc/rc.conf to enable mox:
+# mox_enable="YES"
+
+# Note: mox defaults to drop privileges to a user called mox
+
+# Optional settings:
+# mox_logfile (string):    Full path to the mox log file (/var/log/mox)
+# mox_workdir (string):    Directory where mox config and data can be found (/home/mox)
+# mox_flags (string):      Extra flags passed to mox
+
+. /etc/rc.subr
+
+name=mox
+rcvar=mox_enable
+
+load_rc_config $name
+
+: ${mox_enable:=NO}
+: ${mox_logfile:=/var/log/mox.log}
+: ${mox_workdir:=/home/mox}
+: ${mox_flags:=""}
+
+pidfile=/var/run/mox.pid
+daemonpidfile=/var/run/daemon_mox.pid
+procname=/usr/local/bin/mox
+
+command=/usr/sbin/daemon
+command_args="--child-pidfile ${pidfile} --supervisor-pidfile ${daemonpidfile} --sighup --output-file ${mox_logfile}"
+
+start_cmd=mox_start
+start_precmd=mox_startprecmd
+
+mox_startprecmd() {
+	if [ ! -d "${mox_workdir}" ]; then
+		echo "Error: ${mox_workdir} not found."
+		exit 1
+	fi
+	if [ ! -f "${mox_workdir}/config/mox.conf" ]; then
+		echo "Error: mox.conf not found. First run quickstart:"
+		echo "  cd ${mox_workdir}"
+		echo "  mox quickstart postmaster@example.com"
+		exit 1
+	fi
+}
+
+mox_start() {
+	echo "Starting ${name}."
+	if [ -d ${mox_workdir} ]; then
+		cd "${mox_workdir}"
+		${command} ${command_args} ${procname} serve ${mox_flags}
+	else
+		echo "Error: ${mox_workdir} not found."
+		exit 1
+	fi
+}
+
+run_rc_command $1
