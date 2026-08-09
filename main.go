@@ -148,12 +148,14 @@ var commands = []struct {
 	{"config describe-domains", cmdConfigDescribeDomains},
 	{"config describe-static", cmdConfigDescribeStatic},
 	{"config account list", cmdConfigAccountList},
+	{"config account addresses", cmdConfigAccountAddresses},
 	{"config account add", cmdConfigAccountAdd},
 	{"config account rm", cmdConfigAccountRemove},
 	{"config account disable", cmdConfigAccountDisable},
 	{"config account enable", cmdConfigAccountEnable},
 	{"config address add", cmdConfigAddressAdd},
 	{"config address rm", cmdConfigAddressRemove},
+	{"config address account", cmdConfigAddressAccount},
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
 	{"config domain disable", cmdConfigDomainDisable},
@@ -1021,6 +1023,30 @@ func ctlcmdConfigAccountList(ctl *ctl) {
 	ctl.xstreamto(os.Stdout)
 }
 
+func cmdConfigAccountAddresses(c *cmd) {
+	c.help = `List all addresses for an account.
+
+Each address is printed on a line.
+An address starting with an "@" indicate it is a catchall address for the domain.
+
+Does not check whether account is disabled.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAccountAddresses(xctl(), args[0])
+}
+
+func ctlcmdConfigAccountAddresses(ctl *ctl, account string) {
+	ctl.xwrite("accountaddresses")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
 func cmdConfigAccountDisable(c *cmd) {
 	c.params = "account message"
 	c.help = `Disable login for an account, showing message to users when they try to login.
@@ -1305,6 +1331,32 @@ func ctlcmdConfigAddressRemove(ctl *ctl, address string) {
 	ctl.xwrite(address)
 	ctl.xreadok()
 	fmt.Println("address removed")
+}
+
+func cmdConfigAddressAccount(c *cmd) {
+	c.params = "address"
+	c.help = `Print the account an address belongs to.
+
+Catchall addresses and the account catch all separator are considered when
+looking up the account.
+
+Does not check whether account is disabled.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAddressAccount(xctl(), args[0])
+}
+
+func ctlcmdConfigAddressAccount(ctl *ctl, address string) {
+	ctl.xwrite("addressaccount")
+	ctl.xwrite(address)
+	ctl.xreadok()
+	account := ctl.xread()
+	fmt.Println(account)
 }
 
 func cmdConfigDNSRecords(c *cmd) {

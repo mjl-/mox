@@ -64,12 +64,14 @@ any parameters. Followed by the help and usage information for each command.
 	mox config describe-domains >domains.conf
 	mox config describe-static >mox.conf
 	mox config account list
+	mox config account addresses
 	mox config account add account address
 	mox config account rm account
 	mox config account disable account message
 	mox config account enable account
 	mox config address add address account
 	mox config address rm address
+	mox config address account address
 	mox config domain add [-disabled] domain account [localpart]
 	mox config domain rm domain
 	mox config domain disable domain
@@ -964,6 +966,17 @@ information, such as "(disabled)".
 
 	usage: mox config account list
 
+# mox config account addresses
+
+List all addresses for an account.
+
+Each address is printed on a line.
+An address starting with an "@" indicate it is a catchall address for the domain.
+
+Does not check whether account is disabled.
+
+	usage: mox config account addresses
+
 # mox config account add
 
 Add an account with an email address and reload the configuration.
@@ -1020,6 +1033,17 @@ Remove an address and reload the configuration.
 Incoming email for this address will be rejected after removing an address.
 
 	usage: mox config address rm address
+
+# mox config address account
+
+Print the account an address belongs to.
+
+Catchall addresses and the account catch all separator are considered when
+looking up the account.
+
+Does not check whether account is disabled.
+
+	usage: mox config address account address
 
 # mox config domain add
 
