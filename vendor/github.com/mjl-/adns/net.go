@@ -152,10 +152,10 @@ func (e *DNSError) Error() string {
 
 // Timeout reports whether the DNS lookup is known to have timed out.
 // This is not always known; a DNS lookup may fail due to a timeout
-// and return a DNSError for which Timeout returns false.
+// and return a [DNSError] for which Timeout returns false.
 func (e *DNSError) Timeout() bool { return e.IsTimeout }
 
 // Temporary reports whether the DNS error is known to be temporary.
 // This is not always known; a DNS lookup may fail due to a temporary
-// error and return a DNSError for which Temporary returns false.
+// error and return a [DNSError] for which Temporary returns false.
 func (e *DNSError) Temporary() bool { return e.IsTimeout || e.IsTemporary }

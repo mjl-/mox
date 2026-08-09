@@ -11,6 +11,7 @@ package adns
 import (
 	"net"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/mjl-/adns/internal/bytealg"
@@ -79,7 +80,7 @@ func dnsReadConfig(filename string) *dnsConfig {
 		case "options": // magic options
 			for _, s := range f[1:] {
 				switch {
-				case hasPrefix(s, "ndots:"):
+				case strings.HasPrefix(s, "ndots:"):
 					n, _, _ := dtoi(s[6:])
 					if n < 0 {
 						n = 0
@@ -87,13 +88,13 @@ func dnsReadConfig(filename string) *dnsConfig {
 						n = 15
 					}
 					conf.ndots = n
-				case hasPrefix(s, "timeout:"):
+				case strings.HasPrefix(s, "timeout:"):
 					n, _, _ := dtoi(s[8:])
 					if n < 1 {
 						n = 1
 					}
 					conf.timeout = time.Duration(n) * time.Second
-				case hasPrefix(s, "attempts:"):
+				case strings.HasPrefix(s, "attempts:"):
 					n, _, _ := dtoi(s[9:])
 					if n < 1 {
 						n = 1
@@ -174,10 +175,6 @@ func dnsDefaultSearch() []string {
 		return []string{ensureRooted(hn[i+1:])}
 	}
 	return nil
-}
-
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
 func ensureRooted(s string) string {

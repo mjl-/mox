@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,7 +32,6 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 
 	"github.com/mjl-/adns/internal/bytealg"
-	"github.com/mjl-/adns/internal/itoa"
 )
 
 const (
@@ -416,7 +416,11 @@ type resolverConfig struct {
 var resolvConf resolverConfig
 
 func getSystemDNSConfig() *dnsConfig {
-	resolvConf.tryUpdate("/etc/resolv.conf")
+	return getSystemDNSConfigNamed("/etc/resolv.conf")
+}
+
+func getSystemDNSConfigNamed(path string) *dnsConfig {
+	resolvConf.tryUpdate(path)
 	return resolvConf.dnsConfig.Load()
 }
 
@@ -432,13 +436,28 @@ func (conf *resolverConfig) init() {
 	conf.ch = make(chan struct{}, 1)
 }
 
+// distantFuture is a sentinel time used for tests to signal that
+// resolv.conf should not be rechecked.
+var distantFuture = time.Date(3000, 1, 2, 3, 4, 5, 6, time.UTC)
+
 // tryUpdate tries to update conf with the named resolv.conf file.
 // The name variable only exists for testing. It is otherwise always
 // "/etc/resolv.conf".
 func (conf *resolverConfig) tryUpdate(name string) {
 	conf.initOnce.Do(conf.init)
 
-	if conf.dnsConfig.Load().noReload {
+	dc := conf.dnsConfig.Load()
+
+	// Currently we should never have a config that does not have any
+	// available servers to query, since in such cases the servers field
+	// is set to [defaultNS], see dnsReadConfig.
+	// This assertion main purpose is for testing, such that we never set
+	// the mocked dnsConfig in such way.
+	if len(dc.servers) == 0 {
+		panic("unreachable")
+	}
+
+	if dc.noReload {
 		return
 	}
 
@@ -449,7 +468,19 @@ func (conf *resolverConfig) tryUpdate(name string) {
 	defer conf.releaseSema()
 
 	now := time.Now()
-	if conf.lastChecked.After(now.Add(-5 * time.Second)) {
+
+	// Only recheck the resolv.conf when:
+	// - expired (last re-check was more that 5 seconds ago)
+	// - the default nameservers are used (the last parse could not load
+	//   resolv.conf, or it did not contain any nameservers)
+	// - rechecks are not disabled (only possible in case of testing)
+	//
+	// Note: We only do one check at a time. Other concurrent requests might
+	// still use the previous (outdated) version of the configuration file.
+	expired := now.After(conf.lastChecked.Add(5 * time.Second))
+	rechecksEnabled := conf.lastChecked != distantFuture // for testing purposes
+	recheck := (expired || dc.isDefaultNS()) && rechecksEnabled
+	if !recheck {
 		return
 	}
 	conf.lastChecked = now
@@ -547,9 +578,8 @@ func avoidDNS(name string) bool {
 // nameList returns a list of names for sequential DNS queries.
 func (conf *dnsConfig) nameList(name string) []string {
 	// Check name length (see isDomainName).
-	l := len(name)
-	rooted := l > 0 && name[l-1] == '.'
-	if l > 254 || l == 254 && !rooted {
+	rooted := len(name) > 0 && name[len(name)-1] == '.'
+	if len(name) > 254 || len(name) == 254 && !rooted {
 		return nil
 	}
 
@@ -563,7 +593,6 @@ func (conf *dnsConfig) nameList(name string) []string {
 
 	hasNdots := bytealg.CountString(name, '.') >= conf.ndots
 	name += "."
-	l++
 
 	// Build list of search choices.
 	names := make([]string, 0, 1+len(conf.search))
@@ -611,7 +640,7 @@ func (o hostLookupOrder) String() string {
 	if s, ok := lookupOrderName[o]; ok {
 		return s
 	}
-	return "hostLookupOrder=" + itoa.Itoa(int(o)) + "??"
+	return "hostLookupOrder=" + strconv.Itoa(int(o)) + "??"
 }
 
 func (r *Resolver) goLookupHostOrder(ctx context.Context, name string, order hostLookupOrder, conf *dnsConfig) (addrs []string, result Result, err error) {
@@ -686,7 +715,7 @@ func (r *Resolver) goLookupIPCNAMEOrder(ctx context.Context, network, name strin
 		p      dnsmessage.Parser
 		server string
 		result Result
-		error
+		error  error
 	}
 
 	if conf == nil {
