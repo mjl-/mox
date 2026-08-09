@@ -154,7 +154,8 @@ type Manager struct {
 	// RenewBefore optionally specifies how early certificates should
 	// be renewed before they expire.
 	//
-	// If zero, they're renewed 30 days before expiration.
+	// If zero, they're renewed at the lesser of 30 days or
+	// 1/3 of the certificate lifetime.
 	RenewBefore time.Duration
 
 	// Client is used to perform low-level operations, such as account registration
@@ -272,10 +273,6 @@ func (m *Manager) TLSConfig() *tls.Config {
 // If GetCertificate is used directly, instead of via Manager.TLSConfig, package users will
 // also have to add acme.ALPNProto to NextProtos for tls-alpn-01, or use HTTPHandler for http-01.
 func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	if m.Prompt == nil {
-		return nil, errors.New("acme/autocert: Manager.Prompt not set")
-	}
-
 	name := hello.ServerName
 	if name == "" {
 		return nil, errors.New("acme/autocert: missing server name")
@@ -489,7 +486,7 @@ func (m *Manager) cert(ctx context.Context, ck certKey) (*tls.Certificate, error
 		leaf: cert.Leaf,
 	}
 	m.state[ck] = s
-	m.startRenew(ck, s.key, s.leaf.NotAfter)
+	m.startRenew(ck, s.key, s.leaf.NotBefore, s.leaf.NotAfter)
 	return cert, nil
 }
 
@@ -592,24 +589,21 @@ func encodeECDSAKey(w io.Writer, key *ecdsa.PrivateKey) error {
 // If the domain is already being verified, it waits for the existing verification to complete.
 // Either way, createCert blocks for the duration of the whole process.
 func (m *Manager) createCert(ctx context.Context, ck certKey) (*tls.Certificate, error) {
-	// TODO: maybe rewrite this whole piece using sync.Once
-	state, err := m.certState(ck)
+	state, owner, err := m.certState(ck)
 	if err != nil {
 		return nil, err
 	}
-	// state may exist if another goroutine is already working on it
-	// in which case just wait for it to finish
-	if !state.locked {
+	// If another goroutine is already working on this state, wait for it
+	// to finish by taking the read lock
+	if !owner {
 		state.RLock()
 		defer state.RUnlock()
 		return state.tlscert()
 	}
 
-	// We are the first; state is locked.
-	// Unblock the readers when domain ownership is verified
-	// and we got the cert or the process failed.
+	// We are the first to work on this certKey, so state is write-locked.
+	// Unblock the readers when our work is complete.
 	defer state.Unlock()
-	state.locked = false
 
 	der, leaf, err := m.authorizedCert(ctx, state.key, ck)
 	if err != nil {
@@ -635,14 +629,19 @@ func (m *Manager) createCert(ctx context.Context, ck certKey) (*tls.Certificate,
 	}
 	state.cert = der
 	state.leaf = leaf
-	m.startRenew(ck, state.key, state.leaf.NotAfter)
+	m.startRenew(ck, state.key, state.leaf.NotBefore, state.leaf.NotAfter)
 	return state.tlscert()
 }
 
-// certState returns a new or existing certState.
-// If a new certState is returned, state.exist is false and the state is locked.
+// certState returns a new or existing certState along with a boolean
+// indicating whether the caller is the owner of the state.
+//
+// The owner of the state is responsible for performing the ACME work and
+// must unlock the state's write lock when done. Non-owner callers should
+// wait on the state's read lock for the owner to finish.
+//
 // The returned error is non-nil only in the case where a new state could not be created.
-func (m *Manager) certState(ck certKey) (*certState, error) {
+func (m *Manager) certState(ck certKey) (*certState, bool, error) {
 	m.stateMu.Lock()
 	defer m.stateMu.Unlock()
 	if m.state == nil {
@@ -650,7 +649,7 @@ func (m *Manager) certState(ck certKey) (*certState, error) {
 	}
 	// existing state
 	if state, ok := m.state[ck]; ok {
-		return state, nil
+		return state, false, nil
 	}
 
 	// new locked state
@@ -680,16 +679,13 @@ func (m *Manager) certState(ck certKey) (*certState, error) {
 		key, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	state := &certState{
-		key:    key,
-		locked: true,
-	}
+	state := &certState{key: key}
 	state.Lock() // will be unlocked by m.certState caller
 	m.state[ck] = state
-	return state, nil
+	return state, true, nil
 }
 
 // authorizedCert starts the domain ownership verification process and requests a new cert upon success.
@@ -962,7 +958,7 @@ func httpTokenCacheKey(tokenPath string) string {
 //
 // The key argument is a certificate private key.
 // The exp argument is the cert expiration time (NotAfter).
-func (m *Manager) startRenew(ck certKey, key crypto.Signer, exp time.Time) {
+func (m *Manager) startRenew(ck certKey, key crypto.Signer, notBefore, notAfter time.Time) {
 	m.renewalMu.Lock()
 	defer m.renewalMu.Unlock()
 	if m.renewal[ck] != nil {
@@ -974,7 +970,7 @@ func (m *Manager) startRenew(ck certKey, key crypto.Signer, exp time.Time) {
 	}
 	dr := &domainRenewal{m: m, ck: ck, key: key}
 	m.renewal[ck] = dr
-	dr.start(exp)
+	dr.start(notBefore, notAfter)
 }
 
 // stopRenew stops all currently running cert renewal timers.
@@ -1082,13 +1078,6 @@ func (m *Manager) hostPolicy() HostPolicy {
 	return defaultHostPolicy
 }
 
-func (m *Manager) renewBefore() time.Duration {
-	if m.RenewBefore > renewJitter {
-		return m.RenewBefore
-	}
-	return 720 * time.Hour // 30 days
-}
-
 func (m *Manager) now() time.Time {
 	if m.nowFunc != nil {
 		return m.nowFunc()
@@ -1099,10 +1088,9 @@ func (m *Manager) now() time.Time {
 // certState is ready when its mutex is unlocked for reading.
 type certState struct {
 	sync.RWMutex
-	locked bool              // locked for read/write
-	key    crypto.Signer     // private key for cert
-	cert   [][]byte          // DER encoding
-	leaf   *x509.Certificate // parsed cert[0]; always non-nil if cert != nil
+	key  crypto.Signer     // private key for cert
+	cert [][]byte          // DER encoding
+	leaf *x509.Certificate // parsed cert[0]; always non-nil if cert != nil
 }
 
 // tlscert creates a tls.Certificate from s.key and s.cert.

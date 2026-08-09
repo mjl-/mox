@@ -26,8 +26,8 @@ github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 h1:jWpvCLoY8Z/e3VKvls
 github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0/go.mod h1:QUyp042oQthUoa9bqDv0ER0wrtXnBruoNd7aNjkbP+k=
 github.com/mjl-/adns v0.0.0-20250321173553-ab04b05bdfea h1:8dftsVL1tHhRksXzFZRhSJ7gSlcy/t87Nvucs3JnTGE=
 github.com/mjl-/adns v0.0.0-20250321173553-ab04b05bdfea/go.mod h1:rWZMqGA2HoBm5b5q/A5J8u1sSVuEYh6zBz9tMoVs+RU=
-github.com/mjl-/autocert v0.0.0-20250321204043-abab2b936e31 h1:6MFGOLPGf6VzHWkKv8waSzJMMS98EFY2LVKPRHffCyo=
-github.com/mjl-/autocert v0.0.0-20250321204043-abab2b936e31/go.mod h1:taMFU86abMxKLPV4Bynhv8enbYmS67b8LG80qZv2Qus=
+github.com/mjl-/autocert v0.0.0-20260807073006-86291c3fc55e h1:6HNDMgvF/qw+/ReA8k5U6r3cesDdXi0N3vuGkyTuKjM=
+github.com/mjl-/autocert v0.0.0-20260807073006-86291c3fc55e/go.mod h1:T5Rh/n4Lk8i1MydIPt09qt74RtN1Q4DXnH8D3vgL2KM=
 github.com/mjl-/bstore v0.0.10 h1:fYLQy3EdgXvRHoa8Q3sXMAjZf+uQLRbsh9rYjGep/t4=
 github.com/mjl-/bstore v0.0.10/go.mod h1:QzqlAZAVRKwyojCRd9v25viFsMxK5UmIbdxgEyHdK6c=
 github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978 h1:Eg5DfI3/00URzGErujKus6a3O0kyXzF8vjoDZzH/gig=
