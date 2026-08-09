@@ -69,7 +69,7 @@ func ctlcmdQueueHoldrulesAdd(ctl *ctl, account, senderDomain, recipientDomain st
 }
 
 func cmdQueueHoldrulesRemove(c *cmd) {
-	c.params = "ruleid"
+	c.params = "$ruleid"
 	c.help = `Remove hold rule for the delivery queue.
 
 Remove a hold rule by its id.
@@ -267,7 +267,7 @@ func ctlcmdQueueHoldSet(ctl *ctl, f queue.Filter, hold bool) {
 }
 
 func cmdQueueSchedule(c *cmd) {
-	c.params = "[filterflags] [-now] duration"
+	c.params = "[filterflags] [-now] $duration"
 	c.help = `Change next delivery attempt for matching messages.
 
 The next delivery attempt is adjusted by the duration parameter. If the -now
@@ -308,7 +308,7 @@ func ctlcmdQueueSchedule(ctl *ctl, f queue.Filter, fromNow bool, d time.Duration
 }
 
 func cmdQueueTransport(c *cmd) {
-	c.params = "[filterflags] transport"
+	c.params = "[filterflags] $transport"
 	c.help = `Set transport for matching messages.
 
 By default, the routing rules determine how a message is delivered. The default
@@ -450,7 +450,7 @@ func ctlcmdQueueDrop(ctl *ctl, f queue.Filter) {
 }
 
 func cmdQueueDump(c *cmd) {
-	c.params = "id"
+	c.params = "$id"
 	c.help = `Dump a message from the queue.
 
 The message is printed to stdout and is in standard internet mail format.
@@ -495,7 +495,7 @@ func ctlcmdQueueSuppressList(ctl *ctl, account string) {
 }
 
 func cmdQueueSuppressAdd(c *cmd) {
-	c.params = "account address"
+	c.params = "$account $address"
 	c.help = `Add address to suppression list for account.`
 	args := c.Parse()
 	if len(args) != 2 {
@@ -513,7 +513,7 @@ func ctlcmdQueueSuppressAdd(ctl *ctl, account, address string) {
 }
 
 func cmdQueueSuppressRemove(c *cmd) {
-	c.params = "account address"
+	c.params = "$account $address"
 	c.help = `Remove address from suppression list for account.`
 	args := c.Parse()
 	if len(args) != 2 {
@@ -531,7 +531,7 @@ func ctlcmdQueueSuppressRemove(ctl *ctl, account, address string) {
 }
 
 func cmdQueueSuppressLookup(c *cmd) {
-	c.params = "[-account account] address"
+	c.params = "[-account account] $address"
 	c.help = `Check if address is present in suppression list, for any or specific account.`
 	var account string
 	c.flag.StringVar(&account, "account", "", "only check address in specified account")
@@ -580,7 +580,7 @@ func ctlcmdQueueRetiredList(ctl *ctl, f queue.RetiredFilter, s queue.RetiredSort
 }
 
 func cmdQueueRetiredPrint(c *cmd) {
-	c.params = "id"
+	c.params = "$id"
 	c.help = `Print a message from the retired queue.
 
 Prints a JSON representation of the information from the retired queue.
@@ -715,7 +715,7 @@ func ctlcmdQueueHookList(ctl *ctl, f queue.HookFilter, s queue.HookSort) {
 }
 
 func cmdQueueHookSchedule(c *cmd) {
-	c.params = "[filterflags] duration"
+	c.params = "[filterflags] $duration"
 	c.help = `Change next delivery attempt for matching webhooks.
 
 The next delivery attempt is adjusted by the duration parameter. If the -now
@@ -779,7 +779,7 @@ func ctlcmdQueueHookCancel(ctl *ctl, f queue.HookFilter) {
 }
 
 func cmdQueueHookPrint(c *cmd) {
-	c.params = "id"
+	c.params = "$id"
 	c.help = `Print details of a webhook from the queue.
 
 The webhook is printed to stdout as JSON.
@@ -828,7 +828,7 @@ func ctlcmdQueueHookRetiredList(ctl *ctl, f queue.HookRetiredFilter, s queue.Hoo
 }
 
 func cmdQueueHookRetiredPrint(c *cmd) {
-	c.params = "id"
+	c.params = "$id"
 	c.help = `Print details of a webhook from the retired queue.
 
 The retired webhook is printed to stdout as JSON.

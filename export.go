@@ -12,7 +12,7 @@ import (
 )
 
 func cmdExportMaildir(c *cmd) {
-	c.params = "[-single] dst-dir account-path [mailbox]"
+	c.params = "[-single] $dstdir $accountpath [$mailbox]"
 	c.help = `Export one or all mailboxes from an account in maildir format.
 
 Export bypasses a running mox instance. It opens the account mailbox/message
@@ -27,7 +27,7 @@ the accounts web page or webmail.
 }
 
 func cmdExportMbox(c *cmd) {
-	c.params = "[-single] dst-dir account-path [mailbox]"
+	c.params = "[-single] $dstdir $accountpath [$mailbox]"
 	c.help = `Export messages from one or all mailboxes in an account in mbox format.
 
 Using mbox is not recommended. Maildir is a better format.

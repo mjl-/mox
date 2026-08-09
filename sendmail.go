@@ -73,7 +73,7 @@ func cmdConfigDescribeSendmail(c *cmd) {
 }
 
 func cmdSendmail(c *cmd) {
-	c.params = "[-Fname] [ignoredflags] [-t] [<message]"
+	c.params = "[-Fname] [ignoredflags] [-t] [< messagefile]"
 	c.help = `Sendmail is a drop-in replacement for /usr/sbin/sendmail to deliver emails sent by unix processes like cron.
 
 If invoked as "sendmail", it will act as sendmail for sending messages. Its

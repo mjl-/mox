@@ -20,120 +20,120 @@ any parameters. Followed by the help and usage information for each command.
 
 	mox [-config config/mox.conf] [-pedantic] ...
 	mox serve
-	mox quickstart [-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]
+	mox quickstart [-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]
 	mox stop
-	mox setaccountpassword account
+	mox setaccountpassword $account
 	mox setadminpassword
-	mox loglevels [level [pkg]]
+	mox loglevels [$level [$pkg]]
 	mox queue holdrules list
 	mox queue holdrules add [ruleflags]
-	mox queue holdrules remove ruleid
+	mox queue holdrules remove $ruleid
 	mox queue list [filtersortflags]
 	mox queue hold [filterflags]
 	mox queue unhold [filterflags]
-	mox queue schedule [filterflags] [-now] duration
-	mox queue transport [filterflags] transport
+	mox queue schedule [filterflags] [-now] $duration
+	mox queue transport [filterflags] $transport
 	mox queue requiretls [filterflags] {yes | no | default}
 	mox queue fail [filterflags]
 	mox queue drop [filterflags]
-	mox queue dump id
+	mox queue dump $id
 	mox queue retired list [filtersortflags]
-	mox queue retired print id
+	mox queue retired print $id
 	mox queue suppress list [-account account]
-	mox queue suppress add account address
-	mox queue suppress remove account address
-	mox queue suppress lookup [-account account] address
+	mox queue suppress add $account $address
+	mox queue suppress remove $account $address
+	mox queue suppress lookup [-account account] $address
 	mox queue webhook list [filtersortflags]
-	mox queue webhook schedule [filterflags] duration
+	mox queue webhook schedule [filterflags] $duration
 	mox queue webhook cancel [filterflags]
-	mox queue webhook print id
+	mox queue webhook print $id
 	mox queue webhook retired list [filtersortflags]
-	mox queue webhook retired print id
-	mox import maildir accountname mailboxname maildir
-	mox import mbox accountname mailboxname mbox
-	mox export maildir [-single] dst-dir account-path [mailbox]
-	mox export mbox [-single] dst-dir account-path [mailbox]
+	mox queue webhook retired print $id
+	mox import maildir $accountname $mailboxname $maildir
+	mox import mbox $accountname $mailboxname $mbox
+	mox export maildir [-single] $dstdir $accountpath [$mailbox]
+	mox export mbox [-single] $dstdir $accountpath [$mailbox]
 	mox localserve
-	mox help [command ...]
-	mox backup destdir
-	mox verifydata data-dir
+	mox help [$command ...]
+	mox backup $destdir
+	mox verifydata $datadir
 	mox licenses
 	mox config test
-	mox config dnscheck domain
-	mox config dnsrecords domain
+	mox config dnscheck $domain
+	mox config dnsrecords $domain
 	mox config describe-domains >domains.conf
 	mox config describe-static >mox.conf
 	mox config account list
 	mox config account addresses
-	mox config account add account address
-	mox config account rm account
-	mox config account disable account message
-	mox config account enable account
-	mox config address add address account
-	mox config address rm address
-	mox config address account address
-	mox config domain add [-disabled] domain account [localpart]
-	mox config domain rm domain
-	mox config domain disable domain
-	mox config domain enable domain
-	mox config tlspubkey list [account]
-	mox config tlspubkey get fingerprint
-	mox config tlspubkey add address [name] < cert.pem
-	mox config tlspubkey rm fingerprint
-	mox config tlspubkey gen stem
-	mox config alias list domain
-	mox config alias print alias
-	mox config alias add alias@domain rcpt1@domain ...
-	mox config alias update alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
-	mox config alias rm alias@domain
-	mox config alias addaddr alias@domain rcpt1@domain ...
-	mox config alias rmaddr alias@domain rcpt1@domain ...
+	mox config account add $account $address
+	mox config account rm $account
+	mox config account disable $account $message
+	mox config account enable $account
+	mox config address add $address $account
+	mox config address rm $address
+	mox config address account $address
+	mox config domain add [-disabled] $domain $account [$localpart]
+	mox config domain rm $domain
+	mox config domain disable $domain
+	mox config domain enable $domain
+	mox config tlspubkey list [$account]
+	mox config tlspubkey get $fingerprint
+	mox config tlspubkey add $address [$name] < cert.pem
+	mox config tlspubkey rm $fingerprint
+	mox config tlspubkey gen $stem
+	mox config alias list $domain
+	mox config alias print $alias
+	mox config alias add $alias@domain $rcpt1@domain ...
+	mox config alias update $alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
+	mox config alias rm $alias@domain
+	mox config alias addaddr $alias@domain $rcpt1@domain ...
+	mox config alias rmaddr $alias@domain $rcpt1@domain ...
 	mox config describe-sendmail >/etc/moxsubmit.conf
 	mox config printservice >mox.service
 	mox config ensureacmehostprivatekeys
-	mox config example [name]
-	mox admin imapserve preauth-address
+	mox config example [$name]
+	mox admin imapserve $preauthaddress
 	mox checkupdate
-	mox cid cid
-	mox clientconfig domain
-	mox dane dial host:port
-	mox dane dialmx domain [destination-host]
-	mox dane makerecord usage selector matchtype [certificate.pem | publickey.pem | privatekey.pem]
-	mox dns lookup [ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] name
+	mox cid $cid
+	mox clientconfig $domain
+	mox dane dial $host:$port
+	mox dane dialmx $domain [$desthost]
+	mox dane makerecord $usage $selector $matchtype [certificate.pem | publickey.pem | privatekey.pem]
+	mox dns lookup [ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] $name
 	mox dkim gened25519 >$selector._domainkey.$domain.ed25519.privatekey.pkcs8.pem
 	mox dkim genrsa >$selector._domainkey.$domain.rsa2048.privatekey.pkcs8.pem
-	mox dkim lookup selector domain
+	mox dkim lookup $selector $domain
 	mox dkim txt <$selector._domainkey.$domain.key.pkcs8.pem
-	mox dkim verify message
-	mox dkim sign message
-	mox dmarc lookup domain
-	mox dmarc parsereportmsg message ...
-	mox dmarc verify remoteip mailfromaddress helodomain < message
-	mox dmarc checkreportaddrs domain
-	mox dnsbl check zone ip
-	mox dnsbl checkhealth zone
-	mox mtasts lookup domain
-	mox rdap domainage domain
-	mox retrain [accountname]
-	mox sendmail [-Fname] [ignoredflags] [-t] [<message]
-	mox smtp dial host[:port]
-	mox spf check domain ip
-	mox spf lookup domain
-	mox spf parse txtrecord
-	mox tlsrpt lookup domain
-	mox tlsrpt parsereportmsg message ...
+	mox dkim verify $messagefile
+	mox dkim sign $messagefile
+	mox dmarc lookup $domain
+	mox dmarc parsereportmsg $messagefile ...
+	mox dmarc verify $remoteip $mailfromaddress $helodomain < messagefile
+	mox dmarc checkreportaddrs $domain
+	mox dnsbl check $zone $ip
+	mox dnsbl checkhealth $zone
+	mox mtasts lookup $domain
+	mox rdap domainage $domain
+	mox retrain [$accountname]
+	mox sendmail [-Fname] [ignoredflags] [-t] [< messagefile]
+	mox smtp dial $host[:$port]
+	mox spf check $domain $ip
+	mox spf lookup $domain
+	mox spf parse $txtrecord
+	mox tlsrpt lookup $domain
+	mox tlsrpt parsereportmsg $messagefile ...
 	mox version
-	mox webapi [method [baseurl-with-credentials]
-	mox example [name]
-	mox bumpuidvalidity account [mailbox]
-	mox reassignuids account [mailboxid]
-	mox fixuidmeta account
-	mox fixmsgsize [account]
-	mox reparse [account]
-	mox ensureparsed account
-	mox recalculatemailboxcounts account
-	mox message parse message.eml
-	mox reassignthreads [account]
+	mox webapi [$method [$baseurl-with-credentials]
+	mox example [$name]
+	mox bumpuidvalidity $account [$mailbox]
+	mox reassignuids $account [$mailboxid]
+	mox fixuidmeta $account
+	mox fixmsgsize [$account]
+	mox reparse [$account]
+	mox ensureparsed $account
+	mox recalculatemailboxcounts $account
+	mox message parse $messagefile
+	mox reassignthreads [$account]
 
 # mox serve
 
@@ -185,7 +185,7 @@ traffic to your existing backend applications. Look for "WebHandlers:" in the
 output of "mox config describe-domains" and see the output of
 "mox config example webhandlers".
 
-	usage: mox quickstart [-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]
+	usage: mox quickstart [-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]
 	  -existing-webserver
 	    	use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.
 	  -hostname string
@@ -218,7 +218,7 @@ The parameter is an account name, as configured under Accounts in domains.conf
 and as present in the data/accounts/ directory, not a configured email address
 for an account.
 
-	usage: mox setaccountpassword account
+	usage: mox setaccountpassword $account
 
 # mox setadminpassword
 
@@ -242,7 +242,7 @@ Specify a pkg and an empty level to clear the configured level for a package.
 
 Valid labels: error, info, debug, trace, traceauth, tracedata.
 
-	usage: mox loglevels [level [pkg]]
+	usage: mox loglevels [$level [$pkg]]
 
 # mox queue holdrules list
 
@@ -275,7 +275,7 @@ Remove hold rule for the delivery queue.
 
 Remove a hold rule by its id.
 
-	usage: mox queue holdrules remove ruleid
+	usage: mox queue holdrules remove $ruleid
 
 # mox queue list
 
@@ -371,7 +371,7 @@ current time, instead of added to the current scheduled time.
 
 Schedule immediate delivery with "mox queue schedule -now 0".
 
-	usage: mox queue schedule [filterflags] [-now] duration
+	usage: mox queue schedule [filterflags] [-now] $duration
 	  -account string
 	    	account that queued the message
 	  -from string
@@ -402,7 +402,7 @@ and common case is direct delivery with SMTP. Messages can get a previously
 configured transport assigned to use for delivery, e.g. using submission to
 another mail server or with connections over a SOCKS proxy.
 
-	usage: mox queue transport [filterflags] transport
+	usage: mox queue transport [filterflags] $transport
 	  -account string
 	    	account that queued the message
 	  -from string
@@ -517,7 +517,7 @@ Dump a message from the queue.
 
 The message is printed to stdout and is in standard internet mail format.
 
-	usage: mox queue dump id
+	usage: mox queue dump $id
 
 # mox queue retired list
 
@@ -555,7 +555,7 @@ Print a message from the retired queue.
 
 Prints a JSON representation of the information from the retired queue.
 
-	usage: mox queue retired print id
+	usage: mox queue retired print $id
 
 # mox queue suppress list
 
@@ -569,19 +569,19 @@ Print addresses in suppression list.
 
 Add address to suppression list for account.
 
-	usage: mox queue suppress add account address
+	usage: mox queue suppress add $account $address
 
 # mox queue suppress remove
 
 Remove address from suppression list for account.
 
-	usage: mox queue suppress remove account address
+	usage: mox queue suppress remove $account $address
 
 # mox queue suppress lookup
 
 Check if address is present in suppression list, for any or specific account.
 
-	usage: mox queue suppress lookup [-account account] address
+	usage: mox queue suppress lookup [-account account] $address
 	  -account string
 	    	only check address in specified account
 
@@ -619,7 +619,7 @@ current time, instead of added to the current scheduled time.
 
 Schedule immediate delivery with "mox queue schedule -now 0".
 
-	usage: mox queue webhook schedule [filterflags] duration
+	usage: mox queue webhook schedule [filterflags] $duration
 	  -account string
 	    	account that queued the message/webhook
 	  -event value
@@ -659,7 +659,7 @@ Print details of a webhook from the queue.
 
 The webhook is printed to stdout as JSON.
 
-	usage: mox queue webhook print id
+	usage: mox queue webhook print $id
 
 # mox queue webhook retired list
 
@@ -691,7 +691,7 @@ Print details of a webhook from the retired queue.
 
 The retired webhook is printed to stdout as JSON.
 
-	usage: mox queue webhook retired print id
+	usage: mox queue webhook retired print $id
 
 # mox import maildir
 
@@ -719,7 +719,7 @@ result in duplicate messages.
 Mailbox flags, like "seen", "answered", will be imported. An optional
 dovecot-keywords file can specify additional flags, like Forwarded/Junk/NotJunk.
 
-	usage: mox import maildir accountname mailboxname maildir
+	usage: mox import maildir $accountname $mailboxname $maildir
 
 # mox import mbox
 
@@ -746,7 +746,7 @@ uploading a zip or tgz file with mbox and/or maildirs.
 Messages are imported even if already present. Importing messages twice will
 result in duplicate messages.
 
-	usage: mox import mbox accountname mailboxname mbox
+	usage: mox import mbox $accountname $mailboxname $mbox
 
 # mox export maildir
 
@@ -757,7 +757,7 @@ database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
 the accounts web page or webmail.
 
-	usage: mox export maildir [-single] dst-dir account-path [mailbox]
+	usage: mox export maildir [-single] $dstdir $accountpath [$mailbox]
 	  -single
 	    	export single mailbox, without any children. disabled if mailbox isn't specified.
 
@@ -776,7 +776,7 @@ For mbox export, "mboxrd" is used where message lines starting with the magic
 "From " string are escaped by prepending a >. All ">*From " are escaped,
 otherwise reconstructing the original could lose a ">".
 
-	usage: mox export mbox [-single] dst-dir account-path [mailbox]
+	usage: mox export mbox [-single] $dstdir $accountpath [$mailbox]
 	  -single
 	    	export single mailbox, without any children. disabled if mailbox isn't specified.
 
@@ -825,7 +825,7 @@ Prints help about matching commands.
 If multiple commands match, they are listed along with the first line of their help text.
 If a single command matches, its usage and full help text is printed.
 
-	usage: mox help [command ...]
+	usage: mox help [$command ...]
 
 # mox backup
 
@@ -870,7 +870,7 @@ This can change the backup files (e.g. upgrade database files, move away
 unrecognized message files), so you should make a new backup before actually
 upgrading.
 
-	usage: mox backup destdir
+	usage: mox backup $destdir
 	  -verbose
 	    	print progress
 
@@ -894,7 +894,7 @@ copy of the database files, as made with "mox backup". Before upgrading, make a
 new backup again since "mox verifydata" may have upgraded the database files,
 possibly making them potentially no longer readable by the previous version.
 
-	usage: mox verifydata data-dir
+	usage: mox verifydata $datadir
 	  -fix
 	    	fix fixable problems, such as moving away message files not referenced by their database
 	  -skip-size-check
@@ -919,7 +919,7 @@ are printed.
 
 Check the DNS records with the configuration for the domain, and print any errors/warnings.
 
-	usage: mox config dnscheck domain
+	usage: mox config dnscheck $domain
 
 # mox config dnsrecords
 
@@ -929,7 +929,7 @@ The zone file can be imported into existing DNS software. You should review the
 DNS records, especially if your domain previously/currently has email
 configured.
 
-	usage: mox config dnsrecords domain
+	usage: mox config dnsrecords $domain
 
 # mox config describe-domains
 
@@ -984,7 +984,7 @@ Add an account with an email address and reload the configuration.
 Email can be delivered to this address/account. A password has to be configured
 explicitly, see the setaccountpassword command.
 
-	usage: mox config account add account address
+	usage: mox config account add $account $address
 
 # mox config account rm
 
@@ -995,7 +995,7 @@ these addresses will be rejected.
 
 All data for the account will be removed.
 
-	usage: mox config account rm account
+	usage: mox config account rm $account
 
 # mox config account disable
 
@@ -1007,7 +1007,7 @@ account will still be delivered. No new login sessions are possible.
 Message must be non-empty, ascii-only without control characters including
 newline, and maximum 256 characters because it is used in SMTP/IMAP.
 
-	usage: mox config account disable account message
+	usage: mox config account disable $account $message
 
 # mox config account enable
 
@@ -1015,7 +1015,7 @@ Enable login again for an account.
 
 Login attempts by the user no long result in an error message.
 
-	usage: mox config account enable account
+	usage: mox config account enable $account
 
 # mox config address add
 
@@ -1024,7 +1024,7 @@ Adds an address to an account and reloads the configuration.
 If address starts with a @ (i.e. a missing localpart), this is a catchall
 address for the domain.
 
-	usage: mox config address add address account
+	usage: mox config address add $address $account
 
 # mox config address rm
 
@@ -1032,7 +1032,7 @@ Remove an address and reload the configuration.
 
 Incoming email for this address will be rejected after removing an address.
 
-	usage: mox config address rm address
+	usage: mox config address rm $address
 
 # mox config address account
 
@@ -1043,7 +1043,7 @@ looking up the account.
 
 Does not check whether account is disabled.
 
-	usage: mox config address account address
+	usage: mox config address account $address
 
 # mox config domain add
 
@@ -1057,7 +1057,7 @@ The domain can be created in disabled mode, preventing automatically requesting
 TLS certificates with ACME, and rejecting incoming/outgoing messages involving
 the domain, but allowing further configuration of the domain.
 
-	usage: mox config domain add [-disabled] domain account [localpart]
+	usage: mox config domain add [-disabled] $domain $account [$localpart]
 	  -disabled
 	    	disable the new domain
 
@@ -1068,7 +1068,7 @@ Remove a domain from the configuration and reload the configuration.
 This is a dangerous operation. Incoming email delivery for this domain will be
 rejected.
 
-	usage: mox config domain rm domain
+	usage: mox config domain rm $domain
 
 # mox config domain disable
 
@@ -1077,7 +1077,7 @@ Disable a domain and reload the configuration.
 This is a dangerous operation. Incoming/outgoing messages involving this domain
 will be rejected.
 
-	usage: mox config domain disable domain
+	usage: mox config domain disable $domain
 
 # mox config domain enable
 
@@ -1085,7 +1085,7 @@ Enable a domain and reload the configuration.
 
 Incoming/outgoing messages involving this domain will be accepted again.
 
-	usage: mox config domain enable domain
+	usage: mox config domain enable $domain
 
 # mox config tlspubkey list
 
@@ -1093,7 +1093,7 @@ List TLS public keys for TLS client certificate authentication.
 
 If account is absent, the TLS public keys for all accounts are listed.
 
-	usage: mox config tlspubkey list [account]
+	usage: mox config tlspubkey list [$account]
 
 # mox config tlspubkey get
 
@@ -1102,7 +1102,7 @@ Get a TLS public key for a fingerprint.
 Prints the type, name, account and address for the key, and the certificate in
 PEM format.
 
-	usage: mox config tlspubkey get fingerprint
+	usage: mox config tlspubkey get $fingerprint
 
 # mox config tlspubkey add
 
@@ -1113,7 +1113,7 @@ The public key is read from the certificate.
 The optional name is a human-readable descriptive name of the key. If absent,
 the CommonName from the certificate is used.
 
-	usage: mox config tlspubkey add address [name] < cert.pem
+	usage: mox config tlspubkey add $address [$name] < cert.pem
 	  -no-imap-preauth
 	    	Don't automatically switch new IMAP connections authenticated with this key to "authenticated" state after the TLS handshake. For working around clients that ignore the untagged IMAP PREAUTH response and try to authenticate while already authenticated.
 
@@ -1121,7 +1121,7 @@ the CommonName from the certificate is used.
 
 Remove TLS public key for fingerprint.
 
-	usage: mox config tlspubkey rm fingerprint
+	usage: mox config tlspubkey rm $fingerprint
 
 # mox config tlspubkey gen
 
@@ -1140,19 +1140,19 @@ The private key is also written to standard error in raw-url-base64-encoded
 form, also for use with "mox sendmail". The fingerprint is written to standard
 error too, for reference.
 
-	usage: mox config tlspubkey gen stem
+	usage: mox config tlspubkey gen $stem
 
 # mox config alias list
 
 Show aliases (lists) for domain.
 
-	usage: mox config alias list domain
+	usage: mox config alias list $domain
 
 # mox config alias print
 
 Print settings and members of alias (list).
 
-	usage: mox config alias print alias
+	usage: mox config alias print $alias
 
 # mox config alias add
 
@@ -1162,13 +1162,13 @@ An alias is used for delivering incoming email to multiple recipients. If you
 want to add an address to an account, don't use an alias, just add the address
 to the account.
 
-	usage: mox config alias add alias@domain rcpt1@domain ...
+	usage: mox config alias add $alias@domain $rcpt1@domain ...
 
 # mox config alias update
 
 Update alias (list) configuration.
 
-	usage: mox config alias update alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
+	usage: mox config alias update $alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
 	  -allowmsgfrom string
 	    	whether alias address can be used in message from header
 	  -listmembers string
@@ -1180,19 +1180,19 @@ Update alias (list) configuration.
 
 Remove alias (list).
 
-	usage: mox config alias rm alias@domain
+	usage: mox config alias rm $alias@domain
 
 # mox config alias addaddr
 
 Add addresses to alias (list).
 
-	usage: mox config alias addaddr alias@domain rcpt1@domain ...
+	usage: mox config alias addaddr $alias@domain $rcpt1@domain ...
 
 # mox config alias rmaddr
 
 Remove addresses from alias (list).
 
-	usage: mox config alias rmaddr alias@domain rcpt1@domain ...
+	usage: mox config alias rmaddr $alias@domain $rcpt1@domain ...
 
 # mox config describe-sendmail
 
@@ -1239,7 +1239,7 @@ for a domain and create the TLSA DNS records it suggests to enable DANE.
 
 List available config examples, or print a specific example.
 
-	usage: mox config example [name]
+	usage: mox config example [$name]
 
 # mox admin imapserve
 
@@ -1249,7 +1249,7 @@ For use with tools that can do IMAP over tunneled connections, e.g. with SSH
 during migrations. TLS is not possible on the connection, and authentication
 does not require TLS.
 
-	usage: mox admin imapserve preauth-address
+	usage: mox admin imapserve $preauthaddress
 	  -fd0
 	    	write IMAP to file descriptor 0 instead of stdout
 
@@ -1272,7 +1272,7 @@ A cid is essentially a connection counter initialized when mox starts. Each log
 line contains a cid. Received headers added by mox contain a unique ID that can
 be decrypted to a cid by admin of a mox instance only.
 
-	usage: mox cid cid
+	usage: mox cid $cid
 
 # mox clientconfig
 
@@ -1286,7 +1286,7 @@ connection with STARTTLS). For IMAP, the port with TLS is 993 and without is
 Without TLS/STARTTLS, passwords are sent in clear text, which should only be
 configured over otherwise secured connections, like a VPN.
 
-	usage: mox clientconfig domain
+	usage: mox clientconfig $domain
 
 # mox dane dial
 
@@ -1295,7 +1295,7 @@ Dial the address using TLS with certificate verification using DANE.
 Data is copied between connection and stdin/stdout until either side closes the
 connection.
 
-	usage: mox dane dial host:port
+	usage: mox dane dial $host:$port
 	  -usages string
 	    	allowed usages for dane, comma-separated list (default "pkix-ta,pkix-ee,dane-ta,dane-ee")
 
@@ -1321,7 +1321,7 @@ either side closes the connection.
 This command follows the same logic as delivery attempts made from the queue,
 sharing most of its code.
 
-	usage: mox dane dialmx domain [destination-host]
+	usage: mox dane dialmx $domain [$desthost]
 	  -ehlohostname string
 	    	hostname to send in smtp ehlo command (default "localhost")
 
@@ -1345,7 +1345,7 @@ record. In case of selector "cert", a certificate is required. Otherwise the
 "subject public key info" (spki) of the first certificate or public or private
 key (pkcs#8, pkcs#1 or ec private key) is used.
 
-	usage: mox dane makerecord usage selector matchtype [certificate.pem | publickey.pem | privatekey.pem]
+	usage: mox dane makerecord $usage $selector $matchtype [certificate.pem | publickey.pem | privatekey.pem]
 
 # mox dns lookup
 
@@ -1360,7 +1360,7 @@ mox dns lookup mx xmox.nl
 mox dns lookup txt _dmarc.xmox.nl.
 mox dns lookup tlsa _25._tcp.xmox.nl
 
-	usage: mox dns lookup [ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] name
+	usage: mox dns lookup [ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] $name
 
 # mox dkim gened25519
 
@@ -1386,7 +1386,7 @@ with DKIM, by mox.
 
 Lookup and print the DKIM record for the selector at the domain.
 
-	usage: mox dkim lookup selector domain
+	usage: mox dkim lookup $selector $domain
 
 # mox dkim txt
 
@@ -1405,7 +1405,7 @@ of older messages may fail because the DNS records have been removed or changed
 by now, or because the signature header may have specified an expiration time
 that was passed.
 
-	usage: mox dkim verify message
+	usage: mox dkim verify $messagefile
 
 # mox dkim sign
 
@@ -1415,13 +1415,13 @@ The message is parsed, the domain looked up in the configuration files, and
 DKIM-Signature headers generated. The message is printed with the DKIM-Signature
 headers prepended.
 
-	usage: mox dkim sign message
+	usage: mox dkim sign $messagefile
 
 # mox dmarc lookup
 
 Lookup dmarc policy for domain, a DNS TXT record at _dmarc.<domain>, validate and print it.
 
-	usage: mox dmarc lookup domain
+	usage: mox dmarc lookup $domain
 
 # mox dmarc parsereportmsg
 
@@ -1433,7 +1433,7 @@ domain in a From header. This may or may not be legatimate email. DMARC reports
 contain summaries of evaluations of DMARC and DKIM/SPF, which can help
 understand email deliverability problems.
 
-	usage: mox dmarc parsereportmsg message ...
+	usage: mox dmarc parsereportmsg $messagefile ...
 
 # mox dmarc verify
 
@@ -1447,7 +1447,7 @@ For DSN messages, that address may be empty. The helo domain was specified at
 the beginning of the SMTP transaction that delivered the message. These values
 can be found in message headers.
 
-	usage: mox dmarc verify remoteip mailfromaddress helodomain < message
+	usage: mox dmarc verify $remoteip $mailfromaddress $helodomain < messagefile
 
 # mox dmarc checkreportaddrs
 
@@ -1459,7 +1459,7 @@ and that of the report destination address do not match, the destination
 address must opt-in to receiving DMARC reports by creating a DMARC record at
 <dmarcdomain>._report._dmarc.<reportdestdomain>.
 
-	usage: mox dmarc checkreportaddrs domain
+	usage: mox dmarc checkreportaddrs $domain
 
 # mox dnsbl check
 
@@ -1468,7 +1468,7 @@ Test if IP is in the DNS blocklist of the zone, e.g. bl.spamcop.net.
 If the IP is in the blocklist, an explanation is printed. This is typically a
 URL with more information.
 
-	usage: mox dnsbl check zone ip
+	usage: mox dnsbl check $zone $ip
 
 # mox dnsbl checkhealth
 
@@ -1477,7 +1477,7 @@ Check the health of the DNS blocklist represented by zone, e.g. bl.spamcop.net.
 The health of a DNS blocklist can be checked by querying for 127.0.0.1 and
 127.0.0.2. The second must and the first must not be present.
 
-	usage: mox dnsbl checkhealth zone
+	usage: mox dnsbl checkhealth $zone
 
 # mox mtasts lookup
 
@@ -1490,7 +1490,7 @@ fetched at https://mta-sts.<domain>/.well-known/mta-sts.txt. The policy
 specifies the mode (enforce, testing, none), which MX servers support TLS and
 should be used, and how long the policy can be cached.
 
-	usage: mox mtasts lookup domain
+	usage: mox mtasts lookup $domain
 
 # mox rdap domainage
 
@@ -1508,7 +1508,7 @@ On each invocation, a bootstrap file with a list of registries (of top-level
 domains) is retrieved, without caching. Do not run this command too often with
 automation.
 
-	usage: mox rdap domainage domain
+	usage: mox rdap domainage $domain
 
 # mox retrain
 
@@ -1517,7 +1517,7 @@ Recreate and retrain the junk filter for the account or all accounts.
 Useful after having made changes to the junk filter configuration, or if the
 implementation has changed.
 
-	usage: mox retrain [accountname]
+	usage: mox retrain [$accountname]
 
 # mox sendmail
 
@@ -1550,7 +1550,7 @@ binary should be setgid that group:
 	# edit /etc/moxsubmit.conf
 
 
-	usage: mox sendmail [-Fname] [ignoredflags] [-t] [<message]
+	usage: mox sendmail [-Fname] [ignoredflags] [-t] [< messagefile]
 
 # mox smtp dial
 
@@ -1569,7 +1569,7 @@ No MTA-STS or DANE verification is done.
 Hint: Use "mox -loglevel trace smtp dial ..." to see the protocol messages
 exchanged during connection set up.
 
-	usage: mox smtp dial host[:port]
+	usage: mox smtp dial $host[:$port]
 	  -ehlohostname string
 	    	our hostname to use during the SMTP EHLO command
 	  -forcetls
@@ -1606,19 +1606,19 @@ between. If not allowed, an explanation may be provided by the policy. If so,
 the explanation is printed. The SPF mechanism that matched (if any) is also
 printed.
 
-	usage: mox spf check domain ip
+	usage: mox spf check $domain $ip
 
 # mox spf lookup
 
 Lookup the SPF record for the domain and print it.
 
-	usage: mox spf lookup domain
+	usage: mox spf lookup $domain
 
 # mox spf parse
 
 Parse the record as SPF record. If valid, nothing is printed.
 
-	usage: mox spf parse txtrecord
+	usage: mox spf parse $txtrecord
 
 # mox tlsrpt lookup
 
@@ -1629,7 +1629,7 @@ connectivity should be sent. Mail servers attempting delivery to our domain
 should attempt to use TLS. TLSRPT lets them report how many connection
 successfully used TLS, and how what kind of errors occurred otherwise.
 
-	usage: mox tlsrpt lookup domain
+	usage: mox tlsrpt lookup $domain
 
 # mox tlsrpt parsereportmsg
 
@@ -1637,7 +1637,7 @@ Parse and print the TLSRPT in the message.
 
 The report is printed in formatted JSON.
 
-	usage: mox tlsrpt parsereportmsg message ...
+	usage: mox tlsrpt parsereportmsg $messagefile ...
 
 # mox version
 
@@ -1649,13 +1649,13 @@ Prints this mox version.
 
 Lists available methods, prints request/response parameters for method, or calls a method with a request read from standard input.
 
-	usage: mox webapi [method [baseurl-with-credentials]
+	usage: mox webapi [$method [$baseurl-with-credentials]
 
 # mox example
 
 List available examples, or print a specific example.
 
-	usage: mox example [name]
+	usage: mox example [$name]
 
 # mox bumpuidvalidity
 
@@ -1666,7 +1666,7 @@ This can be useful after manually repairing metadata about the account/mailbox.
 Opens account database file directly. Ensure mox does not have the account
 open, or is not running.
 
-	usage: mox bumpuidvalidity account [mailbox]
+	usage: mox bumpuidvalidity $account [$mailbox]
 
 # mox reassignuids
 
@@ -1675,7 +1675,7 @@ Reassign UIDs in one mailbox or all mailboxes in an account and bump UID validit
 Opens account database file directly. Ensure mox does not have the account
 open, or is not running.
 
-	usage: mox reassignuids account [mailboxid]
+	usage: mox reassignuids $account [$mailboxid]
 
 # mox fixuidmeta
 
@@ -1692,7 +1692,7 @@ UIDVALIDITY is updated.
 Opens account database file directly. Ensure mox does not have the account
 open, or is not running.
 
-	usage: mox fixuidmeta account
+	usage: mox fixuidmeta $account
 
 # mox fixmsgsize
 
@@ -1704,7 +1704,7 @@ If an inconsistency is found, you should probably also run "mox
 bumpuidvalidity" on the mailboxes or entire account to force IMAP clients to
 refetch messages.
 
-	usage: mox fixmsgsize [account]
+	usage: mox fixmsgsize [$account]
 
 # mox reparse
 
@@ -1714,13 +1714,13 @@ Can be useful after upgrading mox with improved message parsing. Messages are
 parsed in batches, so other access to the mailboxes/messages are not blocked
 while reparsing all messages.
 
-	usage: mox reparse [account]
+	usage: mox reparse [$account]
 
 # mox ensureparsed
 
 Ensure messages in the database have a pre-parsed MIME form in the database.
 
-	usage: mox ensureparsed account
+	usage: mox ensureparsed $account
 	  -all
 	    	store new parsed message for all messages
 
@@ -1734,13 +1734,13 @@ the mailbox, and the total message size for the account. In case of a bug in
 this accounting, the numbers could become incorrect. This command will find, fix
 and print them.
 
-	usage: mox recalculatemailboxcounts account
+	usage: mox recalculatemailboxcounts $account
 
 # mox message parse
 
 Parse message, print JSON representation.
 
-	usage: mox message parse message.eml
+	usage: mox message parse $messagefile
 	  -smtputf8
 	    	check if message needs smtputf8
 
@@ -1776,7 +1776,7 @@ message is deleted in the future, the message can still be linked to the earlier
 ancestors. If the direct parent already wasn't available while matching, this is
 stored as the message having a "missing link" to its stored ancestors.
 
-	usage: mox reassignthreads [account]
+	usage: mox reassignthreads [$account]
 */
 package main
 

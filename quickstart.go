@@ -46,7 +46,7 @@ import (
 var moxService string
 
 func cmdQuickstart(c *cmd) {
-	c.params = "[-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]"
+	c.params = "[-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
 Quickstart writes configuration files, prints initial admin and account
