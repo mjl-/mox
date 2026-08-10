@@ -1,5 +1,9 @@
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 
+import {dom, attr} from '../lib'
+import {css, styles, renderText, isImage} from './lib'
+import * as api from './api'
+
 // Loaded from synchronous javascript.
 declare let messageItem: api.MessageItem
 declare let parsedMessage: api.ParsedMessage

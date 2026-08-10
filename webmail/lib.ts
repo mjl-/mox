@@ -7,6 +7,9 @@
 //   Makes it easier to look through a DOM, and easier to change the style of all
 //   instances of a class.
 
+import {dom, style, attr} from '../lib'
+import * as api from './api'
+
 const cssStyleDark = dom.style(attr.type('text/css'))
 document.head.prepend(cssStyleDark)
 const styleSheetDark = cssStyleDark.sheet!
@@ -22,7 +25,7 @@ let cssRules: { [selector: string]: string} = {} // For ensuring a selector has 
 // Ensure a selector has the given style properties. If a style value is an array,
 // it must have 2 elements. The first is the default value, the second used for a
 // rule for dark mode.
-const ensureCSS = (selector: string, styles: { [prop: string]: string | number | string[] }, important?: boolean) => {
+export const ensureCSS = (selector: string, styles: { [prop: string]: string | number | string[] }, important?: boolean) => {
 	// Check that a selector isn't added again with different styling. Only during development.
 	const checkConsistency = location.hostname === 'localhost'
 	if (cssRules[selector]) {
@@ -66,7 +69,7 @@ const ensureCSS = (selector: string, styles: { [prop: string]: string | number |
 
 // Ensure CSS styling exists for a class, returning the same kind of object
 // returned by dom._class, for use with dom.*-building functions.
-const css = (className: string, styles: { [prop: string]: string | number | string[] }, important?: boolean): { _class: string[] } => {
+export const css = (className: string, styles: { [prop: string]: string | number | string[] }, important?: boolean): { _class: string[] } => {
 	ensureCSS('.'+className, styles, important)
 	return dom._class(className)
 }
@@ -133,7 +136,7 @@ ensureCSS(':root', {
 })
 
 // Typed way to reference a css variables. Kept from before used variables.
-const styles = {
+export const styles = {
 	color: 'var(--color)',
 	colorMild: 'var(--colorMild)',
 	colorMilder: 'var(--colorMilder)',
@@ -190,7 +193,7 @@ const styles = {
 	linkColor: 'var(--linkColor)',
 	linkVisitedColor: 'var(--linkVisitedColor)',
 }
-const styleClasses = {
+export const styleClasses = {
 	// For quoted text, with multiple levels of indentations.
 	quoted: [
 		css('quoted1', {color: styles.quoted1Color}),
@@ -228,7 +231,7 @@ ensureCSS('.textmulti > *:first-child', {padding: '.5em'})
 // join elements in l with the results of calls to efn. efn can return
 // HTMLElements, which cannot be inserted into the dom multiple times, hence the
 // function.
-const join = (l: any, efn: () => any): any[] => {
+export const join = (l: any, efn: () => any): any[] => {
 	const r: any[] = []
 	const n = l.length
 	for (let i = 0; i < n; i++) {
@@ -250,7 +253,7 @@ const imageTypes = [
 	'image/apng',
 	'image/svg+xml',
 ]
-const isImage = (a: api.Attachment) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase())
+export const isImage = (a: api.Attachment) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase())
 
 // addLinks turns a line of text into alternating strings and links. Links that
 // would end with interpunction followed by whitespace are returned with that
@@ -287,7 +290,7 @@ const addLinks = (text: string): (HTMLAnchorElement | string)[] => {
 
 // renderText turns text into a renderable element with ">" interpreted as quoted
 // text (with different levels), and URLs replaced by links.
-const renderText = (text: string): HTMLElement => {
+export const renderText = (text: string): HTMLElement => {
 	return dom.div(text.split('\n').map(line => {
 		let q = 0
 		for (const c of line) {
@@ -305,7 +308,7 @@ const renderText = (text: string): HTMLElement => {
 	}))
 }
 
-const displayName = (s: string) => {
+export const displayName = (s: string) => {
 	// ../rfc/5322:1216
 	// ../rfc/5322:1270
 	// todo: need support for group addresses (eg "undisclosed recipients").
@@ -317,10 +320,10 @@ const displayName = (s: string) => {
 	return s
 }
 
-const formatDomain = (dom: api.Domain) => dom.Unicode || dom.ASCII
+export const formatDomain = (dom: api.Domain) => dom.Unicode || dom.ASCII
 
 // format an address with both name and email address.
-const formatAddress = (a: api.MessageAddress): string => {
+export const formatAddress = (a: api.MessageAddress): string => {
 	let s = '<' + a.User + '@' + formatDomain(a.Domain) + '>'
 	if (a.Name) {
 		s = displayName(a.Name) + ' ' + s
@@ -329,7 +332,7 @@ const formatAddress = (a: api.MessageAddress): string => {
 }
 
 // Like formatAddress, but returns an element with a title (for hover) with the ASCII domain, in case of IDN.
-const formatAddressElem = (a: api.MessageAddress): string | HTMLElement => {
+export const formatAddressElem = (a: api.MessageAddress): string | HTMLElement => {
 	if (!a.Domain.Unicode) {
 		return formatAddress(a)
 	}
@@ -337,7 +340,7 @@ const formatAddressElem = (a: api.MessageAddress): string | HTMLElement => {
 }
 
 // like formatAddress, but underline domain with dmarc-like validation if appropriate.
-const formatAddressValidated = (a: api.MessageAddress, m: api.Message, use: boolean): (string | HTMLElement)[] => {
+export const formatAddressValidated = (a: api.MessageAddress, m: api.Message, use: boolean): (string | HTMLElement)[] => {
 	const domainText = (domstr: string, ascii: string): HTMLElement | string => {
 		if (!use) {
 			return domstr
@@ -400,7 +403,7 @@ const formatAddressValidated = (a: api.MessageAddress, m: api.Message, use: bool
 }
 
 // format just the name if present and it doesn't look like an address, or otherwise just the email address.
-const formatAddressShort = (a: api.MessageAddress, junk: boolean): string => {
+export const formatAddressShort = (a: api.MessageAddress, junk: boolean): string => {
 	const n = a.Name
 	if (!junk && n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
 		return n
@@ -409,9 +412,9 @@ const formatAddressShort = (a: api.MessageAddress, junk: boolean): string => {
 }
 
 // return just the email address.
-const formatEmail = (a: api.MessageAddress) => a.User + '@' + formatDomain(a.Domain)
+export const formatEmail = (a: api.MessageAddress) => a.User + '@' + formatDomain(a.Domain)
 
-const equalAddress = (a: api.MessageAddress, b: api.MessageAddress) => {
+export const equalAddress = (a: api.MessageAddress, b: api.MessageAddress) => {
 	return (!a.User || !b.User || a.User === b.User) && a.Domain.ASCII === b.Domain.ASCII
 }
 
@@ -443,7 +446,7 @@ const addressList = (allAddrs: boolean, l: api.MessageAddress[]) => {
 // loadMsgheaderView loads the common message headers into msgheaderelem.
 // if refineKeyword is set, labels are shown and a click causes a call to
 // refineKeyword.
-const loadMsgheaderView = (msgheaderelem: HTMLTableSectionElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>), allAddrs: boolean) => {
+export const loadMsgheaderView = (msgheaderelem: HTMLTableSectionElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>), allAddrs: boolean) => {
 	const msgenv = mi.Envelope
 	const received = mi.Message.Received
 	const receivedlocal = new Date(received.getTime())

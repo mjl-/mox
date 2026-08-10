@@ -1,5 +1,9 @@
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 
+import {dom, attr} from '../lib'
+import {css, styles, styleClasses, formatAddress, join, loadMsgheaderView} from './lib'
+import * as api from './api'
+
 // Loaded from synchronous javascript.
 declare let messageItem: api.MessageItem
 // From customization script.

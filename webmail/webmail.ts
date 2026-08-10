@@ -83,6 +83,10 @@ Enable consistency checking in UI updates:
 - todo: mobile-friendly version. should perhaps be a completely different app, because it is so different.
 */
 
+import {dom, style, attr, prop, ElemArg} from '../lib'
+import {css, ensureCSS, styles, styleClasses, equalAddress, formatAddress, formatAddressShort, formatEmail, loadMsgheaderView, isImage, renderText, formatDomain, join} from './lib'
+import * as api from './api'
+
 // If we had to reload with a cache buster after a server update, the URL will
 // start with ?v=.... Remove it and load again.
 const reloadURL = URL.parse(window.location.href)
@@ -130,7 +134,7 @@ const yscrollStyle = css('yscroll', {overflowY: 'scroll', position: 'absolute', 
 const yscrollAutoStyle = css('yscrollAuto', {overflowY: 'auto', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0})
 
 // Input elements that automatically grow based on input, with additional JS.
-const autosizeStyle = css('autosize', {display: 'inline-grid', maxWidth: '90vw'})
+css('autosize', {display: 'inline-grid', maxWidth: '90vw'})
 ensureCSS('.autosize.input', {gridArea: '1 / 2'})
 ensureCSS('.autosize::after', {content: 'attr(data-value)', marginRight: '1em', lineHeight: 0, visibility: 'hidden', whiteSpace: 'pre-wrap', overflowX: 'hidden'})
 
@@ -7835,7 +7839,7 @@ const showUnhandledError = (err: Error, lineno: number, colno: number) => {
 		dom.div(style({marginBottom: '.5ex'}), ''+xerrmsg),
 		dom.clickbutton('Details', function click() {
 			box.remove()
-			let msg = `Mox version: ${moxversion}
+			let msg = `Mox version: ${moxversion} (${moxgoos}/${moxgoarch})
 Browser: ${window.navigator.userAgent}
 File: webmail.html
 Lineno: ${lineno || '-'}

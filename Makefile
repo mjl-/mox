@@ -133,26 +133,30 @@ node_modules/.bin/tsc:
 	-mkdir -p node_modules/.bin
 	npm ci --ignore-scripts
 
-install-js: node_modules/.bin/tsc
+node_modules/.bin/esbuild:
+	-mkdir -p node_modules/.bin
+	npm ci --ignore-scripts
+
+install-js: node_modules/.bin/tsc node_modules/.bin/esbuild
 
 install-js0:
 	-mkdir -p node_modules/.bin
-	npm install --ignore-scripts --save-dev --save-exact typescript@7.0.2
+	npm install --ignore-scripts --save-dev --save-exact typescript@7.0.2 esbuild@v0.28.1
 
-webmail/webmail.js: lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
-	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
+webmail/webmail.js: webmail/webmail.ts webmail/api.ts webmail/lib.ts lib.ts
+	./tsc.sh $@ webmail/webmail.ts webmail/api.ts webmail/lib.ts lib.ts
 
-webmail/msg.js: lib.ts webmail/api.ts webmail/lib.ts webmail/msg.ts
-	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/msg.ts
+webmail/msg.js: webmail/msg.ts webmail/api.ts webmail/lib.ts lib.ts
+	./tsc.sh $@ webmail/msg.ts webmail/api.ts webmail/lib.ts lib.ts
 
-webmail/text.js: lib.ts webmail/api.ts webmail/lib.ts webmail/text.ts
-	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/text.ts
+webmail/text.js: webmail/text.ts webmail/api.ts webmail/lib.ts lib.ts
+	./tsc.sh $@ webmail/text.ts webmail/api.ts webmail/lib.ts lib.ts
 
-webadmin/admin.js: lib.ts webadmin/api.ts webadmin/admin.ts
-	./tsc.sh $@ lib.ts webadmin/api.ts webadmin/admin.ts
+webadmin/admin.js: webadmin/admin.ts webadmin/api.ts lib.ts
+	./tsc.sh $@ webadmin/admin.ts webadmin/api.ts lib.ts
 
-webaccount/account.js: lib.ts webaccount/api.ts webaccount/account.ts
-	./tsc.sh $@ lib.ts webaccount/api.ts webaccount/account.ts
+webaccount/account.js: webaccount/account.ts webaccount/api.ts lib.ts
+	./tsc.sh $@ webaccount/account.ts webaccount/api.ts lib.ts
 
 frontend: node_modules/.bin/tsc webadmin/admin.js webaccount/account.js webmail/webmail.js webmail/msg.js webmail/text.js
 
