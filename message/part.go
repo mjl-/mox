@@ -526,27 +526,26 @@ func parseEnvelope(log mlog.Log, h mail.Header) (*Envelope, error) {
 
 func parseAddressList(log mlog.Log, h mail.Header, k string) []Address {
 	// todo: possibly work around ios mail generating incorrect q-encoded "phrases" with unencoded double quotes? ../rfc/2047:382
-	v := h.Get(k)
-	if v == "" {
-		return nil
-	}
 	parser := mail.AddressParser{WordDecoder: &wordDecoder}
-	l, err := parser.ParseList(v)
-	if err != nil {
-		return nil
-	}
 	var r []Address
-	for _, a := range l {
-		// todo: parse more fully according to ../rfc/5322:959
-		var user, host string
-		addr, err := smtp.ParseNetMailAddress(a.Address)
+	for _, v := range h[textproto.CanonicalMIMEHeaderKey(k)] {
+		l, err := parser.ParseList(v)
 		if err != nil {
-			log.Infox("parsing address (continuing)", err, slog.Any("netmailaddress", a.Address))
-		} else {
-			user = addr.Localpart.String()
-			host = addr.Domain.ASCII
+			log.Infox("parsing address list", err, slog.String("header", k))
+			return nil
 		}
-		r = append(r, Address{a.Name, user, host})
+		for _, a := range l {
+			// todo: parse more fully according to ../rfc/5322:959
+			var user, host string
+			addr, err := smtp.ParseNetMailAddress(a.Address)
+			if err != nil {
+				log.Infox("parsing address (continuing)", err, slog.Any("netmailaddress", a.Address))
+			} else {
+				user = addr.Localpart.String()
+				host = addr.Domain.ASCII
+			}
+			r = append(r, Address{a.Name, user, host})
+		}
 	}
 	return r
 }
