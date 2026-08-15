@@ -1789,9 +1789,11 @@ func (c *conn) cmdMail(p *parser) {
 			// ../rfc/4954:704
 			// todo future: should we accept utf-8-addr-xtext if there is no smtputf8, and utf-8 if there is? need to find a spec ../rfc/6533:259
 			p.xtake("=")
-			p.xtake("<")
-			p.xtext()
-			p.xtake(">")
+			if p.take("<") {
+				p.xtake(">")
+			} else {
+				p.xtext()
+			}
 		case "SMTPUTF8":
 			// ../rfc/6531:213
 			c.smtputf8 = true
