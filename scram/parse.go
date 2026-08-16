@@ -152,7 +152,7 @@ func (p *parser) xvalue() string {
 				p.xerrorf("invalid empty value")
 			}
 			r := p.s[p.o : p.o+o]
-			p.o = o
+			p.o += o
 			return r
 		}
 	}

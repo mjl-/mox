@@ -123,6 +123,32 @@ func TestScramServerBad(t *testing.T) {
 	}
 }
 
+// Test with multiple extensions.
+func TestScramExtensions(t *testing.T) {
+	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
+	saltedPassword, err := SaltPassword(sha256.New, "pencil", salt, 4096)
+	tcheck(t, err, "saltpassword")
+
+	// Client-first with two trailing extensions (a=1,b=2).
+	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO,a=1,b=2"), nil, false)
+	tcheck(t, err, "newserver with client-first extensions")
+	if server.Authentication != "user" {
+		t.Fatalf("got username %q, expected %q", server.Authentication, "user")
+	}
+	if server.clientNonce != "rOprNGfwEbeRWgbNEkqO" {
+		t.Fatalf("got client nonce %q, expected %q", server.clientNonce, "rOprNGfwEbeRWgbNEkqO")
+	}
+
+	_, err = server.ServerFirst(4096, salt)
+	tcheck(t, err, "server first")
+
+	// Client-final with two extensions (a=1,b=2).
+	_, err = server.Finish([]byte("c=biws,r="+server.nonce+",a=1,b=2,p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ="), saltedPassword)
+	if !errors.Is(err, ErrInvalidProof) {
+		t.Fatalf("got %v, expected ErrInvalidProof", err)
+	}
+}
+
 func TestScramClient(t *testing.T) {
 	c := NewClient(sha256.New, "user", "", false, nil)
 	c.clientNonce = "rOprNGfwEbeRWgbNEkqO"
