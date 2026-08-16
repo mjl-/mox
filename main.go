@@ -1031,6 +1031,7 @@ func ctlcmdConfigAccountList(ctl *ctl) {
 }
 
 func cmdConfigAccountAddresses(c *cmd) {
+	c.params = "$account"
 	c.help = `List all addresses for an account.
 
 Each address is printed on a line.

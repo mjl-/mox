@@ -64,7 +64,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox config describe-domains >domains.conf
 	mox config describe-static >mox.conf
 	mox config account list
-	mox config account addresses
+	mox config account addresses $account
 	mox config account add $account $address
 	mox config account rm $account
 	mox config account disable $account $message
@@ -975,7 +975,7 @@ An address starting with an "@" indicate it is a catchall address for the domain
 
 Does not check whether account is disabled.
 
-	usage: mox config account addresses
+	usage: mox config account addresses $account
 
 # mox config account add
 
