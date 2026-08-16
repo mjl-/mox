@@ -36,7 +36,7 @@ func xprefixConn(c net.Conn, br *bufio.Reader) net.Conn {
 	}
 
 	buf := make([]byte, n)
-	_, err := io.ReadFull(c, buf)
+	_, err := io.ReadFull(br, buf)
 	xcheckf(err, "get buffered data")
 	return &prefixConn{buf, c}
 }
