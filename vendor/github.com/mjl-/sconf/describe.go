@@ -2,6 +2,7 @@ package sconf
 
 import (
 	"bufio"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"reflect"
@@ -238,10 +239,16 @@ func (w *writer) describeValue(v reflect.Value) {
 		w.write(fmt.Sprintf(" %s\n", i))
 
 	case reflect.Slice:
-		w.write("\n")
-		w.indent()
-		w.describeSlice(v)
-		w.unindent()
+		if t.Elem().Kind() == reflect.Uint8 {
+			w.write(" ")
+			w.write(base64.StdEncoding.EncodeToString(v.Bytes()))
+			w.write("\n")
+		} else {
+			w.write("\n")
+			w.indent()
+			w.describeSlice(v)
+			w.unindent()
+		}
 
 	case reflect.Ptr:
 		var pv reflect.Value

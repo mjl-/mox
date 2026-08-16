@@ -7,7 +7,7 @@ require (
 	github.com/mjl-/autocert v0.0.0-20260807073006-86291c3fc55e
 	github.com/mjl-/bstore v0.0.11
 	github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978
-	github.com/mjl-/sconf v0.0.7
+	github.com/mjl-/sconf v0.0.8
 	github.com/mjl-/sherpa v0.6.7
 	github.com/mjl-/sherpadoc v0.0.16
 	github.com/mjl-/sherpaprom v0.0.2
