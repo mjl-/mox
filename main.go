@@ -484,6 +484,13 @@ func main() {
 		cmdSendmail(c)
 		return
 	}
+	// Instructions explain to install mox as /usr/sbin/sendmail as setgid "moxsubmit".
+	// Users can invoke that binary as regular "mox" command too. We don't want to run
+	// our regular code, users could use one of the commands to read
+	// /etc/moxsubmit.conf, or enable traceauth logging and read a password.
+	if os.Getgid() != os.Getegid() {
+		log.Fatalf("can only execute as sendmail when effective gid is different from gid")
+	}
 
 	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", filepath.FromSlash("config/mox.conf")), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
