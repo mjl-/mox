@@ -20,7 +20,7 @@ install: build0 frontend
 	CGO_ENABLED=0 go install
 
 race: build0
-	go build -race
+	CGO_ENABLED=1 go build -race
 
 test:
 	CGO_ENABLED=0 go test -fullpath -shuffle=on -coverprofile cover.out ./...
@@ -51,7 +51,7 @@ check:
 	CGO_ENABLED=0 go vet -tags link rfc/link.go
 	CGO_ENABLED=0 go vet -tags errata rfc/errata.go
 	CGO_ENABLED=0 go vet -tags xr rfc/xr.go
-	GOARCH=386 CGO_ENABLED=0 go vet ./...
+	CGO_ENABLED=0 GOARCH=386 go vet ./...
 	CGO_ENABLED=0 ineffassign ./...
 	CGO_ENABLED=0 staticcheck ./...
 	CGO_ENABLED=0 staticcheck -tags integration
@@ -74,20 +74,20 @@ check-shadow:
 	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which shadow) rfc/xr.go 2>&1 | grep -v '"err"'
 
 fuzz:
-	go test -fullpath -fuzz FuzzParseSignature -fuzztime 5m ./dkim
-	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./dkim
-	go test -fullpath -fuzz . -fuzztime 5m ./dmarc
-	go test -fullpath -fuzz . -fuzztime 5m ./dmarcrpt
-	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./imapserver
-	go test -fullpath -fuzz . -fuzztime 5m ./imapclient
-	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./junk
-	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
-	go test -fullpath -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts
-	go test -fullpath -fuzz . -fuzztime 5m ./smtp
-	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./smtpserver
-	go test -fullpath -fuzz . -fuzztime 5m ./spf
-	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
-	go test -fullpath -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseSignature -fuzztime 5m ./dkim
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./dkim
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./dmarc
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./dmarcrpt
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./imapserver
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./imapclient
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./junk
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./smtp
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./smtpserver
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./spf
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
 
 govendor:
 	go mod tidy
@@ -124,7 +124,7 @@ fix:
 	go fix ./...
 
 modernize:
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
+	CGO_ENABLED=0 go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
 
 tswatch:
 	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'
@@ -165,6 +165,9 @@ install-apidiff:
 
 genapidiff:
 	./apidiff.sh
+
+fetch-publicsuffixlist:
+	curl https://publicsuffix.org/list/public_suffix_list.dat >publicsuffix/public_suffix_list.txt
 
 docker:
 	docker build -t mox:dev .

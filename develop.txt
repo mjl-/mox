@@ -415,15 +415,15 @@ done
 - Gather feedback on recent changes.
 - Check if dependencies need updates.
 - Run "make modernize".
-- Update to latest publicsuffix/ list.
+- Update to latest publicsuffix/ list ("make fetch-publicsuffixlist").
 - Check code if there are deprecated features that can be removed.
-- Generate apidiff and check if breaking changes can be prevented. Update moxtools.
+- Generate apidiff ("make genapidiff") and check if breaking changes can be prevented. Update moxtools.
 - Update features & roadmap in README.md and website.
 - Write release notes, copy from previous.
-- Build and run tests with previous major Go release, run "make docker-release" to test building images.
-- Run tests, including with race detector, also with TZ= for UTC-behaviour, and with -count 2.
-- Run integration and upgrade tests.
-- Run fuzzing tests for a while.
+- Build ("make build check buildall") and run tests with previous major Go release, run "make docker-release" to test building images.
+- Run tests ("make test"), including with race detector ("make test-race", also with TZ= for UTC-behaviour and with -count 2 ("make test-more").
+- Run integration ("make test-integration") and upgrade tests ("make test-upgrade").
+- Run fuzzing tests for a while ("make fuzz").
 - Deploy to test environment. Test the update instructions.
 - Test mox localserve on various OSes (linux, bsd, macos, windows).
 - Send and receive email through the major webmail providers, check headers.
