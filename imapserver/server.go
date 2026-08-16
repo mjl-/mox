@@ -3259,6 +3259,14 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 
 	var mb store.Mailbox
 	c.account.WithRLock(func() {
+		// Flush pending changes. We are about to fetch the current state from the
+		// database. We don't want appends that were pending since the beginning of the
+		// connection to be processed after we've read the latest state from the database,
+		// e.g. by a status commands after select. It would mean we would try to apply
+		// changes that we already have in our connection state.
+		overflow, pendingChanges := c.comm.Get()
+		c.xapplyChanges(overflow, pendingChanges, false)
+
 		c.xdbread(func(tx *bstore.Tx) {
 			mb = c.xmailbox(tx, name, "")
 

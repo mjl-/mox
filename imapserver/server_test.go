@@ -1016,3 +1016,23 @@ func TestCapabilitiesDisabled(t *testing.T) {
 	tc.transactf("ok", "enable condstore uidonly")
 	tc.xuntagged(imapclient.UntaggedEnabled{imapclient.CapCondstore}) // Not UIDONLY.
 }
+
+// Bug where a client opens a connect, another connection adds a message to a
+// mailbox, the first connection selects the mailbox (processing all including
+// the new message but doesn't process pending "changes"), and then does a
+// status which processes pending "changes" which includes the uid that was
+// already seen during select.
+func TestBugConnectionSelectStatus(t *testing.T) {
+	tc := start(t, false)
+	defer tc.close()
+
+	tc2 := startNoSwitchboard(t, false)
+	defer tc2.closeNoWait()
+
+	tc.login("mjl@mox.example", password0)
+	tc2.login("mjl@mox.example", password0)
+
+	tc2.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(exampleMsg), exampleMsg)
+	tc.transactf("ok", "select inbox")
+	tc.transactf("ok", "status inbox (messages)")
+}
