@@ -2819,7 +2819,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 
 			sig := base64.StdEncoding.EncodeToString(r.Sig.Signature)
-			sig = sig[:12] // Must be at least 8 characters and unique among the signatures.
+			sig = sig[:min(len(sig), 12)] // Must be at least 8 characters and unique among the signatures.
 			props = []message.AuthProp{
 				message.MakeAuthProp("header", "d", r.Sig.Domain.XName(c.msgsmtputf8), true, r.Sig.Domain.ASCIIExtra(c.msgsmtputf8)),
 				message.MakeAuthProp("header", "s", r.Sig.Selector.XName(c.msgsmtputf8), true, r.Sig.Selector.ASCIIExtra(c.msgsmtputf8)),
