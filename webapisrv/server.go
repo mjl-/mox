@@ -854,9 +854,11 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 		cd := mime.FormatMediaType(disp, map[string]string{"filename": filename})
 
+		xcheckcontrol(ct)
 		h.Set("Content-Type", ct)
 		h.Set("Content-Disposition", cd)
 		if cid != "" {
+			xcheckcontrol(cid)
 			h.Set("Content-ID", cid)
 		}
 		h.Set("Content-Transfer-Encoding", "base64")
