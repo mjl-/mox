@@ -9,7 +9,7 @@ require (
 	github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978
 	github.com/mjl-/sconf v0.0.8
 	github.com/mjl-/sherpa v0.6.7
-	github.com/mjl-/sherpadoc v0.0.16
+	github.com/mjl-/sherpadoc v0.0.18
 	github.com/mjl-/sherpaprom v0.0.2
 	github.com/prometheus/client_golang v1.18.0
 	github.com/russross/blackfriday/v2 v2.1.0

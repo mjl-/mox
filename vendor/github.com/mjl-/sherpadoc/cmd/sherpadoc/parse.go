@@ -254,6 +254,9 @@ func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) (name string)
 		for _, f := range nt.Fields.List {
 			if len(f.Names) == 0 {
 				// Embedded field. Treat its fields as if they were included.
+				if fieldDrops[dropField{xpp.Pkg.Name, typeName, typeName}] {
+					continue
+				}
 				gatherFields(f.Type, typeName, xpp)
 				continue
 			}
@@ -261,15 +264,13 @@ func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) (name string)
 			// Check if we need this type. Otherwise we may trip
 			// over an unhandled type that we wouldn't include in
 			// the output (eg due to a struct tag).
-			names := nameList(f.Names, f.Tag)
-			need := false
-			for _, name := range names {
-				if name != "" {
-					need = true
-					break
+			var names []string
+			for _, name := range nameList(f.Names, f.Tag) {
+				if name != "" && !fieldDrops[dropField{xpp.Pkg.Name, typeName, name}] {
+					names = append(names, name)
 				}
 			}
-			if !need {
+			if len(names) == 0 {
 				continue
 			}
 
@@ -280,7 +281,7 @@ func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) (name string)
 				[]*field{},
 			}
 			ff.Typewords = gatherFieldType(t.Name, ff, f.Type, f.Tag, sec, xpp)
-			for _, name := range nameList(f.Names, f.Tag) {
+			for _, name := range names {
 				nf := &field{}
 				*nf = *ff
 				nf.Name = name
@@ -711,7 +712,7 @@ func (pp *parsedPackage) ensurePackageParsed(importPath string) *parsedPackage {
 		astPkgs, err := parser.ParseDir(fset, localPath, nil, parser.ParseComments|parser.DeclarationErrors)
 		check(err, "parsing go files from "+localPath)
 		for name, pkg := range astPkgs {
-			if strings.HasSuffix(name, "_test") {
+			if name == "main" || strings.HasSuffix(name, "_test") {
 				continue
 			}
 			if astPkg != nil {
