@@ -154,7 +154,7 @@ func (tv typeVersion) pack(p *packer, rv reflect.Value) {
 			p.Field(false)
 			// Pretend to pack to get the nonzero checks.
 			// todo: we should be able to do nonzero-check without pretending to pack.
-			if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
+			if nrv.IsValid() && (nrv.Kind() != reflect.Pointer || !nrv.IsZero()) {
 				f.Type.pack(&packer{b: &bytes.Buffer{}}, nrv)
 			}
 		} else {
@@ -222,12 +222,12 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 		n := rv.Len()
 		p.Uvarint(uint64(n))
 		p.PushFieldmap(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			nrv := rv.Index(i)
 			if ft.ListElem.isZero(nrv) {
 				p.Field(false)
 				// Pretend to pack to get the nonzero checks of the element.
-				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
+				if nrv.IsValid() && (nrv.Kind() != reflect.Pointer || !nrv.IsZero()) {
 					ft.ListElem.pack(&packer{b: &bytes.Buffer{}}, nrv)
 				}
 			} else {
@@ -239,12 +239,12 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 	case kindArray:
 		n := ft.ArrayLength
 		p.PushFieldmap(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			nrv := rv.Index(i)
 			if ft.ListElem.isZero(nrv) {
 				p.Field(false)
 				// Pretend to pack to get the nonzero checks of the element.
-				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
+				if nrv.IsValid() && (nrv.Kind() != reflect.Pointer || !nrv.IsZero()) {
 					ft.ListElem.pack(&packer{b: &bytes.Buffer{}}, nrv)
 				}
 			} else {
@@ -267,7 +267,7 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 			if ft.MapValue.isZero(v) {
 				p.Field(false)
 				// Pretend to pack to get the nonzero checks of the key type.
-				if v.IsValid() && (v.Kind() != reflect.Ptr || !v.IsZero()) {
+				if v.IsValid() && (v.Kind() != reflect.Pointer || !v.IsZero()) {
 					ft.MapValue.pack(&packer{b: &bytes.Buffer{}}, v)
 				}
 			} else {
@@ -286,7 +286,7 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 				}
 				p.Field(false)
 				// Pretend to pack to get the nonzero checks.
-				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
+				if nrv.IsValid() && (nrv.Kind() != reflect.Pointer || !nrv.IsZero()) {
 					f.Type.pack(&packer{b: &bytes.Buffer{}}, nrv)
 				}
 			} else {

@@ -312,7 +312,7 @@ func checkNonzeroFieldType(m map[reflect.Type]*nonzeroCheckType, ft fieldType, t
 	case kindSlice:
 		et := t.Elem()
 		n := rv.Len()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if err := checkNonzeroFieldType(m, *ft.ListElem, et, rv.Index(i)); err != nil {
 				return err
 			}
@@ -320,7 +320,7 @@ func checkNonzeroFieldType(m map[reflect.Type]*nonzeroCheckType, ft fieldType, t
 	case kindArray:
 		et := t.Elem()
 		n := ft.ArrayLength
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if err := checkNonzeroFieldType(m, *ft.ListElem, et, rv.Index(i)); err != nil {
 				return err
 			}

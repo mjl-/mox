@@ -175,7 +175,7 @@ func (tv typeVersion) parse(p *parser, rv reflect.Value) {
 func (ft fieldType) parse(p *parser, rv reflect.Value) {
 	// Because we allow schema changes from ptr to nonptr, rv can be a
 	// pointer or direct value regardless of ft.Ptr.
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		nrv := reflect.New(rv.Type().Elem())
 		rv.Set(nrv)
 		rv = nrv.Elem()
@@ -186,7 +186,7 @@ func (ft fieldType) parse(p *parser, rv reflect.Value) {
 	case kindBinaryMarshal:
 		buf := p.TakeBytes(false)
 		t := rv.Type()
-		if t.Kind() == reflect.Ptr {
+		if t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
 		v := reflect.New(t)
@@ -194,7 +194,7 @@ func (ft fieldType) parse(p *parser, rv reflect.Value) {
 		if err != nil {
 			panic(parseErr{err})
 		}
-		if rv.Type().Kind() == reflect.Ptr {
+		if rv.Type().Kind() == reflect.Pointer {
 			rv.Set(v)
 		} else {
 			rv.Set(v.Elem())
@@ -247,7 +247,7 @@ func (ft fieldType) parse(p *parser, rv reflect.Value) {
 	case kindArray:
 		n := ft.ArrayLength
 		fm := p.Fieldmap(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if fm.Nonzero(i) {
 				ft.ListElem.parse(p, rv.Index(i))
 			}
@@ -257,7 +257,7 @@ func (ft fieldType) parse(p *parser, rv reflect.Value) {
 		n := p.checkInt(un)
 		fm := p.Fieldmap(n)
 		mp := reflect.MakeMapWithSize(rv.Type(), n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			mk := reflect.New(rv.Type().Key()).Elem()
 			ft.MapKey.parse(p, mk)
 			mv := reflect.New(rv.Type().Elem()).Elem()
@@ -312,7 +312,7 @@ func (ft fieldType) skip(p *parser) {
 		un := p.Uvarint()
 		n := p.checkInt(un)
 		fm := p.Fieldmap(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if fm.Nonzero(i) {
 				ft.ListElem.skip(p)
 			}
@@ -320,7 +320,7 @@ func (ft fieldType) skip(p *parser) {
 	case kindArray:
 		n := ft.ArrayLength
 		fm := p.Fieldmap(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if fm.Nonzero(i) {
 				ft.ListElem.skip(p)
 			}
@@ -329,7 +329,7 @@ func (ft fieldType) skip(p *parser) {
 		un := p.Uvarint()
 		n := p.checkInt(un)
 		fm := p.Fieldmap(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			ft.MapKey.skip(p)
 			if fm.Nonzero(i) {
 				ft.MapValue.skip(p)

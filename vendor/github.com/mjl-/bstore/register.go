@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -505,7 +506,7 @@ func (db *DB) register(ctx context.Context, log *slog.Logger, typeValues ...any)
 				if err != nil {
 					return err
 				}
-				ibname := []byte(fmt.Sprintf("index.%s", iname))
+				ibname := fmt.Appendf(nil, "index.%s", iname)
 				tx.stats.Bucket.Put++
 				ib, err := b.CreateBucket(ibname)
 				if err != nil {
@@ -1061,7 +1062,7 @@ func checkKeyType(t reflect.Type) error {
 
 func gatherFieldType(typeSeqs map[reflect.Type]int, t reflect.Type, inMap, newSeq bool) (fieldType, error) {
 	ft := fieldType{}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 		ft.Ptr = true
 	}
@@ -1353,10 +1354,8 @@ func (tx *Tx) checkTypes(otv, ntv *typeVersion, recreateIndices map[string]struc
 // (currently for ints that are packed with fixed width encoding).
 func (ft fieldType) compatible(nft fieldType, checked map[[2]int]struct{}) (bool, error) {
 	need := func(incr bool, l ...kind) (bool, error) {
-		for _, k := range l {
-			if nft.Kind == k {
-				return incr, nil
-			}
+		if slices.Contains(l, nft.Kind) {
+			return incr, nil
 		}
 		return false, fmt.Errorf("%w: need %v have %v", ErrIncompatible, l, nft.Kind)
 	}

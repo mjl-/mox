@@ -2,6 +2,7 @@ package bstore
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -33,12 +34,7 @@ func newStoreTags(tag string, isPK bool) (storeTags, error) {
 }
 
 func (t storeTags) Has(word string) bool {
-	for _, s := range t {
-		if s == word {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(t, word)
 }
 
 func (t storeTags) Get(word string) (string, error) {

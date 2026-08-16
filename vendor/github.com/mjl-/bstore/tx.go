@@ -37,7 +37,7 @@ func (tx *Tx) error() error {
 
 func (tx *Tx) structptr(value any) (reflect.Value, error) {
 	rv := reflect.ValueOf(value)
-	if !rv.IsValid() || rv.Kind() != reflect.Ptr || !rv.Elem().IsValid() || rv.Type().Elem().Kind() != reflect.Struct {
+	if !rv.IsValid() || rv.Kind() != reflect.Pointer || !rv.Elem().IsValid() || rv.Type().Elem().Kind() != reflect.Struct {
 		return reflect.Value{}, fmt.Errorf("%w: value must be non-nil pointer to a struct, is %T", ErrParam, value)
 	}
 	rv = rv.Elem()
@@ -49,7 +49,7 @@ func (tx *Tx) structOrStructptr(value any) (reflect.Value, error) {
 	if !rv.IsValid() {
 		return reflect.Value{}, fmt.Errorf("%w: value must be non-nil if pointer", ErrParam)
 	}
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 		if !rv.IsValid() {
 			return rv, fmt.Errorf("%w: value must be non-nil if pointer", ErrParam)
@@ -78,7 +78,7 @@ func (tx *Tx) updateIndices(tv *typeVersion, pk []byte, ov, v reflect.Value) err
 				if on != nn {
 					return true
 				}
-				for i := 0; i < nn; i++ {
+				for i := range nn {
 					// Slice elements are comparable.
 					if ofv.Index(i) != nfv.Index(i) {
 						return true

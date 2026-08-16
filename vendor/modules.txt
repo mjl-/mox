@@ -15,7 +15,7 @@ github.com/mjl-/adns/internal/singleflight
 # github.com/mjl-/autocert v0.0.0-20260807073006-86291c3fc55e
 ## explicit; go 1.25.0
 github.com/mjl-/autocert
-# github.com/mjl-/bstore v0.0.10
+# github.com/mjl-/bstore v0.0.11
 ## explicit; go 1.23.0
 github.com/mjl-/bstore
 # github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978

@@ -28,8 +28,8 @@ github.com/mjl-/adns v0.0.0-20260809141028-22f885debe71 h1:CgK2GBILUJZAEOKflC71X
 github.com/mjl-/adns v0.0.0-20260809141028-22f885debe71/go.mod h1:GLn2Mav4YZyQxJuIoLKUqC2HwZG0cpJ6O5R4L16aU0I=
 github.com/mjl-/autocert v0.0.0-20260807073006-86291c3fc55e h1:6HNDMgvF/qw+/ReA8k5U6r3cesDdXi0N3vuGkyTuKjM=
 github.com/mjl-/autocert v0.0.0-20260807073006-86291c3fc55e/go.mod h1:T5Rh/n4Lk8i1MydIPt09qt74RtN1Q4DXnH8D3vgL2KM=
-github.com/mjl-/bstore v0.0.10 h1:fYLQy3EdgXvRHoa8Q3sXMAjZf+uQLRbsh9rYjGep/t4=
-github.com/mjl-/bstore v0.0.10/go.mod h1:QzqlAZAVRKwyojCRd9v25viFsMxK5UmIbdxgEyHdK6c=
+github.com/mjl-/bstore v0.0.11 h1:CF6CcXdInhM0rk5piVWNuJ7yQt0xwq7Td8pYqK5yNwU=
+github.com/mjl-/bstore v0.0.11/go.mod h1:QzqlAZAVRKwyojCRd9v25viFsMxK5UmIbdxgEyHdK6c=
 github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978 h1:Eg5DfI3/00URzGErujKus6a3O0kyXzF8vjoDZzH/gig=
 github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978/go.mod h1:QBkFtjai3AiQQuUu7pVh6PA06Vd3oa68E+vddf/UBOs=
 github.com/mjl-/sconf v0.0.7 h1:bdBcSFZCDFMm/UdBsgNCsjkYmKrSgYwp7rAOoufwHe4=

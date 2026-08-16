@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"time"
 )
 
@@ -26,47 +27,60 @@ in full (with timezone) in the record data.
 
 // packPK returns the PK bytes representation for the PK value rv.
 func packPK(rv reflect.Value) ([]byte, error) {
-	kv := rv.Interface()
 	var buf []byte
-	switch k := kv.(type) {
-	case string:
-		buf = []byte(k)
-	case []byte:
-		buf = k
-	case bool:
+	k, err := typeKind(rv.Type())
+	if err != nil {
+		return nil, err
+	}
+	switch k {
+	case kindString:
+		buf = []byte(rv.String())
+	case kindBytes:
+		buf = rv.Bytes()
+	case kindBool:
 		var b byte
-		if k {
+		if rv.Bool() {
 			b = 1
 		}
 		buf = []byte{b}
-	case int8:
-		buf = []byte{byte(uint8(k + math.MinInt8))}
-	case int16:
-		buf = binary.BigEndian.AppendUint16(nil, uint16(k+math.MinInt16))
-	case int32:
-		buf = binary.BigEndian.AppendUint32(nil, uint32(k+math.MinInt32))
-	case int:
-		if k < math.MinInt32 || k > math.MaxInt32 {
-			return nil, fmt.Errorf("%w: int %d does not fit in int32", ErrParam, k)
+	case kindInt8:
+		v := int8(rv.Int())
+		buf = []byte{byte(uint8(v + math.MinInt8))}
+	case kindInt16:
+		v := int16(rv.Int())
+		buf = binary.BigEndian.AppendUint16(nil, uint16(v+math.MinInt16))
+	case kindInt32:
+		v := int32(rv.Int())
+		buf = binary.BigEndian.AppendUint32(nil, uint32(v+math.MinInt32))
+	case kindInt:
+		v := rv.Int()
+		if v < math.MinInt32 || v > math.MaxInt32 {
+			return nil, fmt.Errorf("%w: int %d does not fit in int32", ErrParam, v)
 		}
-		buf = binary.BigEndian.AppendUint32(nil, uint32(k+math.MinInt32))
-	case int64:
-		buf = binary.BigEndian.AppendUint64(nil, uint64(k+math.MinInt64))
-	case uint8:
-		buf = []byte{k}
-	case uint16:
-		buf = binary.BigEndian.AppendUint16(nil, k)
-	case uint32:
-		buf = binary.BigEndian.AppendUint32(nil, k)
-	case uint:
-		if k > math.MaxUint32 {
-			return nil, fmt.Errorf("%w: uint %d does not fit in uint32", ErrParam, k)
+		buf = binary.BigEndian.AppendUint32(nil, uint32(int32(v)+math.MinInt32))
+	case kindInt64:
+		v := rv.Int()
+		buf = binary.BigEndian.AppendUint64(nil, uint64(v+math.MinInt64))
+	case kindUint8:
+		v := uint8(rv.Uint())
+		buf = []byte{v}
+	case kindUint16:
+		v := uint16(rv.Uint())
+		buf = binary.BigEndian.AppendUint16(nil, v)
+	case kindUint32:
+		v := uint32(rv.Uint())
+		buf = binary.BigEndian.AppendUint32(nil, v)
+	case kindUint:
+		v := rv.Uint()
+		if v > math.MaxUint32 {
+			return nil, fmt.Errorf("%w: uint %d does not fit in uint32", ErrParam, v)
 		}
-		buf = binary.BigEndian.AppendUint32(nil, uint32(k))
-	case uint64:
-		buf = binary.BigEndian.AppendUint64(nil, k)
+		buf = binary.BigEndian.AppendUint32(nil, uint32(v))
+	case kindUint64:
+		v := rv.Uint()
+		buf = binary.BigEndian.AppendUint64(nil, v)
 	default:
-		return nil, fmt.Errorf("%w: unsupported primary key type %T", ErrType, kv)
+		return nil, fmt.Errorf("%w: unsupported primary key type %T", ErrType, rv.Interface())
 	}
 	return buf, nil
 }
@@ -305,13 +319,11 @@ func packIndexKey(frv reflect.Value) ([][]byte, error) {
 		}
 		buf = binary.BigEndian.AppendUint32(nil, uint32(i))
 	case kindUint64:
-		buf = binary.BigEndian.AppendUint64(nil, uint64(frv.Uint()))
+		buf = binary.BigEndian.AppendUint64(nil, frv.Uint())
 	case kindString:
 		buf = []byte(frv.String())
-		for _, c := range buf {
-			if c == 0 {
-				return nil, fmt.Errorf("%w: string used as index key cannot have \\0", ErrParam)
-			}
+		if slices.Contains(buf, 0) {
+			return nil, fmt.Errorf("%w: string used as index key cannot have \\0", ErrParam)
 		}
 		buf = append(buf, 0)
 	case kindTime:
@@ -321,7 +333,7 @@ func packIndexKey(frv reflect.Value) ([][]byte, error) {
 	case kindSlice:
 		n := frv.Len()
 		bufs := make([][]byte, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			nbufs, err := packIndexKey(frv.Index(i))
 			if err != nil {
 				return nil, fmt.Errorf("packing element from slice field: %w", err)
