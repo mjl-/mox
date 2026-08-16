@@ -1188,7 +1188,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 					# during SMTP RCPT TO with this error response line. Useful when a catchall
 					# address is configured for the domain and messages to some addresses should be
 					# rejected. The response line must start with an error code. Currently the
-					# following error resonse codes are allowed: 421 (temporary local error), 550
+					# following error response codes are allowed: 421 (temporary local error), 550
 					# (user not found). If the line consists of only an error code, an appropriate
 					# error message is added. Rejecting messages with a 4xx code invites later retries
 					# by the remote, while 5xx codes should prevent further delivery attempts.
