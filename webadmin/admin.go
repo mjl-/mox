@@ -1460,7 +1460,14 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 				for _, srv := range req.srvs {
 					srvs = append(srvs, fmt.Sprintf("%d %d %d %s", srv.Priority, srv.Weight, srv.Port, srv.Target))
 				}
-				addf(&r.SRVConf.Errors, "Unexpected SRV record(s) for %q: %s", name, strings.Join(srvs, ", "))
+				msg := fmt.Sprintf("Unexpected SRV record(s) for %q: %s", name, strings.Join(srvs, ", "))
+				// If only port is different (non-zero), don't raise an error, just a warning is
+				// fine.
+				if req.host[0] == "." && len(req.srvs) == 1 && req.srvs[0].Target == "." {
+					addf(&r.SRVConf.Warnings, "%s", msg)
+				} else {
+					addf(&r.SRVConf.Errors, "%s", msg)
+				}
 			}
 		}
 		addf(&r.SRVConf.Instructions, "%s", instr.String())
