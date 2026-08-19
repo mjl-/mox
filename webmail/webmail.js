@@ -1,7 +1,10 @@
 (() => {
+	var __defProp = Object.defineProperty;
+	var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
 	// .js/lib.js
 	var scriptblocks = [0, 128, 256, 384, 592, 688, 768, 880, 1024, 1280, 1328, 1424, 1536, 1792, 1872, 1920, 1984, 2048, 2112, 2144, 2160, 2208, 2304, 2432, 2560, 2688, 2816, 2944, 3072, 3200, 3328, 3456, 3584, 3712, 3840, 4096, 4256, 4352, 4608, 4992, 5024, 5120, 5760, 5792, 5888, 5920, 5952, 5984, 6016, 6144, 6320, 6400, 6480, 6528, 6624, 6656, 6688, 6832, 6912, 7040, 7104, 7168, 7248, 7296, 7312, 7360, 7376, 7424, 7552, 7616, 7680, 7936, 8192, 8304, 8352, 8400, 8448, 8528, 8592, 8704, 8960, 9216, 9280, 9312, 9472, 9600, 9632, 9728, 9984, 10176, 10224, 10240, 10496, 10624, 10752, 11008, 11264, 11360, 11392, 11520, 11568, 11648, 11744, 11776, 11904, 12032, 12272, 12288, 12352, 12448, 12544, 12592, 12688, 12704, 12736, 12784, 12800, 13056, 13312, 19904, 19968, 40960, 42128, 42192, 42240, 42560, 42656, 42752, 42784, 43008, 43056, 43072, 43136, 43232, 43264, 43312, 43360, 43392, 43488, 43520, 43616, 43648, 43744, 43776, 43824, 43888, 43968, 44032, 55216, 55296, 56192, 56320, 57344, 63744, 64256, 64336, 65024, 65040, 65056, 65072, 65104, 65136, 65280, 65520, 65536, 65664, 65792, 65856, 65936, 66e3, 66176, 66208, 66272, 66304, 66352, 66384, 66432, 66464, 66560, 66640, 66688, 66736, 66816, 66864, 66928, 67072, 67456, 67584, 67648, 67680, 67712, 67808, 67840, 67872, 67968, 68e3, 68096, 68192, 68224, 68288, 68352, 68416, 68448, 68480, 68608, 68736, 68864, 69216, 69248, 69312, 69376, 69424, 69488, 69552, 69600, 69632, 69760, 69840, 69888, 69968, 70016, 70112, 70144, 70272, 70320, 70400, 70656, 70784, 71040, 71168, 71264, 71296, 71424, 71680, 71840, 71936, 72096, 72192, 72272, 72368, 72384, 72448, 72704, 72816, 72960, 73056, 73440, 73472, 73648, 73664, 73728, 74752, 74880, 77712, 77824, 78896, 82944, 92160, 92736, 92784, 92880, 92928, 93760, 93952, 94176, 94208, 100352, 101120, 101632, 110576, 110592, 110848, 110896, 110960, 113664, 113824, 118528, 118784, 119040, 119296, 119488, 119520, 119552, 119648, 119808, 120832, 122624, 122880, 122928, 123136, 123536, 123584, 124112, 124896, 124928, 125184, 126064, 126208, 126464, 126976, 127024, 127136, 127232, 127488, 127744, 128512, 128592, 128640, 128768, 128896, 129024, 129280, 129536, 129648, 129792, 131072, 173824, 177984, 178208, 183984, 194560, 196608, 201552, 917504, 917760, 983040, 1048576];
-	var findBlock = (code) => {
+	var findBlock = /* @__PURE__ */ __name((code) => {
 		let s = 0;
 		let e = scriptblocks.length;
 		while (s < e - 1) {
@@ -13,8 +16,8 @@
 			}
 		}
 		return s;
-	};
-	var formatText = (e, s) => {
+	}, "findBlock");
+	var formatText = /* @__PURE__ */ __name((e, s) => {
 		if (!s) {
 			return;
 		}
@@ -34,7 +37,7 @@
 		let str = "";
 		let block = -1;
 		let mod = 1;
-		const put = (nextblock) => {
+		const put = /* @__PURE__ */ __name((nextblock) => {
 			if (n === 0 && nextblock === 0) {
 				mod = 0;
 			}
@@ -48,7 +51,7 @@
 			}
 			n++;
 			str = "";
-		};
+		}, "put");
 		for (const c of s) {
 			if (c === " " || c === "	" || c === "\r" || c === "\n") {
 				str += c;
@@ -65,8 +68,8 @@
 			str += c;
 		}
 		put(-1);
-	};
-	var _domKids = (e, l) => {
+	}, "formatText");
+	var _domKids = /* @__PURE__ */ __name((e, l) => {
 		l.forEach((c) => {
 			const xc = c;
 			if (typeof c === "string") {
@@ -108,104 +111,104 @@
 			}
 		});
 		return e;
-	};
+	}, "_domKids");
 	var dom = {
-		_kids: function(e, ...kl) {
+		_kids: /* @__PURE__ */ __name(function(e, ...kl) {
 			while (e.firstChild) {
 				e.removeChild(e.firstChild);
 			}
 			_domKids(e, kl);
-		},
-		_attrs: (x) => {
+		}, "_kids"),
+		_attrs: /* @__PURE__ */ __name((x) => {
 			return { _attrs: x };
-		},
-		_class: (...x) => {
+		}, "_attrs"),
+		_class: /* @__PURE__ */ __name((...x) => {
 			return { _class: x };
-		},
+		}, "_class"),
 		// The createElement calls are spelled out so typescript can derive function
 		// signatures with a specific HTML*Element return type.
-		div: (...l) => _domKids(document.createElement("div"), l),
-		span: (...l) => _domKids(document.createElement("span"), l),
-		a: (...l) => _domKids(document.createElement("a"), l),
-		input: (...l) => _domKids(document.createElement("input"), l),
-		textarea: (...l) => _domKids(document.createElement("textarea"), l),
-		select: (...l) => _domKids(document.createElement("select"), l),
-		option: (...l) => _domKids(document.createElement("option"), l),
-		clickbutton: (...l) => _domKids(document.createElement("button"), [attr.type("button"), ...l]),
-		submitbutton: (...l) => _domKids(document.createElement("button"), [attr.type("submit"), ...l]),
-		form: (...l) => _domKids(document.createElement("form"), l),
-		fieldset: (...l) => _domKids(document.createElement("fieldset"), l),
-		table: (...l) => _domKids(document.createElement("table"), l),
-		thead: (...l) => _domKids(document.createElement("thead"), l),
-		tbody: (...l) => _domKids(document.createElement("tbody"), l),
-		tfoot: (...l) => _domKids(document.createElement("tfoot"), l),
-		tr: (...l) => _domKids(document.createElement("tr"), l),
-		td: (...l) => _domKids(document.createElement("td"), l),
-		th: (...l) => _domKids(document.createElement("th"), l),
-		datalist: (...l) => _domKids(document.createElement("datalist"), l),
-		h1: (...l) => _domKids(document.createElement("h1"), l),
-		h2: (...l) => _domKids(document.createElement("h2"), l),
-		h3: (...l) => _domKids(document.createElement("h3"), l),
-		br: (...l) => _domKids(document.createElement("br"), l),
-		hr: (...l) => _domKids(document.createElement("hr"), l),
-		pre: (...l) => _domKids(document.createElement("pre"), l),
-		label: (...l) => _domKids(document.createElement("label"), l),
-		ul: (...l) => _domKids(document.createElement("ul"), l),
-		li: (...l) => _domKids(document.createElement("li"), l),
-		iframe: (...l) => _domKids(document.createElement("iframe"), l),
-		b: (...l) => _domKids(document.createElement("b"), l),
-		img: (...l) => _domKids(document.createElement("img"), l),
-		style: (...l) => _domKids(document.createElement("style"), l),
-		search: (...l) => _domKids(document.createElement("search"), l),
-		p: (...l) => _domKids(document.createElement("p"), l)
+		div: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("div"), l), "div"),
+		span: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("span"), l), "span"),
+		a: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("a"), l), "a"),
+		input: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("input"), l), "input"),
+		textarea: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("textarea"), l), "textarea"),
+		select: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("select"), l), "select"),
+		option: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("option"), l), "option"),
+		clickbutton: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("button"), [attr.type("button"), ...l]), "clickbutton"),
+		submitbutton: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("button"), [attr.type("submit"), ...l]), "submitbutton"),
+		form: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("form"), l), "form"),
+		fieldset: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("fieldset"), l), "fieldset"),
+		table: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("table"), l), "table"),
+		thead: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("thead"), l), "thead"),
+		tbody: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("tbody"), l), "tbody"),
+		tfoot: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("tfoot"), l), "tfoot"),
+		tr: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("tr"), l), "tr"),
+		td: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("td"), l), "td"),
+		th: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("th"), l), "th"),
+		datalist: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("datalist"), l), "datalist"),
+		h1: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("h1"), l), "h1"),
+		h2: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("h2"), l), "h2"),
+		h3: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("h3"), l), "h3"),
+		br: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("br"), l), "br"),
+		hr: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("hr"), l), "hr"),
+		pre: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("pre"), l), "pre"),
+		label: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("label"), l), "label"),
+		ul: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("ul"), l), "ul"),
+		li: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("li"), l), "li"),
+		iframe: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("iframe"), l), "iframe"),
+		b: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("b"), l), "b"),
+		img: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("img"), l), "img"),
+		style: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("style"), l), "style"),
+		search: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("search"), l), "search"),
+		p: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("p"), l), "p")
 	};
-	var _attr = (k, v) => {
+	var _attr = /* @__PURE__ */ __name((k, v) => {
 		const o = {};
 		o[k] = v;
 		return { _attrs: o };
-	};
+	}, "_attr");
 	var attr = {
-		title: (s) => _attr("title", s),
-		value: (s) => _attr("value", s),
-		type: (s) => _attr("type", s),
-		tabindex: (s) => _attr("tabindex", s),
-		src: (s) => _attr("src", s),
-		placeholder: (s) => _attr("placeholder", s),
-		href: (s) => _attr("href", s),
-		checked: (s) => _attr("checked", s),
-		selected: (s) => _attr("selected", s),
-		id: (s) => _attr("id", s),
-		datalist: (s) => _attr("datalist", s),
-		rows: (s) => _attr("rows", s),
-		target: (s) => _attr("target", s),
-		rel: (s) => _attr("rel", s),
-		required: (s) => _attr("required", s),
-		multiple: (s) => _attr("multiple", s),
-		download: (s) => _attr("download", s),
-		disabled: (s) => _attr("disabled", s),
-		draggable: (s) => _attr("draggable", s),
-		rowspan: (s) => _attr("rowspan", s),
-		colspan: (s) => _attr("colspan", s),
-		for: (s) => _attr("for", s),
-		role: (s) => _attr("role", s),
-		arialabel: (s) => _attr("aria-label", s),
-		arialive: (s) => _attr("aria-live", s),
-		name: (s) => _attr("name", s),
-		min: (s) => _attr("min", s),
-		max: (s) => _attr("max", s),
-		action: (s) => _attr("action", s),
-		method: (s) => _attr("method", s),
-		autocomplete: (s) => _attr("autocomplete", s),
-		list: (s) => _attr("list", s),
-		form: (s) => _attr("form", s),
-		size: (s) => _attr("size", s)
+		title: /* @__PURE__ */ __name((s) => _attr("title", s), "title"),
+		value: /* @__PURE__ */ __name((s) => _attr("value", s), "value"),
+		type: /* @__PURE__ */ __name((s) => _attr("type", s), "type"),
+		tabindex: /* @__PURE__ */ __name((s) => _attr("tabindex", s), "tabindex"),
+		src: /* @__PURE__ */ __name((s) => _attr("src", s), "src"),
+		placeholder: /* @__PURE__ */ __name((s) => _attr("placeholder", s), "placeholder"),
+		href: /* @__PURE__ */ __name((s) => _attr("href", s), "href"),
+		checked: /* @__PURE__ */ __name((s) => _attr("checked", s), "checked"),
+		selected: /* @__PURE__ */ __name((s) => _attr("selected", s), "selected"),
+		id: /* @__PURE__ */ __name((s) => _attr("id", s), "id"),
+		datalist: /* @__PURE__ */ __name((s) => _attr("datalist", s), "datalist"),
+		rows: /* @__PURE__ */ __name((s) => _attr("rows", s), "rows"),
+		target: /* @__PURE__ */ __name((s) => _attr("target", s), "target"),
+		rel: /* @__PURE__ */ __name((s) => _attr("rel", s), "rel"),
+		required: /* @__PURE__ */ __name((s) => _attr("required", s), "required"),
+		multiple: /* @__PURE__ */ __name((s) => _attr("multiple", s), "multiple"),
+		download: /* @__PURE__ */ __name((s) => _attr("download", s), "download"),
+		disabled: /* @__PURE__ */ __name((s) => _attr("disabled", s), "disabled"),
+		draggable: /* @__PURE__ */ __name((s) => _attr("draggable", s), "draggable"),
+		rowspan: /* @__PURE__ */ __name((s) => _attr("rowspan", s), "rowspan"),
+		colspan: /* @__PURE__ */ __name((s) => _attr("colspan", s), "colspan"),
+		for: /* @__PURE__ */ __name((s) => _attr("for", s), "for"),
+		role: /* @__PURE__ */ __name((s) => _attr("role", s), "role"),
+		arialabel: /* @__PURE__ */ __name((s) => _attr("aria-label", s), "arialabel"),
+		arialive: /* @__PURE__ */ __name((s) => _attr("aria-live", s), "arialive"),
+		name: /* @__PURE__ */ __name((s) => _attr("name", s), "name"),
+		min: /* @__PURE__ */ __name((s) => _attr("min", s), "min"),
+		max: /* @__PURE__ */ __name((s) => _attr("max", s), "max"),
+		action: /* @__PURE__ */ __name((s) => _attr("action", s), "action"),
+		method: /* @__PURE__ */ __name((s) => _attr("method", s), "method"),
+		autocomplete: /* @__PURE__ */ __name((s) => _attr("autocomplete", s), "autocomplete"),
+		list: /* @__PURE__ */ __name((s) => _attr("list", s), "list"),
+		form: /* @__PURE__ */ __name((s) => _attr("form", s), "form"),
+		size: /* @__PURE__ */ __name((s) => _attr("size", s), "size")
 	};
-	var style = (x) => {
+	var style = /* @__PURE__ */ __name((x) => {
 		return { _styles: x };
-	};
-	var prop = (x) => {
+	}, "style");
+	var prop = /* @__PURE__ */ __name((x) => {
 		return { _props: x };
-	};
+	}, "prop");
 
 	// .js/webmail/api.js
 	var Validation;
@@ -317,61 +320,64 @@
 		"Quoting": { "Name": "Quoting", "Docs": "", "Values": [{ "Name": "Default", "Value": "", "Docs": "" }, { "Name": "Bottom", "Value": "bottom", "Docs": "" }, { "Name": "Top", "Value": "top", "Docs": "" }] }
 	};
 	var parser = {
-		Request: (v) => parse("Request", v),
-		Query: (v) => parse("Query", v),
-		Filter: (v) => parse("Filter", v),
-		NotFilter: (v) => parse("NotFilter", v),
-		Page: (v) => parse("Page", v),
-		MessageItem: (v) => parse("MessageItem", v),
-		Message: (v) => parse("Message", v),
-		MessageEnvelope: (v) => parse("MessageEnvelope", v),
-		MessageAddress: (v) => parse("MessageAddress", v),
-		Domain: (v) => parse("Domain", v),
-		Attachment: (v) => parse("Attachment", v),
-		Part: (v) => parse("Part", v),
-		Envelope: (v) => parse("Envelope", v),
-		Address: (v) => parse("Address", v),
-		ParsedMessage: (v) => parse("ParsedMessage", v),
-		FromAddressSettings: (v) => parse("FromAddressSettings", v),
-		ComposeMessage: (v) => parse("ComposeMessage", v),
-		SubmitMessage: (v) => parse("SubmitMessage", v),
-		File: (v) => parse("File", v),
-		ForwardAttachments: (v) => parse("ForwardAttachments", v),
-		Mailbox: (v) => parse("Mailbox", v),
-		RecipientSecurity: (v) => parse("RecipientSecurity", v),
-		Settings: (v) => parse("Settings", v),
-		Ruleset: (v) => parse("Ruleset", v),
-		EventStart: (v) => parse("EventStart", v),
-		DomainAddressConfig: (v) => parse("DomainAddressConfig", v),
-		EventViewErr: (v) => parse("EventViewErr", v),
-		EventViewReset: (v) => parse("EventViewReset", v),
-		EventViewMsgs: (v) => parse("EventViewMsgs", v),
-		EventViewChanges: (v) => parse("EventViewChanges", v),
-		ChangeMsgAdd: (v) => parse("ChangeMsgAdd", v),
-		Flags: (v) => parse("Flags", v),
-		ChangeMsgRemove: (v) => parse("ChangeMsgRemove", v),
-		ChangeMsgFlags: (v) => parse("ChangeMsgFlags", v),
-		ChangeMsgThread: (v) => parse("ChangeMsgThread", v),
-		ChangeMailboxRemove: (v) => parse("ChangeMailboxRemove", v),
-		ChangeMailboxAdd: (v) => parse("ChangeMailboxAdd", v),
-		ChangeMailboxRename: (v) => parse("ChangeMailboxRename", v),
-		ChangeMailboxCounts: (v) => parse("ChangeMailboxCounts", v),
-		ChangeMailboxSpecialUse: (v) => parse("ChangeMailboxSpecialUse", v),
-		SpecialUse: (v) => parse("SpecialUse", v),
-		ChangeMailboxKeywords: (v) => parse("ChangeMailboxKeywords", v),
-		UID: (v) => parse("UID", v),
-		ModSeq: (v) => parse("ModSeq", v),
-		Validation: (v) => parse("Validation", v),
-		CSRFToken: (v) => parse("CSRFToken", v),
-		ThreadMode: (v) => parse("ThreadMode", v),
-		AttachmentType: (v) => parse("AttachmentType", v),
-		Localpart: (v) => parse("Localpart", v),
-		ViewMode: (v) => parse("ViewMode", v),
-		SecurityResult: (v) => parse("SecurityResult", v),
-		Quoting: (v) => parse("Quoting", v)
+		Request: /* @__PURE__ */ __name((v) => parse("Request", v), "Request"),
+		Query: /* @__PURE__ */ __name((v) => parse("Query", v), "Query"),
+		Filter: /* @__PURE__ */ __name((v) => parse("Filter", v), "Filter"),
+		NotFilter: /* @__PURE__ */ __name((v) => parse("NotFilter", v), "NotFilter"),
+		Page: /* @__PURE__ */ __name((v) => parse("Page", v), "Page"),
+		MessageItem: /* @__PURE__ */ __name((v) => parse("MessageItem", v), "MessageItem"),
+		Message: /* @__PURE__ */ __name((v) => parse("Message", v), "Message"),
+		MessageEnvelope: /* @__PURE__ */ __name((v) => parse("MessageEnvelope", v), "MessageEnvelope"),
+		MessageAddress: /* @__PURE__ */ __name((v) => parse("MessageAddress", v), "MessageAddress"),
+		Domain: /* @__PURE__ */ __name((v) => parse("Domain", v), "Domain"),
+		Attachment: /* @__PURE__ */ __name((v) => parse("Attachment", v), "Attachment"),
+		Part: /* @__PURE__ */ __name((v) => parse("Part", v), "Part"),
+		Envelope: /* @__PURE__ */ __name((v) => parse("Envelope", v), "Envelope"),
+		Address: /* @__PURE__ */ __name((v) => parse("Address", v), "Address"),
+		ParsedMessage: /* @__PURE__ */ __name((v) => parse("ParsedMessage", v), "ParsedMessage"),
+		FromAddressSettings: /* @__PURE__ */ __name((v) => parse("FromAddressSettings", v), "FromAddressSettings"),
+		ComposeMessage: /* @__PURE__ */ __name((v) => parse("ComposeMessage", v), "ComposeMessage"),
+		SubmitMessage: /* @__PURE__ */ __name((v) => parse("SubmitMessage", v), "SubmitMessage"),
+		File: /* @__PURE__ */ __name((v) => parse("File", v), "File"),
+		ForwardAttachments: /* @__PURE__ */ __name((v) => parse("ForwardAttachments", v), "ForwardAttachments"),
+		Mailbox: /* @__PURE__ */ __name((v) => parse("Mailbox", v), "Mailbox"),
+		RecipientSecurity: /* @__PURE__ */ __name((v) => parse("RecipientSecurity", v), "RecipientSecurity"),
+		Settings: /* @__PURE__ */ __name((v) => parse("Settings", v), "Settings"),
+		Ruleset: /* @__PURE__ */ __name((v) => parse("Ruleset", v), "Ruleset"),
+		EventStart: /* @__PURE__ */ __name((v) => parse("EventStart", v), "EventStart"),
+		DomainAddressConfig: /* @__PURE__ */ __name((v) => parse("DomainAddressConfig", v), "DomainAddressConfig"),
+		EventViewErr: /* @__PURE__ */ __name((v) => parse("EventViewErr", v), "EventViewErr"),
+		EventViewReset: /* @__PURE__ */ __name((v) => parse("EventViewReset", v), "EventViewReset"),
+		EventViewMsgs: /* @__PURE__ */ __name((v) => parse("EventViewMsgs", v), "EventViewMsgs"),
+		EventViewChanges: /* @__PURE__ */ __name((v) => parse("EventViewChanges", v), "EventViewChanges"),
+		ChangeMsgAdd: /* @__PURE__ */ __name((v) => parse("ChangeMsgAdd", v), "ChangeMsgAdd"),
+		Flags: /* @__PURE__ */ __name((v) => parse("Flags", v), "Flags"),
+		ChangeMsgRemove: /* @__PURE__ */ __name((v) => parse("ChangeMsgRemove", v), "ChangeMsgRemove"),
+		ChangeMsgFlags: /* @__PURE__ */ __name((v) => parse("ChangeMsgFlags", v), "ChangeMsgFlags"),
+		ChangeMsgThread: /* @__PURE__ */ __name((v) => parse("ChangeMsgThread", v), "ChangeMsgThread"),
+		ChangeMailboxRemove: /* @__PURE__ */ __name((v) => parse("ChangeMailboxRemove", v), "ChangeMailboxRemove"),
+		ChangeMailboxAdd: /* @__PURE__ */ __name((v) => parse("ChangeMailboxAdd", v), "ChangeMailboxAdd"),
+		ChangeMailboxRename: /* @__PURE__ */ __name((v) => parse("ChangeMailboxRename", v), "ChangeMailboxRename"),
+		ChangeMailboxCounts: /* @__PURE__ */ __name((v) => parse("ChangeMailboxCounts", v), "ChangeMailboxCounts"),
+		ChangeMailboxSpecialUse: /* @__PURE__ */ __name((v) => parse("ChangeMailboxSpecialUse", v), "ChangeMailboxSpecialUse"),
+		SpecialUse: /* @__PURE__ */ __name((v) => parse("SpecialUse", v), "SpecialUse"),
+		ChangeMailboxKeywords: /* @__PURE__ */ __name((v) => parse("ChangeMailboxKeywords", v), "ChangeMailboxKeywords"),
+		UID: /* @__PURE__ */ __name((v) => parse("UID", v), "UID"),
+		ModSeq: /* @__PURE__ */ __name((v) => parse("ModSeq", v), "ModSeq"),
+		Validation: /* @__PURE__ */ __name((v) => parse("Validation", v), "Validation"),
+		CSRFToken: /* @__PURE__ */ __name((v) => parse("CSRFToken", v), "CSRFToken"),
+		ThreadMode: /* @__PURE__ */ __name((v) => parse("ThreadMode", v), "ThreadMode"),
+		AttachmentType: /* @__PURE__ */ __name((v) => parse("AttachmentType", v), "AttachmentType"),
+		Localpart: /* @__PURE__ */ __name((v) => parse("Localpart", v), "Localpart"),
+		ViewMode: /* @__PURE__ */ __name((v) => parse("ViewMode", v), "ViewMode"),
+		SecurityResult: /* @__PURE__ */ __name((v) => parse("SecurityResult", v), "SecurityResult"),
+		Quoting: /* @__PURE__ */ __name((v) => parse("Quoting", v), "Quoting")
 	};
 	var defaultOptions = { slicesNullable: true, mapsNullable: true, nullableOptional: true };
 	var Client = class _Client {
+		static {
+			__name(this, "Client");
+		}
 		baseURL;
 		authState;
 		options;
@@ -700,11 +706,14 @@
 		}
 		return location.protocol + "//" + location.host + p + "api/";
 	})();
-	var verifyArg = (path, v, typewords, toJS, allowUnknownKeys, types2, opts) => {
+	var verifyArg = /* @__PURE__ */ __name((path, v, typewords, toJS, allowUnknownKeys, types2, opts) => {
 		return new verifier(types2, toJS, allowUnknownKeys, opts).verify(path, v, typewords);
-	};
-	var parse = (name, v) => verifyArg(name, v, [name], true, false, types, defaultOptions);
+	}, "verifyArg");
+	var parse = /* @__PURE__ */ __name((name, v) => verifyArg(name, v, [name], true, false, types, defaultOptions), "parse");
 	var verifier = class {
+		static {
+			__name(this, "verifier");
+		}
 		types;
 		toJS;
 		allowUnknownKeys;
@@ -718,23 +727,23 @@
 		verify(path, v, typewords) {
 			typewords = typewords.slice(0);
 			const ww = typewords.shift();
-			const error = (msg) => {
+			const error = /* @__PURE__ */ __name((msg) => {
 				if (path != "") {
 					msg = path + ": " + msg;
 				}
 				throw new Error(msg);
-			};
+			}, "error");
 			if (typeof ww !== "string") {
 				error("bad typewords");
 				return;
 			}
 			const w = ww;
-			const ensure = (ok, expect) => {
+			const ensure = /* @__PURE__ */ __name((ok, expect) => {
 				if (!ok) {
 					error("got " + JSON.stringify(v) + ", expected " + expect);
 				}
 				return v;
-			};
+			}, "ensure");
 			switch (w) {
 				case "nullable":
 					if (v === null || v === void 0 && this.opts.nullableOptional) {
@@ -862,14 +871,14 @@
 			}
 		}
 	};
-	var _sherpaCall = async (baseURL, authState, options, paramTypes, returnTypes, name, params) => {
+	var _sherpaCall = /* @__PURE__ */ __name(async (baseURL, authState, options, paramTypes, returnTypes, name, params) => {
 		if (!options.skipParamCheck) {
 			if (params.length !== paramTypes.length) {
 				return Promise.reject({ message: "wrong number of parameters in sherpa call, saw " + params.length + " != expected " + paramTypes.length });
 			}
 			params = params.map((v, index) => verifyArg("params[" + index + "]", v, paramTypes[index], false, false, types, options));
 		}
-		const simulate = async (json2) => {
+		const simulate = /* @__PURE__ */ __name(async (json2) => {
 			const config = JSON.parse(json2 || "null") || {};
 			const waitMinMsec = config.waitMinMsec || 0;
 			const waitMaxMsec = config.waitMaxMsec || 0;
@@ -879,8 +888,8 @@
 				if (options.aborter) {
 					options.aborter.abort = () => {
 						reject({ message: "call to " + name + " aborted by user", code: "sherpa:aborted" });
-						reject = resolve = () => {
-						};
+						reject = resolve = /* @__PURE__ */ __name(() => {
+						}, "resolve");
 					};
 				}
 				setTimeout(() => {
@@ -890,11 +899,11 @@
 					} else {
 						resolve();
 					}
-					reject = resolve = () => {
-					};
+					reject = resolve = /* @__PURE__ */ __name(() => {
+					}, "resolve");
 				}, waitMinMsec + wait);
 			});
-		};
+		}, "simulate");
 		let json = "";
 		try {
 			json = window.localStorage.getItem("sherpats-debug") || "";
@@ -903,15 +912,15 @@
 		if (json) {
 			await simulate(json);
 		}
-		const fn = (resolve, reject) => {
-			let resolve1 = (v) => {
+		const fn = /* @__PURE__ */ __name((resolve, reject) => {
+			let resolve1 = /* @__PURE__ */ __name((v) => {
 				resolve(v);
-				resolve1 = () => {
-				};
-				reject1 = () => {
-				};
-			};
-			let reject1 = (v) => {
+				resolve1 = /* @__PURE__ */ __name(() => {
+				}, "resolve1");
+				reject1 = /* @__PURE__ */ __name(() => {
+				}, "reject1");
+			}, "resolve1");
+			let reject1 = /* @__PURE__ */ __name((v) => {
 				if ((v.code === "user:noAuth" || v.code === "user:badAuth") && options.login) {
 					const login2 = options.login;
 					if (!authState.loginPromise) {
@@ -934,11 +943,11 @@
 					return;
 				}
 				reject(v);
-				resolve1 = () => {
-				};
-				reject1 = () => {
-				};
-			};
+				resolve1 = /* @__PURE__ */ __name(() => {
+				}, "resolve1");
+				reject1 = /* @__PURE__ */ __name(() => {
+				}, "reject1");
+			}, "reject1");
 			const url = baseURL + name;
 			const req = new window.XMLHttpRequest();
 			if (options.aborter) {
@@ -1017,9 +1026,9 @@
 			} catch (err) {
 				reject1({ code: "sherpa:badData", message: "cannot marshal to JSON" });
 			}
-		};
+		}, "fn");
 		return await new Promise(fn);
-	};
+	}, "_sherpaCall");
 
 	// .js/webmail/lib.js
 	var cssStyleDark = dom.style(attr.type("text/css"));
@@ -1031,7 +1040,7 @@
 	document.head.prepend(cssStyle);
 	var styleSheet = cssStyle.sheet;
 	var cssRules = {};
-	var ensureCSS = (selector, styles2, important) => {
+	var ensureCSS = /* @__PURE__ */ __name((selector, styles2, important) => {
 		const checkConsistency = location.hostname === "localhost";
 		if (cssRules[selector]) {
 			if (checkConsistency) {
@@ -1066,11 +1075,11 @@
 				st.setProperty(k, "" + v, important ? "important" : "");
 			}
 		}
-	};
-	var css = (className, styles2, important) => {
+	}, "ensureCSS");
+	var css = /* @__PURE__ */ __name((className, styles2, important) => {
 		ensureCSS("." + className, styles2, important);
 		return dom._class(className);
-	};
+	}, "css");
 	ensureCSS(":root", {
 		"--color": ["black", "#ddd"],
 		"--colorMild": ["#555", "#bbb"],
@@ -1194,7 +1203,7 @@
 		/* compensate pad */
 	});
 	ensureCSS(".textmulti > *:first-child", { padding: ".5em" });
-	var join = (l, efn) => {
+	var join = /* @__PURE__ */ __name((l, efn) => {
 		const r = [];
 		const n = l.length;
 		for (let i = 0; i < n; i++) {
@@ -1204,7 +1213,7 @@
 			}
 		}
 		return r;
-	};
+	}, "join");
 	var imageTypes = [
 		"image/avif",
 		"image/webp",
@@ -1214,8 +1223,8 @@
 		"image/apng",
 		"image/svg+xml"
 	];
-	var isImage = (a) => imageTypes.includes((a.Part.MediaType + "/" + a.Part.MediaSubType).toLowerCase());
-	var addLinks = (text) => {
+	var isImage = /* @__PURE__ */ __name((a) => imageTypes.includes((a.Part.MediaType + "/" + a.Part.MediaSubType).toLowerCase()), "isImage");
+	var addLinks = /* @__PURE__ */ __name((text) => {
 		const re = RegExp("(?:(http|https)://|mailto:)([:%0-9a-zA-Z._~!$&'/()*+,;=-]+@)?([\\[\\]0-9a-zA-Z.-]+)(:[0-9]+)?([:@%0-9a-zA-Z._~!$&'/()*+,;=-]*)(\\?[:@%0-9a-zA-Z._~!$&'/()*+,;=?-]*)?(#[:@%0-9a-zA-Z._~!$&'/()*+,;=?-]*)?");
 		const r = [];
 		while (text.length > 0) {
@@ -1240,8 +1249,8 @@
 			r.push(dom.a(url, attr.href(url), url.startsWith("mailto:") ? [] : [attr.target("_blank"), attr.rel("noopener noreferrer")]));
 		}
 		return r;
-	};
-	var renderText = (text) => {
+	}, "addLinks");
+	var renderText = /* @__PURE__ */ __name((text) => {
 		return dom.div(text.split("\n").map((line) => {
 			let q = 0;
 			for (const c of line) {
@@ -1256,30 +1265,30 @@
 			}
 			return dom.div(styleClasses.quoted[q % styleClasses.quoted.length], addLinks(line));
 		}));
-	};
-	var displayName = (s) => {
+	}, "renderText");
+	var displayName = /* @__PURE__ */ __name((s) => {
 		const specials = /[()<>\[\]:;@\\,."]/;
 		if (specials.test(s)) {
 			return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"';
 		}
 		return s;
-	};
-	var formatDomain = (dom2) => dom2.Unicode || dom2.ASCII;
-	var formatAddress = (a) => {
+	}, "displayName");
+	var formatDomain = /* @__PURE__ */ __name((dom2) => dom2.Unicode || dom2.ASCII, "formatDomain");
+	var formatAddress = /* @__PURE__ */ __name((a) => {
 		let s = "<" + a.User + "@" + formatDomain(a.Domain) + ">";
 		if (a.Name) {
 			s = displayName(a.Name) + " " + s;
 		}
 		return s;
-	};
-	var formatAddressElem = (a) => {
+	}, "formatAddress");
+	var formatAddressElem = /* @__PURE__ */ __name((a) => {
 		if (!a.Domain.Unicode) {
 			return formatAddress(a);
 		}
 		return dom.span(a.Name ? [displayName(a.Name), " "] : "", "<", a.User, "@", dom.span(attr.title(a.Domain.ASCII), formatDomain(a.Domain)), ">");
-	};
-	var formatAddressValidated = (a, m, use) => {
-		const domainText = (domstr, ascii) => {
+	}, "formatAddressElem");
+	var formatAddressValidated = /* @__PURE__ */ __name((a, m, use) => {
+		const domainText = /* @__PURE__ */ __name((domstr, ascii) => {
 			if (!use) {
 				return domstr;
 			}
@@ -1320,7 +1329,7 @@
 					return dom.span(attr.title(title + extra), domstr);
 			}
 			return dom.span(attr.title(title + extra), css("addressValidation" + name, { borderBottom: "1.5px solid", borderBottomColor: color, textDecoration: "none" }), domstr);
-		};
+		}, "domainText");
 		let l = [];
 		if (a.Name) {
 			l.push(a.Name + " ");
@@ -1329,32 +1338,32 @@
 		l.push(domainText(formatDomain(a.Domain), a.Domain.ASCII));
 		l.push(">");
 		return l;
-	};
-	var formatAddressShort = (a, junk) => {
+	}, "formatAddressValidated");
+	var formatAddressShort = /* @__PURE__ */ __name((a, junk) => {
 		const n = a.Name;
 		if (!junk && n && !n.includes("<") && !n.includes("@") && !n.includes(">")) {
 			return n;
 		}
 		return "<" + a.User + "@" + formatDomain(a.Domain) + ">";
-	};
-	var formatEmail = (a) => a.User + "@" + formatDomain(a.Domain);
-	var equalAddress = (a, b) => {
+	}, "formatAddressShort");
+	var formatEmail = /* @__PURE__ */ __name((a) => a.User + "@" + formatDomain(a.Domain), "formatEmail");
+	var equalAddress = /* @__PURE__ */ __name((a, b) => {
 		return (!a.User || !b.User || a.User === b.User) && a.Domain.ASCII === b.Domain.ASCII;
-	};
-	var addressList = (allAddrs, l) => {
+	}, "equalAddress");
+	var addressList = /* @__PURE__ */ __name((allAddrs, l) => {
 		if (l.length <= 5 || allAddrs) {
 			return dom.span(join(l.map((a) => formatAddressElem(a)), () => ", "));
 		}
-		let elem = dom.span(join(l.slice(0, 4).map((a) => formatAddressElem(a)), () => ", "), " ", dom.clickbutton("More...", attr.title("More addresses:\n" + l.slice(4).map((a) => formatAddress(a)).join(",\n")), function click() {
-			const nelem = dom.span(join(l.map((a) => formatAddressElem(a)), () => ", "), " ", dom.clickbutton("Less...", function click2() {
+		let elem = dom.span(join(l.slice(0, 4).map((a) => formatAddressElem(a)), () => ", "), " ", dom.clickbutton("More...", attr.title("More addresses:\n" + l.slice(4).map((a) => formatAddress(a)).join(",\n")), /* @__PURE__ */ __name(function click() {
+			const nelem = dom.span(join(l.map((a) => formatAddressElem(a)), () => ", "), " ", dom.clickbutton("Less...", /* @__PURE__ */ __name(function click2() {
 				elem.replaceWith(addressList(allAddrs, l));
-			}));
+			}, "click")));
 			elem.replaceWith(nelem);
 			elem = nelem;
-		}));
+		}, "click")));
 		return elem;
-	};
-	var loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAddrs) => {
+	}, "addressList");
+	var loadMsgheaderView = /* @__PURE__ */ __name((msgheaderelem, mi, moreHeaders, refineKeyword, allAddrs) => {
 		const msgenv = mi.Envelope;
 		const received = mi.Message.Received;
 		const receivedlocal = new Date(received.getTime());
@@ -1368,15 +1377,15 @@
 			dom.tr(dom.td("To:", msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.To || []))),
 			(msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td("Cc:", msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.CC || []))),
 			(msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td("Bcc:", msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.BCC || []))),
-			dom.tr(dom.td("Subject:", msgHeaderFieldStyle), dom.td(dom.div(css("msgSubjectAttrsSpread", { display: "flex", justifyContent: "space-between" }), dom.div(msgenv.Subject || ""), dom.div(mi.Message.IsForward ? dom.span(msgAttrStyle, "Forwarded", attr.title("Message came in from a forwarded address. Some message authentication policies, like DMARC, were not evaluated.")) : [], mi.Message.IsMailingList ? dom.span(msgAttrStyle, "Mailing list", attr.title("Message was received from a mailing list. Some message authentication policies, like DMARC, were not evaluated.")) : [], mi.Message.ReceivedTLSVersion === 1 ? dom.span(msgAttrStyle, css("msgAttrNoTLS", { borderBottom: "1.5px solid", borderBottomColor: styles.underlineRed }), "Without TLS", attr.title("Message received (last hop) without TLS.")) : [], mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(msgAttrStyle, css("msgAttrTLS", { borderBottom: "1.5px solid", borderBottomColor: styles.underlineGreen }), "With TLS", attr.title("Message received (last hop) with TLS.")) : [], mi.Message.ReceivedRequireTLS ? dom.span(css("msgAttrRequireTLS", { padding: ".1em .3em", fontSize: ".9em", backgroundColor: styles.successBackground, border: "1px solid", borderColor: styles.borderColor, borderRadius: "3px" }), "With RequireTLS", attr.title("Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.")) : [], mi.IsSigned ? dom.span(msgAttrStyle, css("msgAttrSigned", { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: ".15em" }), "Message has a signature") : [], mi.IsEncrypted ? dom.span(msgAttrStyle, css("msgAttrEncrypted", { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: ".15em" }), "Message is encrypted") : [], refineKeyword ? (mi.Message.Keywords || []).map((kw) => dom.clickbutton(styleClasses.keyword, dom._class("keywordButton"), kw, async function click() {
+			dom.tr(dom.td("Subject:", msgHeaderFieldStyle), dom.td(dom.div(css("msgSubjectAttrsSpread", { display: "flex", justifyContent: "space-between" }), dom.div(msgenv.Subject || ""), dom.div(mi.Message.IsForward ? dom.span(msgAttrStyle, "Forwarded", attr.title("Message came in from a forwarded address. Some message authentication policies, like DMARC, were not evaluated.")) : [], mi.Message.IsMailingList ? dom.span(msgAttrStyle, "Mailing list", attr.title("Message was received from a mailing list. Some message authentication policies, like DMARC, were not evaluated.")) : [], mi.Message.ReceivedTLSVersion === 1 ? dom.span(msgAttrStyle, css("msgAttrNoTLS", { borderBottom: "1.5px solid", borderBottomColor: styles.underlineRed }), "Without TLS", attr.title("Message received (last hop) without TLS.")) : [], mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(msgAttrStyle, css("msgAttrTLS", { borderBottom: "1.5px solid", borderBottomColor: styles.underlineGreen }), "With TLS", attr.title("Message received (last hop) with TLS.")) : [], mi.Message.ReceivedRequireTLS ? dom.span(css("msgAttrRequireTLS", { padding: ".1em .3em", fontSize: ".9em", backgroundColor: styles.successBackground, border: "1px solid", borderColor: styles.borderColor, borderRadius: "3px" }), "With RequireTLS", attr.title("Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.")) : [], mi.IsSigned ? dom.span(msgAttrStyle, css("msgAttrSigned", { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: ".15em" }), "Message has a signature") : [], mi.IsEncrypted ? dom.span(msgAttrStyle, css("msgAttrEncrypted", { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: ".15em" }), "Message is encrypted") : [], refineKeyword ? (mi.Message.Keywords || []).map((kw) => dom.clickbutton(styleClasses.keyword, dom._class("keywordButton"), kw, /* @__PURE__ */ __name(async function click() {
 				await refineKeyword(kw);
-			})) : [])))),
+			}, "click"))) : [])))),
 			(mi.MoreHeaders || []).map((t) => dom.tr(dom.td(t[0] + ":", msgHeaderFieldStyle), dom.td(t[1]))),
 			// Ensure width of all possible additional headers is taken into account, to
 			// prevent different layout between messages when not all headers are present.
 			dom.tr(dom.td(moreHeaders.map((s) => dom.div(s + ":", msgHeaderFieldStyle, style({ visibility: "hidden", height: 0 })))), dom.td())
 		);
-	};
+	}, "loadMsgheaderView");
 
 	// .js/webmail/webmail.js
 	var reloadURL = URL.parse(window.location.href);
@@ -1386,6 +1395,9 @@
 		window.location.href = reloadURL.toString();
 	}
 	var ConsistencyError = class extends Error {
+		static {
+			__name(this, "ConsistencyError");
+		}
 	};
 	var zindexes = {
 		splitter: "1",
@@ -1420,8 +1432,8 @@
 	var moxversion;
 	var moxgoos;
 	var moxgoarch;
-	var log = () => {
-	};
+	var log = /* @__PURE__ */ __name(() => {
+	}, "log");
 	try {
 		if (localStorage.getItem("log") || location.hostname === "localhost") {
 			log = console.log;
@@ -1462,7 +1474,7 @@
 		composeHeight: 0,
 		composeViewportHeight: 0
 	};
-	var parseSettings = () => {
+	var parseSettings = /* @__PURE__ */ __name(() => {
 		try {
 			const v = window.localStorage.getItem("settings");
 			if (!v) {
@@ -1470,21 +1482,21 @@
 			}
 			const x = JSON.parse(v);
 			const def = defaultSettings;
-			const getString = (k, ...l) => {
+			const getString = /* @__PURE__ */ __name((k, ...l) => {
 				const v2 = x[k];
 				if (typeof v2 !== "string" || l.length > 0 && !l.includes(v2)) {
 					return def[k];
 				}
 				return v2;
-			};
-			const getBool = (k) => {
+			}, "getString");
+			const getBool = /* @__PURE__ */ __name((k) => {
 				const v2 = x[k];
 				return typeof v2 === "boolean" ? v2 : def[k];
-			};
-			const getInt = (k) => {
+			}, "getBool");
+			const getInt = /* @__PURE__ */ __name((k) => {
 				const v2 = x[k];
 				return typeof v2 === "number" ? v2 : def[k];
-			};
+			}, "getInt");
 			let mailboxCollapsed = x.mailboxCollapsed;
 			if (!mailboxCollapsed || typeof mailboxCollapsed !== "object") {
 				mailboxCollapsed = def.mailboxCollapsed;
@@ -1513,15 +1525,15 @@
 			console.log("getting settings from localstorage", err);
 			return { ...defaultSettings };
 		}
-	};
-	var settingsPut = (nsettings) => {
+	}, "parseSettings");
+	var settingsPut = /* @__PURE__ */ __name((nsettings) => {
 		settings = nsettings;
 		try {
 			window.localStorage.setItem("settings", JSON.stringify(nsettings));
 		} catch (err) {
 			console.log("storing settings in localstorage", err);
 		}
-	};
+	}, "settingsPut");
 	var settings = parseSettings();
 	var accountAddresses = [];
 	var loginAddress = null;
@@ -1529,7 +1541,7 @@
 	var rejectsMailbox = "";
 	var lastServerVersion = "";
 	var scheduledTimers = /* @__PURE__ */ new Map();
-	var login = async (reason) => {
+	var login = /* @__PURE__ */ __name(async (reason) => {
 		popupOpen = true;
 		return new Promise((resolve, _) => {
 			const origFocus = document.activeElement;
@@ -1550,7 +1562,7 @@
 				maxHeight: "95vh",
 				overflowY: "auto",
 				marginBottom: "20vh"
-			}), dom.form(async function submit(e) {
+			}), dom.form(/* @__PURE__ */ __name(async function submit(e) {
 				e.preventDefault();
 				e.stopPropagation();
 				reasonElem.remove();
@@ -1575,31 +1587,31 @@
 				} finally {
 					fieldset.disabled = false;
 				}
-			}, fieldset = dom.fieldset(dom.h1("Mail"), dom.label(style({ display: "block", marginBottom: "2ex" }), dom.div("Email address", style({ marginBottom: ".5ex" })), autosize = dom.span(dom._class("autosize"), username = dom.input(attr.required(""), attr.autocomplete("email"), attr.placeholder("jane@example.org"), function change() {
+			}, "submit"), fieldset = dom.fieldset(dom.h1("Mail"), dom.label(style({ display: "block", marginBottom: "2ex" }), dom.div("Email address", style({ marginBottom: ".5ex" })), autosize = dom.span(dom._class("autosize"), username = dom.input(attr.required(""), attr.autocomplete("email"), attr.placeholder("jane@example.org"), /* @__PURE__ */ __name(function change() {
 				autosize.dataset.value = username.value;
-			}, function input() {
+			}, "change"), /* @__PURE__ */ __name(function input() {
 				autosize.dataset.value = username.value;
-			}))), dom.label(style({ display: "block", marginBottom: "2ex" }), dom.div("Password", style({ marginBottom: ".5ex" })), password = dom.input(attr.type("password"), attr.autocomplete("current-password"), attr.required(""))), dom.div(style({ textAlign: "center" }), dom.submitbutton("Login")))))));
+			}, "input")))), dom.label(style({ display: "block", marginBottom: "2ex" }), dom.div("Password", style({ marginBottom: ".5ex" })), password = dom.input(attr.type("password"), attr.autocomplete("current-password"), attr.required(""))), dom.div(style({ textAlign: "center" }), dom.submitbutton("Login")))))));
 			document.body.appendChild(root);
 			username.focus();
 		});
-	};
-	var localStorageGet = (k) => {
+	}, "login");
+	var localStorageGet = /* @__PURE__ */ __name((k) => {
 		try {
 			return window.localStorage.getItem(k);
 		} catch (err) {
 			return null;
 		}
-	};
-	var localStorageRemove = (k) => {
+	}, "localStorageGet");
+	var localStorageRemove = /* @__PURE__ */ __name((k) => {
 		try {
 			return window.localStorage.removeItem(k);
 		} catch (err) {
 		}
-	};
+	}, "localStorageRemove");
 	var client = new Client().withOptions({ csrfHeader: "x-mox-csrf", login }).withAuthToken(localStorageGet("webmailcsrftoken") || "");
-	var link = (href, anchorOpt) => dom.a(attr.href(href), attr.rel("noopener noreferrer"), attr.target("_blank"), anchorOpt || href);
-	var envelopeIdentity = (l) => {
+	var link = /* @__PURE__ */ __name((href, anchorOpt) => dom.a(attr.href(href), attr.rel("noopener noreferrer"), attr.target("_blank"), anchorOpt || href), "link");
+	var envelopeIdentity = /* @__PURE__ */ __name((l) => {
 		for (const a of l) {
 			const ma = accountAddresses.find((aa) => (!aa.User || aa.User === a.User) && aa.Domain.ASCII === a.Domain.ASCII);
 			if (ma) {
@@ -1607,10 +1619,10 @@
 			}
 		}
 		return null;
-	};
+	}, "envelopeIdentity");
 	var shortcutElem = dom.div(css("shortcutFlash", { fontSize: "2em", position: "absolute", left: ".25em", bottom: ".25em", backgroundColor: "#888", padding: "0.25em .5em", color: "white", borderRadius: ".15em" }));
 	var shortcutTimer = 0;
-	var showShortcut = (c) => {
+	var showShortcut = /* @__PURE__ */ __name((c) => {
 		if (accountSettings?.NoShowShortcuts) {
 			return;
 		}
@@ -1624,8 +1636,8 @@
 			shortcutElem.remove();
 			shortcutTimer = 0;
 		}, 1500);
-	};
-	var shortcutCmd = async (cmdfn, shortcuts) => {
+	}, "showShortcut");
+	var shortcutCmd = /* @__PURE__ */ __name(async (cmdfn, shortcuts) => {
 		let shortcut = "";
 		for (const k in shortcuts) {
 			if (shortcuts[k] === cmdfn) {
@@ -1637,21 +1649,21 @@
 			showShortcut(shortcut);
 		}
 		await cmdfn();
-	};
-	var clickCmd = (cmdfn, shortcuts) => {
-		return async function click() {
+	}, "shortcutCmd");
+	var clickCmd = /* @__PURE__ */ __name((cmdfn, shortcuts) => {
+		return /* @__PURE__ */ __name(async function click() {
 			shortcutCmd(cmdfn, shortcuts);
-		};
-	};
-	var enterCmd = (cmdfn, shortcuts) => {
-		return async function keydown(e) {
+		}, "click");
+	}, "clickCmd");
+	var enterCmd = /* @__PURE__ */ __name((cmdfn, shortcuts) => {
+		return /* @__PURE__ */ __name(async function keydown(e) {
 			if (e.key === "Enter") {
 				e.stopPropagation();
 				shortcutCmd(cmdfn, shortcuts);
 			}
-		};
-	};
-	var keyHandler = (shortcuts) => {
+		}, "keydown");
+	}, "enterCmd");
+	var keyHandler = /* @__PURE__ */ __name((shortcuts) => {
 		return async (k, e) => {
 			const fn = shortcuts[k];
 			if (fn) {
@@ -1660,9 +1672,9 @@
 				fn();
 			}
 		};
-	};
-	var formatSize = (size) => size > 1024 * 1024 ? (size / (1024 * 1024)).toFixed(1) + "mb" : Math.ceil(size / 1024) + "kb";
-	var parseSearchSize = (s) => {
+	}, "keyHandler");
+	var formatSize = /* @__PURE__ */ __name((size) => size > 1024 * 1024 ? (size / (1024 * 1024)).toFixed(1) + "mb" : Math.ceil(size / 1024) + "kb", "formatSize");
+	var parseSearchSize = /* @__PURE__ */ __name((s) => {
 		s = s.trim();
 		if (!s) {
 			return ["", 0];
@@ -1683,8 +1695,8 @@
 			return [digits + suffix + "b", num * Math.pow(2, 10 * (1 + ["k", "m", "g"].indexOf(suffix)))];
 		}
 		return ["", 0];
-	};
-	var fixDate = (dt) => {
+	}, "parseSearchSize");
+	var fixDate = /* @__PURE__ */ __name((dt) => {
 		const t = dt.split("-");
 		if (t.length !== 3) {
 			return dt;
@@ -1696,8 +1708,8 @@
 			t[2] = "0" + t[2];
 		}
 		return t.join("-");
-	};
-	var parseSearchDateTime = (s, isstart) => {
+	}, "fixDate");
+	var parseSearchDateTime = /* @__PURE__ */ __name((s, isstart) => {
 		const t = s.split("T", 2);
 		if (t.length === 2) {
 			const d = /* @__PURE__ */ new Date(fixDate(t[0]) + "T" + t[1]);
@@ -1713,17 +1725,17 @@
 			} else {
 				const tm = t[0];
 				const now = /* @__PURE__ */ new Date();
-				const pad0 = (v) => v <= 9 ? "0" + v : "" + v;
+				const pad0 = /* @__PURE__ */ __name((v) => v <= 9 ? "0" + v : "" + v, "pad0");
 				const d = /* @__PURE__ */ new Date([now.getFullYear(), pad0(now.getMonth() + 1), pad0(now.getDate())].join("-") + "T" + tm);
 				return d ? d.toJSON() : void 0;
 			}
 		}
 		return void 0;
-	};
-	var dquote = (s) => '"' + s.replaceAll('"', '""') + '"';
-	var needsDquote = (s) => /[ \t"]/.test(s);
-	var packToken = (t) => (t[0] ? "-" : "") + (t[1] ? t[1] + ":" : "") + (t[2] || needsDquote(t[3]) ? dquote(t[3]) : t[3]);
-	var parseSearchTokens = (s) => {
+	}, "parseSearchDateTime");
+	var dquote = /* @__PURE__ */ __name((s) => '"' + s.replaceAll('"', '""') + '"', "dquote");
+	var needsDquote = /* @__PURE__ */ __name((s) => /[ \t"]/.test(s), "needsDquote");
+	var packToken = /* @__PURE__ */ __name((t) => (t[0] ? "-" : "") + (t[1] ? t[1] + ":" : "") + (t[2] || needsDquote(t[3]) ? dquote(t[3]) : t[3]), "packToken");
+	var parseSearchTokens = /* @__PURE__ */ __name((s) => {
 		if (!s) {
 			return [];
 		}
@@ -1733,7 +1745,7 @@
 		let quoteend = false;
 		let t = "";
 		let tquoted = false;
-		const add = () => {
+		const add = /* @__PURE__ */ __name(() => {
 			if (t && (tquoted || !t.includes(":"))) {
 				l.push([not, "", tquoted, t]);
 			} else if (t) {
@@ -1745,7 +1757,7 @@
 			quoteend = false;
 			tquoted = false;
 			not = false;
-		};
+		}, "add");
 		[...s].forEach((c) => {
 			if (quoteend) {
 				if (c === '"') {
@@ -1771,8 +1783,8 @@
 		});
 		add();
 		return l;
-	};
-	var newFilter = () => {
+	}, "parseSearchTokens");
+	var newFilter = /* @__PURE__ */ __name(() => {
 		return {
 			MailboxID: 0,
 			MailboxChildrenIncluded: false,
@@ -1781,13 +1793,13 @@
 			SizeMin: 0,
 			SizeMax: 0
 		};
-	};
-	var newNotFilter = () => {
+	}, "newFilter");
+	var newNotFilter = /* @__PURE__ */ __name(() => {
 		return {
 			Attachments: AttachmentType.AttachmentIndifferent
 		};
-	};
-	var parseSearch = (searchquery, mailboxlistView) => {
+	}, "newNotFilter");
+	var parseSearch = /* @__PURE__ */ __name((searchquery, mailboxlistView) => {
 		const tokens = parseSearchTokens(searchquery);
 		const fpos = newFilter();
 		fpos.MailboxID = -1;
@@ -1876,16 +1888,16 @@
 			f.Words.push((tag ? tag + ":" : "") + s);
 		});
 		return [fpos, notf, strs];
-	};
-	var errmsg = (err) => "" + (err.message || "(no error message)");
+	}, "parseSearch");
+	var errmsg = /* @__PURE__ */ __name((err) => "" + (err.message || "(no error message)"), "errmsg");
 	var datalistgen = 1;
-	var newAddressComplete = () => {
+	var newAddressComplete = /* @__PURE__ */ __name(() => {
 		let datalist;
 		let completeMatches;
 		let completeSearch;
 		let completeFull;
 		let aborter = {};
-		return async function keydown(e) {
+		return /* @__PURE__ */ __name(async function keydown(e) {
 			const target = e.target;
 			if (!datalist) {
 				datalist = dom.datalist(attr.id("list-" + datalistgen++));
@@ -1921,20 +1933,20 @@
 			} finally {
 				aborter = {};
 			}
-		};
-	};
-	var flagList = (miv) => {
+		}, "keydown");
+	}, "newAddressComplete");
+	var flagList = /* @__PURE__ */ __name((miv) => {
 		const msgflags = [];
 		const othermsgflags = [];
 		let l = msgflags;
 		const seen = /* @__PURE__ */ new Set();
-		const flag = (v, char, name) => {
+		const flag = /* @__PURE__ */ __name((v, char, name) => {
 			if (v && !seen.has(name)) {
 				l.push([name, char]);
 				seen.add(name);
 			}
-		};
-		const addFlags = (mi) => {
+		}, "flag");
+		const addFlags = /* @__PURE__ */ __name((mi) => {
 			const m = mi.Message;
 			flag(m.Answered, "r", "Replied/answered");
 			flag(m.Flagged, "!", "Flagged");
@@ -1948,7 +1960,7 @@
 			if (m.ThreadMuted) {
 				flag(true, "m", "Muted, new messages are automatically marked as read.");
 			}
-		};
+		}, "addFlags");
 		addFlags(miv.messageitem);
 		if (miv.isCollapsedThreadRoot()) {
 			l = othermsgflags;
@@ -1958,8 +1970,8 @@
 		}
 		const msgItemFlagStyle = css("msgItemFlag", { marginRight: "1px", fontWeight: "normal", fontSize: ".9em" });
 		return msgflags.map((t) => dom.span(msgItemFlagStyle, t[1], attr.title(t[0]))).concat(othermsgflags.map((t) => dom.span(msgItemFlagStyle, css("msgItemFlagCollapsed", { color: styles.colorMilder }), t[1], attr.title(t[0]))));
-	};
-	var refineFilters = (f, notf) => {
+	}, "flagList");
+	var refineFilters = /* @__PURE__ */ __name((f, notf) => {
 		const refine = settings.refine;
 		if (refine) {
 			f = { ...f };
@@ -1981,42 +1993,42 @@
 			}
 		}
 		return [f, notf];
-	};
-	var startDrag = (e, move) => {
+	}, "refineFilters");
+	var startDrag = /* @__PURE__ */ __name((e, move) => {
 		if (e.buttons !== 1) {
 			return Promise.resolve();
 		}
 		return new Promise((resolve, _) => {
 			e.preventDefault();
 			e.stopPropagation();
-			const stop = () => {
+			const stop = /* @__PURE__ */ __name(() => {
 				document.body.removeEventListener("mousemove", move);
 				document.body.removeEventListener("mouseup", stop);
 				resolve();
-			};
+			}, "stop");
 			document.body.addEventListener("mousemove", move);
 			document.body.addEventListener("mouseup", stop);
 		});
-	};
-	var focusPlaceholder = (s) => {
+	}, "startDrag");
+	var focusPlaceholder = /* @__PURE__ */ __name((s) => {
 		let orig = "";
 		return [
-			function focus(e) {
+			/* @__PURE__ */ __name(function focus(e) {
 				const target = e.target;
 				orig = target.getAttribute("placeholder") || "";
 				target.setAttribute("placeholder", s);
-			},
-			function blur(e) {
+			}, "focus"),
+			/* @__PURE__ */ __name(function blur(e) {
 				const target = e.target;
 				if (orig) {
 					target.setAttribute("placeholder", orig);
 				} else {
 					target.removeAttribute("placeholder");
 				}
-			}
+			}, "blur")
 		];
-	};
-	var parseLocationHash = (mailboxlistView) => {
+	}, "focusPlaceholder");
+	var parseLocationHash = /* @__PURE__ */ __name((mailboxlistView) => {
 		let hash = decodeURIComponent((window.location.hash || "#").substring(1));
 		let editMsgid = 0;
 		const em = hash.match(/,compose:([0-9]+)$/);
@@ -2052,9 +2064,9 @@
 			notf = newNotFilter();
 		}
 		return [initsearch, msgid, editMsgid, f, notf];
-	};
+	}, "parseLocationHash");
 	var statusElem;
-	var withStatus = async (action, promise, disablable, noAlert) => {
+	var withStatus = /* @__PURE__ */ __name(async (action, promise, disablable, noAlert) => {
 		let elem;
 		let id = window.setTimeout(() => {
 			elem = dom.span(action + "... ");
@@ -2093,8 +2105,8 @@
 				elem.remove();
 			}
 		}
-	};
-	var withDisabled = async (elem, p) => {
+	}, "withStatus");
+	var withDisabled = /* @__PURE__ */ __name(async (elem, p) => {
 		try {
 			elem.disabled = true;
 			return await p;
@@ -2105,11 +2117,11 @@
 		} finally {
 			elem.disabled = false;
 		}
-	};
-	var popover = (target, opts, ...kids) => {
+	}, "withDisabled");
+	var popover = /* @__PURE__ */ __name((target, opts, ...kids) => {
 		const origFocus = document.activeElement;
 		const pos = target.getBoundingClientRect();
-		const close = () => {
+		const close = /* @__PURE__ */ __name(() => {
 			if (!root.parentNode) {
 				return;
 			}
@@ -2117,19 +2129,19 @@
 			if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 				origFocus.focus();
 			}
-		};
+		}, "close");
 		const posx = opts.fullscreen ? style({ left: 0, right: 0 }) : pos.x < window.innerWidth / 3 ? style({ left: "" + pos.x + "px" }) : style({ right: "" + (window.innerWidth - pos.x - pos.width) + "px" });
 		const posy = opts.fullscreen ? style({ top: 0, bottom: 0 }) : pos.y + pos.height > window.innerHeight * 2 / 3 ? style({ bottom: "" + (window.innerHeight - (pos.y - 1)) + "px", maxHeight: "" + (pos.y - 1 - 10) + "px" }) : style({ top: "" + (pos.y + pos.height + 1) + "px", maxHeight: "" + (window.innerHeight - (pos.y + pos.height + 1) - 10) + "px" });
 		let content;
-		const root = dom.div(css("popoverOverlay", { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: zindexes.popover, backgroundColor: styles.overlayBackgroundColor }), function click(e) {
+		const root = dom.div(css("popoverOverlay", { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: zindexes.popover, backgroundColor: styles.overlayBackgroundColor }), /* @__PURE__ */ __name(function click(e) {
 			e.stopPropagation();
 			close();
-		}, function keydown(e) {
+		}, "click"), /* @__PURE__ */ __name(function keydown(e) {
 			if (e.key === "Escape") {
 				e.stopPropagation();
 				close();
 			}
-		}, content = dom.div(attr.tabindex("0"), css("popoverContent", {
+		}, "keydown"), content = dom.div(attr.tabindex("0"), css("popoverContent", {
 			position: "absolute",
 			overflowY: "auto"
 		}), posx, posy, opts.transparent ? [] : [
@@ -2142,9 +2154,9 @@
 				borderColor: styles.popupBorderColor,
 				color: styles.popupColor
 			}),
-			function click(e) {
+			/* @__PURE__ */ __name(function click(e) {
 				e.stopPropagation();
-			}
+			}, "click")
 		], ...kids));
 		document.body.appendChild(root);
 		const first = root.querySelector("input, select, textarea, button");
@@ -2154,11 +2166,11 @@
 			content.focus();
 		}
 		return close;
-	};
+	}, "popover");
 	var popupOpen = false;
-	var popup = (...kids) => {
+	var popup = /* @__PURE__ */ __name((...kids) => {
 		const origFocus = document.activeElement;
-		const close = () => {
+		const close = /* @__PURE__ */ __name(() => {
 			if (!root.parentNode) {
 				return;
 			}
@@ -2167,25 +2179,25 @@
 			if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 				origFocus.focus();
 			}
-		};
+		}, "close");
 		let content;
-		const root = dom.div(css("popupOverlay", { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: styles.overlayBackgroundColor, display: "flex", alignItems: "center", justifyContent: "center", zIndex: zindexes.popup }), function keydown(e) {
+		const root = dom.div(css("popupOverlay", { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: styles.overlayBackgroundColor, display: "flex", alignItems: "center", justifyContent: "center", zIndex: zindexes.popup }), /* @__PURE__ */ __name(function keydown(e) {
 			if (e.key === "Escape") {
 				e.stopPropagation();
 				close();
 			}
-		}, function click(e) {
+		}, "keydown"), /* @__PURE__ */ __name(function click(e) {
 			e.stopPropagation();
 			close();
-		}, content = dom.div(attr.tabindex("0"), css("popupContent", { backgroundColor: styles.popupBackgroundColor, boxShadow: styles.boxShadow, border: "1px solid", borderColor: styles.popupBorderColor, borderRadius: ".25em", padding: "1em", maxWidth: "95vw", overflowX: "auto", maxHeight: "95vh", overflowY: "auto" }), function click(e) {
+		}, "click"), content = dom.div(attr.tabindex("0"), css("popupContent", { backgroundColor: styles.popupBackgroundColor, boxShadow: styles.boxShadow, border: "1px solid", borderColor: styles.popupBorderColor, borderRadius: ".25em", padding: "1em", maxWidth: "95vw", overflowX: "auto", maxHeight: "95vh", overflowY: "auto" }), /* @__PURE__ */ __name(function click(e) {
 			e.stopPropagation();
-		}, kids));
+		}, "click"), kids));
 		popupOpen = true;
 		document.body.appendChild(root);
 		content.focus();
 		return close;
-	};
-	var cmdSettings = async () => {
+	}, "popup");
+	var cmdSettings = /* @__PURE__ */ __name(async () => {
 		let fieldset;
 		let signature;
 		let quoting;
@@ -2196,7 +2208,7 @@
 		if (!accountSettings) {
 			throw new Error("No account settings fetched yet.");
 		}
-		const remove = popup(css("popupSettings", { minWidth: "30em" }), style({ maxWidth: "50em" }), dom.h1("Settings"), dom.form(async function submit(e) {
+		const remove = popup(css("popupSettings", { minWidth: "30em" }), style({ maxWidth: "50em" }), dom.h1("Settings"), dom.form(/* @__PURE__ */ __name(async function submit(e) {
 			e.preventDefault();
 			e.stopPropagation();
 			const accSet = {
@@ -2211,7 +2223,7 @@
 			await withDisabled(fieldset, client.SettingsSave(accSet));
 			accountSettings = accSet;
 			remove();
-		}, fieldset = dom.fieldset(dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Signature"), signature = dom.textarea(new String(accountSettings.Signature), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + accountSettings.Signature.split("\n").length)))), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Reply above/below original"), attr.title("Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top."), quoting = dom.select(dom.option(attr.value(""), "Auto"), dom.option(attr.value("bottom"), "Bottom", accountSettings.Quoting === Quoting.Bottom ? attr.selected("") : []), dom.option(attr.value("top"), "Top", accountSettings.Quoting === Quoting.Top ? attr.selected("") : []))), dom.label(style({ margin: "1ex 0", display: "block" }), showAddressSecurity = dom.input(attr.type("checkbox"), accountSettings.ShowAddressSecurity ? attr.checked("") : []), " Show address security indications", attr.title("Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.")), dom.label(style({ margin: "1ex 0", display: "block" }), showHTML = dom.input(attr.type("checkbox"), accountSettings.ShowHTML ? attr.checked("") : []), " Show email as HTML instead of text by default for first-time senders", attr.title("Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.")), dom.label(style({ margin: "1ex 0", display: "block" }), showShortcuts = dom.input(attr.type("checkbox"), accountSettings.NoShowShortcuts ? [] : attr.checked("")), " Show shortcut keys in bottom left after interaction with mouse"), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Show additional headers"), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join("\n")), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: "italic" }), "One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.")), dom.div(style({ marginTop: "2ex" }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton("Register", attr.title("In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present."), function click() {
+		}, "submit"), fieldset = dom.fieldset(dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Signature"), signature = dom.textarea(new String(accountSettings.Signature), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + accountSettings.Signature.split("\n").length)))), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Reply above/below original"), attr.title("Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top."), quoting = dom.select(dom.option(attr.value(""), "Auto"), dom.option(attr.value("bottom"), "Bottom", accountSettings.Quoting === Quoting.Bottom ? attr.selected("") : []), dom.option(attr.value("top"), "Top", accountSettings.Quoting === Quoting.Top ? attr.selected("") : []))), dom.label(style({ margin: "1ex 0", display: "block" }), showAddressSecurity = dom.input(attr.type("checkbox"), accountSettings.ShowAddressSecurity ? attr.checked("") : []), " Show address security indications", attr.title("Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.")), dom.label(style({ margin: "1ex 0", display: "block" }), showHTML = dom.input(attr.type("checkbox"), accountSettings.ShowHTML ? attr.checked("") : []), " Show email as HTML instead of text by default for first-time senders", attr.title("Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.")), dom.label(style({ margin: "1ex 0", display: "block" }), showShortcuts = dom.input(attr.type("checkbox"), accountSettings.NoShowShortcuts ? [] : attr.checked("")), " Show shortcut keys in bottom left after interaction with mouse"), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Show additional headers"), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join("\n")), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: "italic" }), "One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.")), dom.div(style({ marginTop: "2ex" }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton("Register", attr.title("In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present."), /* @__PURE__ */ __name(function click() {
 			if (!window.navigator.registerProtocolHandler) {
 				window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
 				return;
@@ -2222,7 +2234,7 @@
 			} catch (err) {
 				window.alert('Error registering "mailto:" protocol handler: ' + errmsg(err));
 			}
-		}), " ", dom.clickbutton("Unregister", attr.title("Not all browsers implement unregistering via JavaScript."), function click() {
+		}, "click")), " ", dom.clickbutton("Unregister", attr.title("Not all browsers implement unregistering via JavaScript."), /* @__PURE__ */ __name(function click() {
 			if (!window.navigator.unregisterProtocolHandler) {
 				window.alert('Unregistering a protocol handler ("mailto:") via JavaScript is not supported by your browser. See your browser settings to unregister.');
 				return;
@@ -2234,9 +2246,9 @@
 				return;
 			}
 			window.alert('"mailto:" protocol handler unregistered.');
-		})), dom.br(), dom.div(dom.submitbutton("Save")))));
-	};
-	var cmdHelp = async () => {
+		}, "click"))), dom.br(), dom.div(dom.submitbutton("Save")))));
+	}, "cmdSettings");
+	var cmdHelp = /* @__PURE__ */ __name(async () => {
 		popup(css("popupHelp", { padding: "1em 1em 2em 1em" }), dom.h1("Help and keyboard shortcuts"), dom.div(style({ display: "flex" }), dom.div(style({ width: "40em" }), dom.table(dom.tr(dom.td(attr.colspan("2"), dom.h2("Global", style({ margin: "0" })))), [
 			["c", "compose new message"],
 			["/", "search"],
@@ -2306,8 +2318,8 @@
 			["$", "next attachment"],
 			["d", "download"]
 		].map((t) => dom.tr(dom.td(t[0]), dom.td(t[1])))), dom.div(style({ marginTop: "2ex", marginBottom: "1ex" }), dom.span("Underdotted text", attr.title("Underdotted text shows additional information on hover.")), " show an explanation or additional information when hovered."), dom.div(style({ marginBottom: "1ex" }), "Multiple messages can be selected by clicking messages while holding the control and/or shift keys. Dragging messages and dropping them on a mailbox moves the messages to that mailbox."), dom.div(style({ marginBottom: "1ex" }), "Text that changes ", dom.span(attr.title("Unicode blocks, e.g. from basic latin to cyrillic, or to emoticons."), '"character groups"'), " without whitespace has an ", dom.span(dom._class("scriptswitch"), "orange underline"), ", which can be a sign of an intent to mislead (e.g. phishing)."), dom.div(style({ marginTop: "2ex" }), "Mox is open source email server software, this is version ", moxversion, ", see ", dom.a(attr.href("licenses.txt"), "licenses"), ".", dom.br(), "Feedback, including bug reports, is appreciated! ", link("https://github.com/mjl-/mox/issues/new")))));
-	};
-	var cmdTooltip = async () => {
+	}, "cmdHelp");
+	var cmdTooltip = /* @__PURE__ */ __name(async () => {
 		let elems = [];
 		if (document.activeElement && document.activeElement !== document.body) {
 			if (document.activeElement.getAttribute("title")) {
@@ -2335,9 +2347,9 @@
 			const pos = e.getBoundingClientRect();
 			return dom.div(css("tooltipContent", { position: "absolute", backgroundColor: ["black", "white"], color: ["white", "black"], borderRadius: ".15em", padding: ".15em .25em", maxWidth: "50em" }), pos.x < window.innerWidth / 3 ? style({ left: "" + pos.x + "px" }) : style({ right: "" + (window.innerWidth - pos.x - pos.width) + "px" }), pos.y + pos.height > window.innerHeight * 2 / 3 ? style({ bottom: "" + (window.innerHeight - (pos.y - 2)) + "px", maxHeight: "" + (pos.y - 2) + "px" }) : style({ top: "" + (pos.y + pos.height + 2) + "px", maxHeight: "" + (window.innerHeight - (pos.y + pos.height + 2)) + "px" }), title);
 		}));
-	};
+	}, "cmdTooltip");
 	var composeView = null;
-	var compose = (opts, listMailboxes, setLocationHash) => {
+	var compose = /* @__PURE__ */ __name((opts, listMailboxes, setLocationHash) => {
 		log("compose", opts);
 		if (composeView) {
 			window.alert("Can only compose one message at a time.");
@@ -2360,13 +2372,13 @@
 		let draftSaveTimer = 0;
 		let draftSavePromise = Promise.resolve(0);
 		let draftLastText = opts.body;
-		const draftCancelSaveTimer = () => {
+		const draftCancelSaveTimer = /* @__PURE__ */ __name(() => {
 			if (draftSaveTimer) {
 				window.clearTimeout(draftSaveTimer);
 				draftSaveTimer = 0;
 			}
-		};
-		const draftScheduleSave = () => {
+		}, "draftCancelSaveTimer");
+		const draftScheduleSave = /* @__PURE__ */ __name(() => {
 			if (draftSaveTimer || body.value === draftLastText) {
 				return;
 			}
@@ -2375,8 +2387,8 @@
 				await withStatus("Saving draft", draftSave());
 				draftScheduleSave();
 			}, 60 * 1e3);
-		};
-		const draftSave = async () => {
+		}, "draftScheduleSave");
+		const draftSave = /* @__PURE__ */ __name(async () => {
 			draftCancelSaveTimer();
 			let replyTo = "";
 			if (replytoViews && replytoViews.length === 1 && replytoViews[0].input.value) {
@@ -2406,26 +2418,26 @@
 				draftSavePromise = Promise.resolve(0);
 			}
 			draftLastText = cm.TextBody;
-		};
-		const unsavedChanges = () => opts.body !== body.value && (!draftMessageID || draftLastText !== body.value);
-		const cmdClose = async () => {
+		}, "draftSave");
+		const unsavedChanges = /* @__PURE__ */ __name(() => opts.body !== body.value && (!draftMessageID || draftLastText !== body.value), "unsavedChanges");
+		const cmdClose = /* @__PURE__ */ __name(async () => {
 			draftCancelSaveTimer();
 			await draftSavePromise;
 			if (unsavedChanges()) {
 				const action = await new Promise((resolve) => {
-					const remove = popup(dom.p(dom.b("Message has unsaved changes")), dom.br(), dom.div(dom.clickbutton("Save draft", function click() {
+					const remove = popup(dom.p(dom.b("Message has unsaved changes")), dom.br(), dom.div(dom.clickbutton("Save draft", /* @__PURE__ */ __name(function click() {
 						resolve("save");
 						remove();
-					}), " ", draftMessageID ? dom.clickbutton("Remove draft", function click() {
+					}, "click")), " ", draftMessageID ? dom.clickbutton("Remove draft", /* @__PURE__ */ __name(function click() {
 						resolve("remove");
 						remove();
-					}) : [], " ", dom.clickbutton("Discard changes", function click() {
+					}, "click")) : [], " ", dom.clickbutton("Discard changes", /* @__PURE__ */ __name(function click() {
 						resolve("discard");
 						remove();
-					}), " ", dom.clickbutton("Cancel", function click() {
+					}, "click")), " ", dom.clickbutton("Cancel", /* @__PURE__ */ __name(function click() {
 						resolve("cancel");
 						remove();
-					})));
+					}, "click"))));
 				});
 				if (action === "save") {
 					await withStatus("Saving draft", draftSave());
@@ -2440,13 +2452,13 @@
 			composeElem.remove();
 			composeView = null;
 			setLocationHash();
-		};
-		const cmdSave = async () => {
+		}, "cmdClose");
+		const cmdSave = /* @__PURE__ */ __name(async () => {
 			draftCancelSaveTimer();
 			await draftSavePromise;
 			await withStatus("Saving draft", draftSave());
-		};
-		const submit = async (archive) => {
+		}, "cmdSave");
+		const submit = /* @__PURE__ */ __name(async (archive) => {
 			draftCancelSaveTimer();
 			await draftSavePromise;
 			const files = await new Promise((resolve, reject) => {
@@ -2497,33 +2509,33 @@
 			composeElem.remove();
 			composeView = null;
 			setLocationHash();
-		};
-		const cmdSend = async () => {
+		}, "submit");
+		const cmdSend = /* @__PURE__ */ __name(async () => {
 			await withStatus("Sending email", submit(false), fieldset);
-		};
-		const cmdSendArchive = async () => {
+		}, "cmdSend");
+		const cmdSendArchive = /* @__PURE__ */ __name(async () => {
 			await withStatus("Sending email and archive", submit(true), fieldset);
-		};
-		const cmdAddTo = async () => {
+		}, "cmdSendArchive");
+		const cmdAddTo = /* @__PURE__ */ __name(async () => {
 			newAddrView("", true, true, toViews, toBtn, toCell, toRow);
-		};
-		const cmdAddCc = async () => {
+		}, "cmdAddTo");
+		const cmdAddCc = /* @__PURE__ */ __name(async () => {
 			newAddrView("", true, false, ccViews, ccBtn, ccCell, ccRow);
-		};
-		const cmdAddBcc = async () => {
+		}, "cmdAddCc");
+		const cmdAddBcc = /* @__PURE__ */ __name(async () => {
 			newAddrView("", true, false, bccViews, bccBtn, bccCell, bccRow);
-		};
-		const cmdReplyTo = async () => {
+		}, "cmdAddBcc");
+		const cmdReplyTo = /* @__PURE__ */ __name(async () => {
 			newAddrView("", false, false, replytoViews, replyToBtn, replyToCell, replyToRow, true);
-		};
-		const cmdCustomFrom = async () => {
+		}, "cmdReplyTo");
+		const cmdCustomFrom = /* @__PURE__ */ __name(async () => {
 			if (customFrom) {
 				return;
 			}
 			customFrom = dom.input(attr.value(from.value), attr.required(""), focusPlaceholder("Jane <jane@example.org>"));
 			from.replaceWith(customFrom);
 			customFromBtn.remove();
-		};
+		}, "cmdCustomFrom");
 		const shortcuts = {
 			"ctrl Enter": cmdSend,
 			"ctrl shift Enter": cmdSendArchive,
@@ -2536,7 +2548,7 @@
 			"ctrl S": cmdClose
 			// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 		};
-		const newAddrView = (addr, isRecipient, isTo, views, btn, cell, row, single) => {
+		const newAddrView = /* @__PURE__ */ __name((addr, isRecipient, isTo, views, btn, cell, row, single) => {
 			if (single && views.length !== 0) {
 				return;
 			}
@@ -2544,7 +2556,7 @@
 			let rcptSecAddr = "";
 			let rcptSecAborter = {};
 			let autosizeElem, inputElem, securityBar;
-			const fetchRecipientSecurity = () => {
+			const fetchRecipientSecurity = /* @__PURE__ */ __name(() => {
 				if (!accountSettings?.ShowAddressSecurity) {
 					return;
 				}
@@ -2560,7 +2572,7 @@
 					rcptSecAborter.abort();
 					rcptSecAborter.abort = void 0;
 				}
-				const color = (v2) => {
+				const color = /* @__PURE__ */ __name((v2) => {
 					if (v2 === SecurityResult.SecurityResultYes) {
 						return styles.underlineGreen;
 					} else if (v2 === SecurityResult.SecurityResultNo) {
@@ -2569,8 +2581,8 @@
 						return "transparent";
 					}
 					return styles.underlineGrey;
-				};
-				const setBar = (c0, c1, c2, c3, c4) => {
+				}, "color");
+				const setBar = /* @__PURE__ */ __name((c0, c1, c2, c3, c4) => {
 					const stops = [
 						c0 + " 0%",
 						c0 + " 19%",
@@ -2592,18 +2604,18 @@
 						c4 + " 100%"
 					].join(", ");
 					securityBar.style.borderImage = "linear-gradient(to right, " + stops + ") 1";
-				};
+				}, "setBar");
 				const aborter = {};
 				rcptSecAborter = aborter;
 				rcptSecPromise = client.withOptions({ aborter }).RecipientSecurity(inputElem.value);
 				rcptSecPromise.then((rs) => {
 					setBar(color(rs.STARTTLS), color(rs.MTASTS), color(rs.DNSSEC), color(rs.DANE), color(rs.RequireTLS));
 					const implemented = [];
-					const check = (v2, s) => {
+					const check = /* @__PURE__ */ __name((v2, s) => {
 						if (v2) {
 							implemented.push(s);
 						}
-					};
+					}, "check");
 					check(rs.STARTTLS === SecurityResult.SecurityResultYes, "STARTTLS");
 					check(rs.MTASTS === SecurityResult.SecurityResultYes, "MTASTS");
 					check(rs.DNSSEC === SecurityResult.SecurityResultYes, "DNSSEC");
@@ -2615,14 +2627,14 @@
 					v.recipientSecurity = rs;
 					if (isRecipient) {
 						let reqtls = opts.isList !== true;
-						const walk = (l) => {
+						const walk = /* @__PURE__ */ __name((l) => {
 							for (const v2 of l) {
 								if (v2.recipientSecurity?.RequireTLS !== SecurityResult.SecurityResultYes || v2.recipientSecurity?.MTASTS !== SecurityResult.SecurityResultYes && v2.recipientSecurity?.DANE !== SecurityResult.SecurityResultYes) {
 									reqtls = false;
 									break;
 								}
 							}
-						};
+						}, "walk");
 						walk(toViews);
 						walk(ccViews);
 						walk(bccViews);
@@ -2638,9 +2650,9 @@
 						requiretls.value = "";
 					}
 				});
-			};
+			}, "fetchRecipientSecurity");
 			const recipientSecurityTitle = "Description of security mechanisms recipient domains may implement:\n1. STARTTLS: Opportunistic (unverified) TLS with STARTTLS, successfully negotiated during the most recent delivery attempt.\n2. MTA-STS: For PKIX/WebPKI-verified TLS.\n3. DNSSEC: MX DNS records are DNSSEC-signed.\n4. DANE: First delivery destination host implements DANE for verified TLS.\n5. RequireTLS: SMTP extension for verified TLS delivery into recipient mailbox, support detected during the most recent delivery attempt.\n\nChecks STARTTLS, DANE and RequireTLS cover the most recently used delivery path, not necessarily all possible delivery paths.\n\nThe bars below the input field indicate implementation status by the recipient domain:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. no previous delivery attempt, or DANE check skipped due to DNSSEC-lookup error)";
-			const root = dom.span(autosizeElem = dom.span(dom._class("autosize"), inputElem = dom.input(focusPlaceholder("Jane <jane@example.org>"), style({ width: "auto" }), attr.value(addr), newAddressComplete(), accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [], function keydown(e) {
+			const root = dom.span(autosizeElem = dom.span(dom._class("autosize"), inputElem = dom.input(focusPlaceholder("Jane <jane@example.org>"), style({ width: "auto" }), attr.value(addr), newAddressComplete(), accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [], /* @__PURE__ */ __name(function keydown(e) {
 				if (e.key === "Backspace" && e.ctrlKey && inputElem.value === "" && !(isTo && views.length === 1)) {
 					remove();
 				} else if (e.key === "=" && e.ctrlKey) {
@@ -2650,12 +2662,12 @@
 				}
 				e.preventDefault();
 				e.stopPropagation();
-			}, function input() {
+			}, "keydown"), /* @__PURE__ */ __name(function input() {
 				autosizeElem.dataset.value = inputElem.value;
-			}, function change() {
+			}, "input"), /* @__PURE__ */ __name(function change() {
 				autosizeElem.dataset.value = inputElem.value;
 				fetchRecipientSecurity();
-			}, function paste(e) {
+			}, "change"), /* @__PURE__ */ __name(function paste(e) {
 				const data = e.clipboardData?.getData("text/plain");
 				if (typeof data !== "string" || data === "") {
 					return;
@@ -2672,18 +2684,18 @@
 				last.input.focus();
 				e.preventDefault();
 				e.stopPropagation();
-			}), securityBar = dom.span(css("securitybar", {
+			}, "paste")), securityBar = dom.span(css("securitybar", {
 				margin: "0 1px",
 				borderBottom: "1.5px solid",
 				borderBottomColor: "transparent"
-			}))), " ", dom.clickbutton("-", style({ padding: "0 .25em" }), attr.arialabel("Remove address."), attr.title("Remove address."), function click() {
+			}))), " ", dom.clickbutton("-", style({ padding: "0 .25em" }), attr.arialabel("Remove address."), attr.title("Remove address."), /* @__PURE__ */ __name(function click() {
 				remove();
 				if (single && views.length === 0) {
 					btn.style.display = "";
 				}
-			}), " ");
+			}, "click")), " ");
 			autosizeElem.dataset.value = inputElem.value;
-			const remove = () => {
+			const remove = /* @__PURE__ */ __name(() => {
 				const i = views.indexOf(v);
 				views.splice(i, 1);
 				root.remove();
@@ -2708,7 +2720,7 @@
 				if (next) {
 					next.focus();
 				}
-			};
+			}, "remove");
 			const v = { root, input: inputElem, isRecipient, recipientSecurity: null };
 			fetchRecipientSecurity();
 			views.push(v);
@@ -2719,13 +2731,13 @@
 			}
 			inputElem.focus();
 			return v;
-		};
+		}, "newAddrView");
 		let noAttachmentsWarning;
-		const checkAttachments = () => {
+		const checkAttachments = /* @__PURE__ */ __name(() => {
 			const missingAttachments = !attachments.files?.length && !forwardAttachmentViews.find((v) => v.checkbox.checked) && !!body.value.split("\n").find((s) => !s.startsWith(">") && s.match(/attach(ed|ment)/));
 			noAttachmentsWarning.style.display = missingAttachments ? "" : "none";
-		};
-		const normalizeUser = (a) => {
+		}, "checkAttachments");
+		const normalizeUser = /* @__PURE__ */ __name((a) => {
 			let user = a.User;
 			const domconf = domainAddressConfigs[a.Domain.ASCII];
 			for (const sep of domconf.LocalpartCatchallSeparators || []) {
@@ -2736,10 +2748,10 @@
 				user = user.toLowerCase();
 			}
 			return user;
-		};
-		const addressSelf = (addr) => {
+		}, "normalizeUser");
+		const addressSelf = /* @__PURE__ */ __name((addr) => {
 			return accountAddresses.find((a) => a.Domain.ASCII === addr.Domain.ASCII && (a.User === "" || normalizeUser(a) === normalizeUser(addr)));
-		};
+		}, "addressSelf");
 		let haveFrom = false;
 		const fromOptions = accountAddresses.filter((a) => a.User).map((a) => {
 			const selected = opts.from && opts.from.length === 1 && equalAddress(a, opts.from[0]) || loginAddress && equalAddress(a, loginAddress) && (!opts.from || envelopeIdentity(opts.from));
@@ -2761,14 +2773,14 @@
 		let scheduleElem;
 		let scheduleTime;
 		let scheduleWeekday;
-		const pad0 = (v) => v >= 10 ? "" + v : "0" + v;
-		const localdate = (d) => [d.getFullYear(), pad0(d.getMonth() + 1), pad0(d.getDate())].join("-");
-		const localdatetime = (d) => localdate(d) + "T" + pad0(d.getHours()) + ":" + pad0(d.getMinutes()) + ":00";
+		const pad0 = /* @__PURE__ */ __name((v) => v >= 10 ? "" + v : "0" + v, "pad0");
+		const localdate = /* @__PURE__ */ __name((d) => [d.getFullYear(), pad0(d.getMonth() + 1), pad0(d.getDate())].join("-"), "localdate");
+		const localdatetime = /* @__PURE__ */ __name((d) => localdate(d) + "T" + pad0(d.getHours()) + ":" + pad0(d.getMinutes()) + ":00", "localdatetime");
 		const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-		const scheduleTimeChanged = () => {
+		const scheduleTimeChanged = /* @__PURE__ */ __name(() => {
 			log("datetime change", scheduleTime.value);
 			dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()]);
-		};
+		}, "scheduleTimeChanged");
 		let resizeLast = null;
 		let resizeTimer = 0;
 		const initWidth = window.innerWidth === settings.composeViewportWidth ? settings.composeWidth : 0;
@@ -2790,7 +2802,7 @@
 			borderRadius: ".25em",
 			display: "flex",
 			flexDirection: "column"
-		}), initWidth ? style({ width: initWidth + "px" }) : [], initHeight ? style({ height: initHeight + "px" }) : [], dom.div(css("composeResizeGrab", { position: "absolute", marginTop: "-1em", marginLeft: "-1em", width: "1em", height: "1em", cursor: "nw-resize" }), async function mousedown(e) {
+		}), initWidth ? style({ width: initWidth + "px" }) : [], initHeight ? style({ height: initHeight + "px" }) : [], dom.div(css("composeResizeGrab", { position: "absolute", marginTop: "-1em", marginLeft: "-1em", width: "1em", height: "1em", cursor: "nw-resize" }), /* @__PURE__ */ __name(async function mousedown(e) {
 			page.style.pointerEvents = "none";
 			resizeLast = null;
 			await startDrag(e, (e2) => {
@@ -2811,7 +2823,7 @@
 				resizeLast = { x: e2.clientX, y: e2.clientY };
 			});
 			page.style.pointerEvents = "";
-		}), dom.form(css("composeForm", {
+		}, "mousedown")), dom.form(css("composeForm", {
 			flexGrow: "1",
 			display: "flex",
 			flexDirection: "column"
@@ -2826,9 +2838,9 @@
 			dom._class("autosize"),
 			style({ width: "100%" }),
 			// Without 100% width, the span takes minimal width for input, we want the full table cell.
-			subject = dom.input(style({ width: "100%" }), attr.value(opts.subject || ""), attr.required(""), focusPlaceholder("subject..."), function input() {
+			subject = dom.input(style({ width: "100%" }), attr.value(opts.subject || ""), attr.required(""), focusPlaceholder("subject..."), /* @__PURE__ */ __name(function input() {
 				subjectAutosize.dataset.value = subject.value;
-			})
+			}, "input"))
 		)))), body = dom.textarea(
 			dom._class("mono"),
 			style({
@@ -2841,20 +2853,20 @@
 			// treatment, which would cause characters to disappear.
 			new String(opts.body || ""),
 			prop({ selectionStart: opts.editOffset || 0, selectionEnd: opts.editOffset || 0 }),
-			function keyup(e) {
+			/* @__PURE__ */ __name(function keyup(e) {
 				if (e.key === "Enter") {
 					checkAttachments();
 				}
-			},
-			!listMailboxes().find((mb) => mb.Draft) ? [] : function input() {
+			}, "keyup"),
+			!listMailboxes().find((mb) => mb.Draft) ? [] : /* @__PURE__ */ __name(function input() {
 				draftScheduleSave();
-			}
+			}, "input")
 		), !(opts.attachmentsMessageItem && opts.attachmentsMessageItem.Attachments && opts.attachmentsMessageItem.Attachments.length > 0) ? [] : dom.div(style({ margin: ".5em 0" }), "Forward attachments: ", forwardAttachmentViews = (opts.attachmentsMessageItem?.Attachments || []).map((a) => {
 			const filename = a.Filename || "(unnamed)";
 			const size = formatSize(a.Part.DecodedSize);
-			const checkbox = dom.input(attr.type("checkbox"), function change() {
+			const checkbox = dom.input(attr.type("checkbox"), /* @__PURE__ */ __name(function change() {
 				checkAttachments();
-			});
+			}, "change"));
 			const root = dom.label(checkbox, " " + filename + " ", dom.span("(" + size + ") ", styleClasses.textMild));
 			const v = {
 				path: a.Path || [],
@@ -2862,49 +2874,49 @@
 				checkbox
 			};
 			return v;
-		}), dom.label(styleClasses.textMild, dom.input(attr.type("checkbox"), function change(e) {
+		}), dom.label(styleClasses.textMild, dom.input(attr.type("checkbox"), /* @__PURE__ */ __name(function change(e) {
 			forwardAttachmentViews.forEach((v) => v.checkbox.checked = e.target.checked);
-		}), " (Toggle all)")), noAttachmentsWarning = dom.div(style({ display: "none" }), css("composeNoAttachmentsWarning", { backgroundColor: styles.warningBackgroundColor, padding: "0.15em .25em", margin: ".5em 0" }), "Message mentions attachments, but no files are attached."), dom.label(style({ margin: "1ex 0", display: "block" }), "Attachments ", attachments = dom.input(attr.type("file"), attr.multiple(""), function change() {
+		}, "change")), " (Toggle all)")), noAttachmentsWarning = dom.div(style({ display: "none" }), css("composeNoAttachmentsWarning", { backgroundColor: styles.warningBackgroundColor, padding: "0.15em .25em", margin: ".5em 0" }), "Message mentions attachments, but no files are attached."), dom.label(style({ margin: "1ex 0", display: "block" }), "Attachments ", attachments = dom.input(attr.type("file"), attr.multiple(""), /* @__PURE__ */ __name(function change() {
 			checkAttachments();
-		})), dom.label(style({ margin: "1ex 0", display: "block" }), attr.title("How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed."), "TLS ", requiretls = dom.select(dom.option(attr.value(""), "Default"), dom.option(attr.value("yes"), "With RequireTLS"), dom.option(attr.value("no"), "Fallback to insecure"))), dom.div(scheduleLink = dom.a(attr.href(""), "Schedule", function click(e) {
+		}, "change"))), dom.label(style({ margin: "1ex 0", display: "block" }), attr.title("How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed."), "TLS ", requiretls = dom.select(dom.option(attr.value(""), "Default"), dom.option(attr.value("yes"), "With RequireTLS"), dom.option(attr.value("no"), "Fallback to insecure"))), dom.div(scheduleLink = dom.a(attr.href(""), "Schedule", /* @__PURE__ */ __name(function click(e) {
 			e.preventDefault();
 			scheduleTime.value = localdatetime(/* @__PURE__ */ new Date());
 			scheduleTimeChanged();
 			scheduleLink.style.display = "none";
 			scheduleElem.style.display = "";
 			scheduleTime.setAttribute("required", "");
-		}), scheduleElem = dom.div(style({ display: "none" }), dom.clickbutton("Start of next day", function click(e) {
+		}, "click")), scheduleElem = dom.div(style({ display: "none" }), dom.clickbutton("Start of next day", /* @__PURE__ */ __name(function click(e) {
 			e.preventDefault();
 			const d = new Date(scheduleTime.value);
 			const nextday = new Date(d.getTime() + 24 * 3600 * 1e3);
 			scheduleTime.value = localdate(nextday) + "T09:00:00";
 			scheduleTimeChanged();
-		}), " ", dom.clickbutton("+1 hour", function click(e) {
+		}, "click")), " ", dom.clickbutton("+1 hour", /* @__PURE__ */ __name(function click(e) {
 			e.preventDefault();
 			const d = new Date(scheduleTime.value);
 			scheduleTime.value = localdatetime(new Date(d.getTime() + 3600 * 1e3));
 			scheduleTimeChanged();
-		}), " ", dom.clickbutton("+1 day", function click(e) {
+		}, "click")), " ", dom.clickbutton("+1 day", /* @__PURE__ */ __name(function click(e) {
 			e.preventDefault();
 			const d = new Date(scheduleTime.value);
 			scheduleTime.value = localdatetime(new Date(d.getTime() + 24 * 3600 * 1e3));
 			scheduleTimeChanged();
-		}), " ", dom.clickbutton("Now", function click(e) {
+		}, "click")), " ", dom.clickbutton("Now", /* @__PURE__ */ __name(function click(e) {
 			e.preventDefault();
 			scheduleTime.value = localdatetime(/* @__PURE__ */ new Date());
 			scheduleTimeChanged();
-		}), " ", dom.clickbutton("Cancel", function click(e) {
+		}, "click")), " ", dom.clickbutton("Cancel", /* @__PURE__ */ __name(function click(e) {
 			e.preventDefault();
 			scheduleLink.style.display = "";
 			scheduleElem.style.display = "none";
 			scheduleTime.removeAttribute("required");
 			scheduleTime.value = "";
-		}), dom.div(style({ marginTop: "1ex" }), scheduleTime = dom.input(attr.type("datetime-local"), function change() {
+		}, "click")), dom.div(style({ marginTop: "1ex" }), scheduleTime = dom.input(attr.type("datetime-local"), /* @__PURE__ */ __name(function change() {
 			scheduleTimeChanged();
-		}), " in local timezone " + (Intl.DateTimeFormat().resolvedOptions().timeZone || "") + ", ", scheduleWeekday = dom.span()))), dom.div(style({ margin: "3ex 0 1ex 0", display: "block" }), dom.submitbutton("Send"), " ", opts.responseMessageID && listMailboxes().find((mb) => mb.Archive) ? dom.clickbutton("Send and archive thread", clickCmd(cmdSendArchive, shortcuts)) : [])), async function submit2(e) {
+		}, "change")), " in local timezone " + (Intl.DateTimeFormat().resolvedOptions().timeZone || "") + ", ", scheduleWeekday = dom.span()))), dom.div(style({ margin: "3ex 0 1ex 0", display: "block" }), dom.submitbutton("Send"), " ", opts.responseMessageID && listMailboxes().find((mb) => mb.Archive) ? dom.clickbutton("Send and archive thread", clickCmd(cmdSendArchive, shortcuts)) : [])), /* @__PURE__ */ __name(async function submit2(e) {
 			e.preventDefault();
 			shortcutCmd(cmdSend, shortcuts);
-		}));
+		}, "submit")));
 		subjectAutosize.dataset.value = subject.value;
 		(opts.to && opts.to.length > 0 ? opts.to : [""]).forEach((s) => newAddrView(s, true, true, toViews, toBtn, toCell, toRow));
 		(opts.cc || []).forEach((s) => newAddrView(s, true, false, ccViews, ccBtn, ccCell, ccRow));
@@ -2936,8 +2948,8 @@
 		};
 		composeView = cv;
 		setLocationHash();
-	};
-	var composeDraft = async (mi, pm, listMailboxes, setLocationHash) => {
+	}, "compose");
+	var composeDraft = /* @__PURE__ */ __name(async (mi, pm, listMailboxes, setLocationHash) => {
 		const m = mi.Message;
 		const draftMailboxID = listMailboxes().find((mb) => mb.Draft)?.ID;
 		if (m.MailboxID !== draftMailboxID) {
@@ -2962,8 +2974,8 @@
 			draftMessageID: m.ID
 		};
 		compose(opts, listMailboxes, setLocationHash);
-	};
-	var labelsPopover = (e, msgs, possibleLabels) => {
+	}, "composeDraft");
+	var labelsPopover = /* @__PURE__ */ __name((e, msgs, possibleLabels) => {
 		if (msgs.length === 0) {
 			return;
 		}
@@ -2972,7 +2984,7 @@
 		const msgIDs = msgs.map((m) => m.ID);
 		let fieldsetnew;
 		let newlabel;
-		const remove = popover(e.target, {}, dom.div(css("popoverLabels", { display: "flex", flexDirection: "column", gap: "1ex" }), knownLabels.map((l) => dom.div(dom.label(dom.input(attr.type("checkbox"), activeLabels.includes(l) ? attr.checked("") : [], style({ marginRight: ".5em" }), attr.title("Add/remove this label to the message(s), leaving other labels unchanged."), async function change(e2) {
+		const remove = popover(e.target, {}, dom.div(css("popoverLabels", { display: "flex", flexDirection: "column", gap: "1ex" }), knownLabels.map((l) => dom.div(dom.label(dom.input(attr.type("checkbox"), activeLabels.includes(l) ? attr.checked("") : [], style({ marginRight: ".5em" }), attr.title("Add/remove this label to the message(s), leaving other labels unchanged."), /* @__PURE__ */ __name(async function change(e2) {
 			if (activeLabels.includes(l)) {
 				await withStatus("Removing label", client.FlagsClear(msgIDs, [l]), e2.target);
 				activeLabels.splice(activeLabels.indexOf(l), 1);
@@ -2980,18 +2992,18 @@
 				await withStatus("Adding label", client.FlagsAdd(msgIDs, [l]), e2.target);
 				activeLabels.push(l);
 			}
-		}), " ", dom.span(styleClasses.keyword, l))))), dom.hr(style({ margin: "2ex 0" })), dom.form(async function submit(e2) {
+		}, "change")), " ", dom.span(styleClasses.keyword, l))))), dom.hr(style({ margin: "2ex 0" })), dom.form(/* @__PURE__ */ __name(async function submit(e2) {
 			e2.preventDefault();
 			await withStatus("Adding new label", client.FlagsAdd(msgIDs, [newlabel.value]), fieldsetnew);
 			remove();
-		}, fieldsetnew = dom.fieldset(dom.div(newlabel = dom.input(focusPlaceholder("new-label"), attr.required(""), attr.title('New label to add/set on the message(s), must be lower-case, ascii-only, without spaces and without the following special characters: (){%*"].')), " ", dom.submitbutton("Add new label", attr.title("Add this label to the message(s), leaving other labels unchanged."))))));
-	};
-	var movePopover = (e, mailboxes, msgs) => {
+		}, "submit"), fieldsetnew = dom.fieldset(dom.div(newlabel = dom.input(focusPlaceholder("new-label"), attr.required(""), attr.title('New label to add/set on the message(s), must be lower-case, ascii-only, without spaces and without the following special characters: (){%*"].')), " ", dom.submitbutton("Add new label", attr.title("Add this label to the message(s), leaving other labels unchanged."))))));
+	}, "labelsPopover");
+	var movePopover = /* @__PURE__ */ __name((e, mailboxes, msgs) => {
 		if (msgs.length === 0) {
 			return;
 		}
 		let msgsMailboxID = msgs[0].MailboxID && msgs.filter((m) => m.MailboxID === msgs[0].MailboxID).length === msgs.length ? msgs[0].MailboxID : 0;
-		const remove = popover(e.target, {}, dom.div(css("popoverMove", { display: "flex", flexDirection: "column", gap: ".25em" }), mailboxes.map((mb) => dom.div(dom.clickbutton(mb.Name, mb.ID === msgsMailboxID ? attr.disabled("") : [], async function click() {
+		const remove = popover(e.target, {}, dom.div(css("popoverMove", { display: "flex", flexDirection: "column", gap: ".25em" }), mailboxes.map((mb) => dom.div(dom.clickbutton(mb.Name, mb.ID === msgsMailboxID ? attr.disabled("") : [], /* @__PURE__ */ __name(async function click() {
 			const moveMsgs = msgs.filter((m) => m.MailboxID !== mb.ID);
 			const msgIDs = moveMsgs.map((m) => m.ID);
 			await withStatus("Moving to mailbox", client.MessageMove(msgIDs, mb.ID, false));
@@ -2999,9 +3011,9 @@
 				await moveAskRuleset(moveMsgs[0].ID, moveMsgs[0].MailboxID, mb, mailboxes);
 			}
 			remove();
-		})))));
-	};
-	var moveAskRuleset = async (msgID, mbSrcID, mbDst, mailboxes) => {
+		}, "click"))))));
+	}, "movePopover");
+	var moveAskRuleset = /* @__PURE__ */ __name(async (msgID, mbSrcID, mbDst, mailboxes) => {
 		const mbSrc = mailboxes.find((mb) => mb.ID === mbSrcID);
 		if (!mbSrc || isSpecialUse(mbDst) || isSpecialUse(mbSrc)) {
 			return;
@@ -3012,37 +3024,37 @@
 		}
 		const what = listID ? ['list with id "', listID, '"'] : ['address "', msgFrom, '"'];
 		if (isRemove) {
-			const remove2 = popup(dom.h1("Remove rule?"), dom.p(style({ maxWidth: "30em" }), "Would you like to remove the server-side rule that automatically delivers messages from ", what, ' to mailbox "', mbDst.Name, '"?'), dom.br(), dom.div(dom.clickbutton("Yes, remove rule", async function click() {
+			const remove2 = popup(dom.h1("Remove rule?"), dom.p(style({ maxWidth: "30em" }), "Would you like to remove the server-side rule that automatically delivers messages from ", what, ' to mailbox "', mbDst.Name, '"?'), dom.br(), dom.div(dom.clickbutton("Yes, remove rule", /* @__PURE__ */ __name(async function click() {
 				await withStatus("Remove ruleset", client.RulesetRemove(rcptTo, ruleset));
 				remove2();
-			}), " ", dom.clickbutton("Not now", async function click() {
+			}, "click")), " ", dom.clickbutton("Not now", /* @__PURE__ */ __name(async function click() {
 				remove2();
-			})), dom.br(), dom.div(style({ marginBottom: "1ex" }), dom.clickbutton("No, and don't ask again for ", what, async function click() {
+			}, "click"))), dom.br(), dom.div(style({ marginBottom: "1ex" }), dom.clickbutton("No, and don't ask again for ", what, /* @__PURE__ */ __name(async function click() {
 				await withStatus("Store ruleset response", client.RulesetMessageNever(rcptTo, listID, msgFrom, true));
 				remove2();
-			})), dom.div(dom.clickbutton(`No, and don't ask again when moving messages out of "`, mbSrc.Name, '"', async function click() {
+			}, "click"))), dom.div(dom.clickbutton(`No, and don't ask again when moving messages out of "`, mbSrc.Name, '"', /* @__PURE__ */ __name(async function click() {
 				await withStatus("Store ruleset response", client.RulesetMailboxNever(mbSrc.ID, false));
 				remove2();
-			})));
+			}, "click"))));
 			return;
 		}
-		const remove = popup(dom.h1("Add rule?"), dom.p(style({ maxWidth: "30em" }), "Would you like to create a server-side ruleset that automatically delivers future messages from ", what, ' to mailbox "', mbDst.Name, '"?'), dom.br(), dom.div(dom.clickbutton("Yes, add rule", async function click() {
+		const remove = popup(dom.h1("Add rule?"), dom.p(style({ maxWidth: "30em" }), "Would you like to create a server-side ruleset that automatically delivers future messages from ", what, ' to mailbox "', mbDst.Name, '"?'), dom.br(), dom.div(dom.clickbutton("Yes, add rule", /* @__PURE__ */ __name(async function click() {
 			await withStatus("Add ruleset", client.RulesetAdd(rcptTo, ruleset));
 			remove();
-		}), " ", dom.clickbutton("Not now", async function click() {
+		}, "click")), " ", dom.clickbutton("Not now", /* @__PURE__ */ __name(async function click() {
 			remove();
-		})), dom.br(), dom.div(style({ marginBottom: "1ex" }), dom.clickbutton("No, and don't ask again for ", what, async function click() {
+		}, "click"))), dom.br(), dom.div(style({ marginBottom: "1ex" }), dom.clickbutton("No, and don't ask again for ", what, /* @__PURE__ */ __name(async function click() {
 			await withStatus("Store ruleset response", client.RulesetMessageNever(rcptTo, listID, msgFrom, false));
 			remove();
-		})), dom.div(dom.clickbutton(`No, and don't ask again when moving messages to "`, mbDst.Name, '"', async function click() {
+		}, "click"))), dom.div(dom.clickbutton(`No, and don't ask again when moving messages to "`, mbDst.Name, '"', /* @__PURE__ */ __name(async function click() {
 			await withStatus("Store ruleset response", client.RulesetMailboxNever(mbDst.ID, true));
 			remove();
-		})));
-	};
-	var isSpecialUse = (mb) => mb.Archive || mb.Draft || mb.Junk || mb.Sent || mb.Trash;
-	var newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTime, initialCollapsed) => {
+		}, "click"))));
+	}, "moveAskRuleset");
+	var isSpecialUse = /* @__PURE__ */ __name((mb) => mb.Archive || mb.Draft || mb.Junk || mb.Sent || mb.Trash, "isSpecialUse");
+	var newMsgitemView = /* @__PURE__ */ __name((mi, msglistView, otherMailbox, listMailboxes, receivedTime, initialCollapsed) => {
 		let ageTimer = 0;
-		const identityTag = (s, title) => dom.span(css("msgItemIdentity", { padding: "0 .15em", marginLeft: ".15em", borderRadius: ".15em", fontWeight: "normal", fontSize: ".9em", whiteSpace: "nowrap", backgroundColor: styles.backgroundColorMilder, color: styles.color, border: "1px solid", borderColor: styles.colorMilder }), s, attr.title(title));
+		const identityTag = /* @__PURE__ */ __name((s, title) => dom.span(css("msgItemIdentity", { padding: "0 .15em", marginLeft: ".15em", borderRadius: ".15em", fontWeight: "normal", fontSize: ".9em", whiteSpace: "nowrap", backgroundColor: styles.backgroundColorMilder, color: styles.color, border: "1px solid", borderColor: styles.colorMilder }), s, attr.title(title)), "identityTag");
 		const identityHeader = [];
 		if (!envelopeIdentity(mi.Envelope.From || []) && !envelopeIdentity(mi.Envelope.To || [])) {
 			if (envelopeIdentity(mi.Envelope.CC || [])) {
@@ -3055,16 +3067,16 @@
 				identityHeader.push(identityTag("-", "You are not in any To, From, CC, BCC header. Could message to a mailing list or Bcc without Bcc message header."));
 			}
 		}
-		const remove = () => {
+		const remove = /* @__PURE__ */ __name(() => {
 			msgitemView.root.remove();
 			if (ageTimer) {
 				window.clearTimeout(ageTimer);
 				ageTimer = 0;
 			}
-		};
-		const age = (date) => {
+		}, "remove");
+		const age = /* @__PURE__ */ __name((date) => {
 			const r = dom.span(dom._class("notooltip"), attr.title(date.toString()));
-			const set = () => {
+			const set = /* @__PURE__ */ __name(() => {
 				const nowSecs = (/* @__PURE__ */ new Date()).getTime() / 1e3;
 				let t = nowSecs - date.getTime() / 1e3;
 				let negative = "";
@@ -3102,11 +3114,11 @@
 				} else {
 					ageTimer = 0;
 				}
-			};
+			}, "set");
 			set();
 			return r;
-		};
-		const render = () => {
+		}, "age");
+		const render = /* @__PURE__ */ __name(() => {
 			const mi2 = msgitemView.messageitem;
 			const m = mi2.Message;
 			if (ageTimer) {
@@ -3144,9 +3156,9 @@
 					threadCharTitle = "Immediate parent message is missing.";
 				}
 			}
-			const isUnread = () => !mi2.Message.Seen || msgitemView.isCollapsedThreadRoot() && !!msgitemView.findDescendant((miv) => !miv.messageitem.Message.Seen);
-			const isRelevant = () => !mi2.Message.ThreadMuted && mi2.MatchQuery || msgitemView.isCollapsedThreadRoot() && msgitemView.findDescendant((miv) => !miv.messageitem.Message.ThreadMuted && miv.messageitem.MatchQuery);
-			const received = () => {
+			const isUnread = /* @__PURE__ */ __name(() => !mi2.Message.Seen || msgitemView.isCollapsedThreadRoot() && !!msgitemView.findDescendant((miv) => !miv.messageitem.Message.Seen), "isUnread");
+			const isRelevant = /* @__PURE__ */ __name(() => !mi2.Message.ThreadMuted && mi2.MatchQuery || msgitemView.isCollapsedThreadRoot() && msgitemView.findDescendant((miv) => !miv.messageitem.Message.ThreadMuted && miv.messageitem.MatchQuery), "isRelevant");
+			const received = /* @__PURE__ */ __name(() => {
 				let r = mi2.Message.Received;
 				if (!msgitemView.isCollapsedThreadRoot()) {
 					return r;
@@ -3159,17 +3171,17 @@
 					}
 				});
 				return r;
-			};
-			const isThreadLast = () => {
+			}, "received");
+			const isThreadLast = /* @__PURE__ */ __name(() => {
 				let miv = msgitemView.threadRoot();
 				while (miv.kids.length > 0) {
 					miv = miv.kids[miv.kids.length - 1];
 				}
 				return miv === msgitemView;
-			};
+			}, "isThreadLast");
 			const mailboxtags = [];
 			const mailboxIDs = /* @__PURE__ */ new Set();
-			const addMailboxTag = (mb, isCollapsedKid) => {
+			const addMailboxTag = /* @__PURE__ */ __name((mb, isCollapsedKid) => {
 				let name = mb.Name;
 				mailboxIDs.add(mb.ID);
 				if (name.length > 8 + 1 + 3 + 1 + 8 + 4) {
@@ -3184,7 +3196,7 @@
 				}
 				const e = dom.span(css("msgItemMailbox", { padding: "0 .15em", marginLeft: ".15em", borderRadius: ".15em", fontWeight: "normal", fontSize: ".9em", whiteSpace: "nowrap", background: styles.backgroundColorMilder, color: ["white", "#ddd"], border: "1px solid", borderColor: styles.colorMilder }), isCollapsedKid ? css("msgItemMailboxCollapsed", { background: "#eee", color: "#333" }, true) : [], name === mb.Name ? [] : attr.title(mb.Name), name);
 				mailboxtags.push(e);
-			};
+			}, "addMailboxTag");
 			const othermb = otherMailbox(m.MailboxID);
 			if (othermb) {
 				addMailboxTag(othermb, false);
@@ -3201,15 +3213,15 @@
 					}
 				}
 			}
-			const correspondentAddrs = (miv) => {
+			const correspondentAddrs = /* @__PURE__ */ __name((miv) => {
 				let fromAddrs = miv.messageitem.Envelope.From || [];
 				let toAddrs = [];
 				if (listMailboxes().find((mb) => mb.ID === miv.messageitem.Message.MailboxID)?.Sent) {
 					toAddrs = [...miv.messageitem.Envelope.To || [], ...miv.messageitem.Envelope.CC || [], ...miv.messageitem.Envelope.BCC || []];
 				}
 				return [fromAddrs, toAddrs];
-			};
-			const correspondents = () => {
+			}, "correspondentAddrs");
+			const correspondents = /* @__PURE__ */ __name(() => {
 				let fromAddrs = [];
 				let toAddrs = [];
 				let junk = m.Junk || !!listMailboxes().find((mb) => mb.ID === m.MailboxID && (mb.Name === rejectsMailbox || mb.Junk));
@@ -3255,7 +3267,7 @@
 						...ta.map((a) => dom.span(style({ fontStyle: "italic" }), formatAddressShort(a, junk)))
 					], () => ", ")
 				];
-			};
+			}, "correspondents");
 			const msgItemCellStyle = css("msgItemCell", { padding: "2px 4px" });
 			const msgItemStyle = css("msgItem", { display: "flex", userSelect: "none", cursor: "pointer", borderRadius: ".15em", border: "1px solid transparent" });
 			ensureCSS(".msgItem.focus", { borderColor: styles.msgItemFocusBorderColor, border: "1px solid" });
@@ -3268,16 +3280,16 @@
 				active ? dom._class("active") : [],
 				focus ? dom._class("focus") : [],
 				attr.draggable("true"),
-				function dragstart(e) {
+				/* @__PURE__ */ __name(function dragstart(e) {
 					if (!msglistView.selected().includes(msgitemView)) {
 						e.preventDefault();
 						window.alert("Can only drag items in selection.");
 						return;
 					}
 					e.dataTransfer.setData("application/vnd.mox.messages", JSON.stringify(msglistView.selected().map((miv) => [miv.messageitem.Message.MailboxID, miv.messageitem.Message.ID])));
-				},
+				}, "dragstart"),
 				// Thread root with kids can be collapsed/expanded with double click.
-				settings.threading !== ThreadMode.ThreadOff && !msgitemView.parent && msgitemView.kids.length > 0 ? function dblclick(e) {
+				settings.threading !== ThreadMode.ThreadOff && !msgitemView.parent && msgitemView.kids.length > 0 ? /* @__PURE__ */ __name(function dblclick(e) {
 					e.stopPropagation();
 					if (settings.threading === ThreadMode.ThreadOn) {
 						withStatus("Saving thread expand/collapse", client.ThreadCollapse([msgitemView.messageitem.Message.ID], !msgitemView.collapsed));
@@ -3288,24 +3300,24 @@
 						msglistView.threadCollapse(msgitemView);
 						msglistView.viewportEnsureMessages();
 					}
-				} : [],
+				}, "dblclick") : [],
 				isUnread() ? css("msgItemUnread", { fontWeight: "bold" }) : [],
 				// Relevant means not muted and matching the query.
 				isRelevant() ? [] : css("msgItemNotRelevant", { opacity: ".4" }),
-				dom.div(msgItemCellStyle, dom._class("msgItemFlags"), dom.div(css("msgItemFlagsSpread", { display: "flex", justifyContent: "space-between" }), dom.div(flagList(msgitemView)), !msgitemView.parent && msgitemView.kids.length > 0 && msgitemView.collapsed ? dom.clickbutton("" + (1 + msgitemView.descendants().length), attr.tabindex("-1"), attr.title("Expand thread."), attr.arialabel("Expand thread."), function click(e) {
+				dom.div(msgItemCellStyle, dom._class("msgItemFlags"), dom.div(css("msgItemFlagsSpread", { display: "flex", justifyContent: "space-between" }), dom.div(flagList(msgitemView)), !msgitemView.parent && msgitemView.kids.length > 0 && msgitemView.collapsed ? dom.clickbutton("" + (1 + msgitemView.descendants().length), attr.tabindex("-1"), attr.title("Expand thread."), attr.arialabel("Expand thread."), /* @__PURE__ */ __name(function click(e) {
 					e.stopPropagation();
 					if (settings.threading === ThreadMode.ThreadOn) {
 						withStatus("Saving thread expanded", client.ThreadCollapse([msgitemView.messageitem.Message.ID], false));
 					}
 					msglistView.threadExpand(msgitemView);
-				}) : [], !msgitemView.parent && msgitemView.kids.length > 0 && !msgitemView.collapsed ? dom.clickbutton("-", style({ width: "1em" }), attr.tabindex("-1"), attr.title("Collapse thread."), attr.arialabel("Collapse thread."), function click(e) {
+				}, "click")) : [], !msgitemView.parent && msgitemView.kids.length > 0 && !msgitemView.collapsed ? dom.clickbutton("-", style({ width: "1em" }), attr.tabindex("-1"), attr.title("Collapse thread."), attr.arialabel("Collapse thread."), /* @__PURE__ */ __name(function click(e) {
 					e.stopPropagation();
 					if (settings.threading === ThreadMode.ThreadOn) {
 						withStatus("Saving thread expanded", client.ThreadCollapse([msgitemView.messageitem.Message.ID], true));
 					}
 					msglistView.threadCollapse(msgitemView);
 					msglistView.viewportEnsureMessages();
-				}) : [])),
+				}, "click")) : [])),
 				dom.div(
 					msgItemCellStyle,
 					dom._class("msgItemFrom"),
@@ -3317,15 +3329,15 @@
 				),
 				dom.div(msgItemCellStyle, css("msgItemSubject", { position: "relative" }), dom.div(css("msgItemSubjectSpread", { display: "flex", justifyContent: "space-between", position: "relative" }), dom.div(css("msgItemSubjectText", { whiteSpace: "nowrap", overflow: "hidden" }), threadIndent > 0 ? dom.span(threadChar, style({ paddingLeft: threadIndent / 2 + "em" }), css("msgItemThreadChar", { opacity: ".75", fontWeight: "normal" }), threadCharTitle ? attr.title(threadCharTitle) : []) : [], msgitemView.parent ? [] : mi2.Envelope.Subject || "(no subject)", dom.span(css("msgItemSubjectSnippet", { fontWeight: "normal", color: styles.colorMilder }), " " + (mi2.Message.Preview || ""))), dom.div(keywords, mailboxtags))),
 				dom.div(msgItemCellStyle, dom._class("msgItemAge"), age(received())),
-				function click(e) {
+				/* @__PURE__ */ __name(function click(e) {
 					e.preventDefault();
 					e.stopPropagation();
 					msglistView.click(msgitemView, e.ctrlKey, e.shiftKey);
-				}
+				}, "click")
 			);
 			msgitemView.root.replaceWith(elem);
 			msgitemView.root = elem;
-		};
+		}, "render");
 		const msgitemView = {
 			root: dom.div(),
 			messageitem: mi,
@@ -3333,29 +3345,29 @@
 			kids: [],
 			parent: null,
 			collapsed: initialCollapsed,
-			threadRoot: () => {
+			threadRoot: /* @__PURE__ */ __name(() => {
 				let miv = msgitemView;
 				while (miv.parent) {
 					miv = miv.parent;
 				}
 				return miv;
-			},
-			isCollapsedThreadRoot: () => !msgitemView.parent && msgitemView.collapsed && msgitemView.kids.length > 0,
-			descendants: () => {
+			}, "threadRoot"),
+			isCollapsedThreadRoot: /* @__PURE__ */ __name(() => !msgitemView.parent && msgitemView.collapsed && msgitemView.kids.length > 0, "isCollapsedThreadRoot"),
+			descendants: /* @__PURE__ */ __name(() => {
 				let l = [];
-				const walk = (miv) => {
+				const walk = /* @__PURE__ */ __name((miv) => {
 					for (const kmiv of miv.kids) {
 						l.push(kmiv);
 						walk(kmiv);
 					}
-				};
+				}, "walk");
 				walk(msgitemView);
 				return l;
-			},
+			}, "descendants"),
 			// We often just need to know if a descendant with certain properties exist. No
 			// need to create an array, then call find on it.
-			findDescendant: (matchfn) => {
-				const walk = (miv) => {
+			findDescendant: /* @__PURE__ */ __name((matchfn) => {
+				const walk = /* @__PURE__ */ __name((miv) => {
 					if (matchfn(miv)) {
 						return miv;
 					}
@@ -3366,10 +3378,10 @@
 						}
 					}
 					return null;
-				};
+				}, "walk");
 				return walk(msgitemView);
-			},
-			lastDescendant: () => {
+			}, "findDescendant"),
+			lastDescendant: /* @__PURE__ */ __name(() => {
 				let l = msgitemView;
 				if (l.kids.length === 0) {
 					return null;
@@ -3378,26 +3390,26 @@
 					l = l.kids[l.kids.length - 1];
 				}
 				return l;
-			},
+			}, "lastDescendant"),
 			remove,
 			render
 		};
 		return msgitemView;
-	};
+	}, "newMsgitemView");
 	var attachmentView = null;
-	var newMsgView = (miv, msglistView, listMailboxes, setLocationHash, possibleLabels, messageLoaded, refineKeyword, parsedMessageOpt) => {
+	var newMsgView = /* @__PURE__ */ __name((miv, msglistView, listMailboxes, setLocationHash, possibleLabels, messageLoaded, refineKeyword, parsedMessageOpt) => {
 		const mi = miv.messageitem;
 		const m = mi.Message;
 		const fromAddress = mi.Envelope.From && mi.Envelope.From.length === 1 ? formatEmail(mi.Envelope.From[0]) : "";
-		let parsedMessageResolve = () => {
-		};
-		let parsedMessageReject = () => {
-		};
+		let parsedMessageResolve = /* @__PURE__ */ __name(() => {
+		}, "parsedMessageResolve");
+		let parsedMessageReject = /* @__PURE__ */ __name(() => {
+		}, "parsedMessageReject");
 		let parsedMessagePromise = new Promise((resolve, reject) => {
 			parsedMessageResolve = resolve;
 			parsedMessageReject = reject;
 		});
-		const react = async (to, cc, bcc, forward) => {
+		const react = /* @__PURE__ */ __name(async (to, cc, bcc, forward) => {
 			const pm = await parsedMessagePromise;
 			let body = "";
 			const sel = window.getSelection();
@@ -3422,8 +3434,8 @@
 
 ---- Forwarded Message ----
 `;
-				const padspace = (s, size) => s + " ".repeat(size - s.length);
-				const add = (k, l) => {
+				const padspace = /* @__PURE__ */ __name((s, size) => s + " ".repeat(size - s.length), "padspace");
+				const add = /* @__PURE__ */ __name((k, l) => {
 					if (l.length === 0) {
 						return;
 					}
@@ -3436,7 +3448,7 @@
 						prefix += "\n";
 						k = "";
 					});
-				};
+				}, "add");
 				add("Subject:", subject2);
 				add("Date:", date);
 				add("From:", from);
@@ -3485,9 +3497,9 @@
 				archiveReferenceMailboxID: msglistView.activeMailbox()?.ID || m.MailboxID
 			};
 			compose(opts, listMailboxes, setLocationHash);
-		};
-		const reply = async (all) => {
-			const contains = (l, a) => !!l.find((e) => equalAddress(e, a));
+		}, "react");
+		const reply = /* @__PURE__ */ __name(async (all) => {
+			const contains = /* @__PURE__ */ __name((l, a) => !!l.find((e) => equalAddress(e, a)), "contains");
 			let to = [];
 			let cc = [];
 			let bcc = [];
@@ -3514,36 +3526,36 @@
 			cc = cc.filter((a, i) => !envelopeIdentity([a]) && !contains(to, a) && !contains(cc.slice(0, i), a));
 			bcc = bcc.filter((a) => !envelopeIdentity([a]));
 			await react(to, cc, bcc, false);
-		};
-		const cmdForward = async () => {
+		}, "reply");
+		const cmdForward = /* @__PURE__ */ __name(async () => {
 			react([], [], [], true);
-		};
-		const cmdReplyList = async () => {
+		}, "cmdForward");
+		const cmdReplyList = /* @__PURE__ */ __name(async () => {
 			const pm = await parsedMessagePromise;
 			if (pm.ListReplyAddress) {
 				await react([pm.ListReplyAddress], [], [], false);
 			}
-		};
-		const cmdReply = async () => {
+		}, "cmdReplyList");
+		const cmdReply = /* @__PURE__ */ __name(async () => {
 			await reply(false);
-		};
-		const cmdReplyAll = async () => {
+		}, "cmdReply");
+		const cmdReplyAll = /* @__PURE__ */ __name(async () => {
 			await reply(true);
-		};
-		const cmdPrint = async () => {
+		}, "cmdReplyAll");
+		const cmdPrint = /* @__PURE__ */ __name(async () => {
 			if (urlType) {
 				window.open("msg/" + m.ID + "/msg" + urlType + "#print", "_blank");
 			}
-		};
-		const cmdOpenNewTab = async () => {
+		}, "cmdPrint");
+		const cmdOpenNewTab = /* @__PURE__ */ __name(async () => {
 			if (urlType) {
 				window.open("msg/" + m.ID + "/msg" + urlType, "_blank");
 			}
-		};
-		const cmdOpenRaw = async () => {
+		}, "cmdOpenNewTab");
+		const cmdOpenRaw = /* @__PURE__ */ __name(async () => {
 			window.open("msg/" + m.ID + "/raw", "_blank");
-		};
-		const cmdOpenRawPart = async () => {
+		}, "cmdOpenRaw");
+		const cmdOpenRawPart = /* @__PURE__ */ __name(async () => {
 			const pm = await parsedMessagePromise;
 			let path = null;
 			if (urlType === "text" && pm.TextPaths && pm.TextPaths.length > 0) {
@@ -3556,86 +3568,86 @@
 				return;
 			}
 			window.open("msg/" + m.ID + "/viewtext/" + [0, ...path].join("."), "_blank");
-		};
-		const cmdDownloadRaw = async () => {
+		}, "cmdOpenRawPart");
+		const cmdDownloadRaw = /* @__PURE__ */ __name(async () => {
 			window.open("msg/" + m.ID + "/rawdl", "_blank");
-		};
-		const cmdViewAttachments = async () => {
+		}, "cmdDownloadRaw");
+		const cmdViewAttachments = /* @__PURE__ */ __name(async () => {
 			if (attachments.length > 0) {
 				view(attachments[0]);
 			}
-		};
-		const cmdComposeDraft = async () => {
+		}, "cmdViewAttachments");
+		const cmdComposeDraft = /* @__PURE__ */ __name(async () => {
 			const pm = await parsedMessagePromise;
 			composeDraft(mi, pm, listMailboxes, setLocationHash);
-		};
-		const cmdToggleHeaders = async () => {
+		}, "cmdComposeDraft");
+		const cmdToggleHeaders = /* @__PURE__ */ __name(async () => {
 			settingsPut({ ...settings, showAllHeaders: !settings.showAllHeaders });
 			const pm = await parsedMessagePromise;
 			loadHeaderDetails(pm);
-		};
+		}, "cmdToggleHeaders");
 		let textbtn, htmlbtn, htmlextbtn;
-		const activeBtn = (b) => {
+		const activeBtn = /* @__PURE__ */ __name((b) => {
 			for (const xb of [textbtn, htmlbtn, htmlextbtn]) {
 				if (xb) {
 					xb.classList.toggle("active", xb === b);
 				}
 			}
-		};
-		const fromAddressSettingsSave = async (mode) => {
+		}, "activeBtn");
+		const fromAddressSettingsSave = /* @__PURE__ */ __name(async (mode) => {
 			const froms = mi.Envelope.From || [];
 			if (froms.length === 1) {
 				await withStatus("Saving view mode settings for address", client.FromAddressSettingsSave({ FromAddress: froms[0].User + "@" + (froms[0].Domain.Unicode || froms[0].Domain.ASCII), ViewMode: mode }));
 			}
-		};
-		const cmdShowText = async () => {
+		}, "fromAddressSettingsSave");
+		const cmdShowText = /* @__PURE__ */ __name(async () => {
 			if (!textbtn) {
 				return;
 			}
 			loadText(await parsedMessagePromise);
 			activeBtn(textbtn);
 			await fromAddressSettingsSave(ViewMode.ModeText);
-		};
-		const cmdShowHTML = async () => {
+		}, "cmdShowText");
+		const cmdShowHTML = /* @__PURE__ */ __name(async () => {
 			if (!htmlbtn || !htmlextbtn) {
 				return;
 			}
 			loadHTML();
 			activeBtn(htmlbtn);
 			await fromAddressSettingsSave(ViewMode.ModeHTML);
-		};
-		const cmdShowHTMLExternal = async () => {
+		}, "cmdShowHTML");
+		const cmdShowHTMLExternal = /* @__PURE__ */ __name(async () => {
 			if (!htmlbtn || !htmlextbtn) {
 				return;
 			}
 			loadHTMLexternal();
 			activeBtn(htmlextbtn);
 			await fromAddressSettingsSave(ViewMode.ModeHTMLExt);
-		};
-		const cmdShowHTMLCycle = async () => {
+		}, "cmdShowHTMLExternal");
+		const cmdShowHTMLCycle = /* @__PURE__ */ __name(async () => {
 			if (urlType === "html") {
 				await cmdShowHTMLExternal();
 			} else {
 				await cmdShowHTML();
 			}
-		};
-		const cmdShowInternals = async () => {
+		}, "cmdShowHTMLCycle");
+		const cmdShowInternals = /* @__PURE__ */ __name(async () => {
 			const pm = await parsedMessagePromise;
-			const mimepart = (p) => dom.li((p.MediaType + "/" + p.MediaSubType).toLowerCase(), p.ContentTypeParams ? " " + JSON.stringify(p.ContentTypeParams) : [], p.Parts && p.Parts.length === 0 ? [] : dom.ul(css("internalsList", { listStyle: "disc", marginLeft: "1em" }), (p.Parts || []).map((pp) => mimepart(pp))));
+			const mimepart = /* @__PURE__ */ __name((p) => dom.li((p.MediaType + "/" + p.MediaSubType).toLowerCase(), p.ContentTypeParams ? " " + JSON.stringify(p.ContentTypeParams) : [], p.Parts && p.Parts.length === 0 ? [] : dom.ul(css("internalsList", { listStyle: "disc", marginLeft: "1em" }), (p.Parts || []).map((pp) => mimepart(pp)))), "mimepart");
 			popup(css("popupInternals", { display: "flex", gap: "1em" }), dom.div(dom.h1("Mime structure"), dom.ul(css("internalsList", { listStyle: "disc", marginLeft: "1em" }), mimepart(pm.Part))), dom.div(css("internalsMessage", { whiteSpace: "pre-wrap", tabSize: 4, maxWidth: "50%" }), dom.h1("Message"), JSON.stringify(m, void 0, "	")), dom.div(css("internalsParts", { whiteSpace: "pre-wrap", tabSize: 4, maxWidth: "50%" }), dom.h1("Part"), JSON.stringify(pm.Part, void 0, "	")));
-		};
-		const cmdUp = async () => {
+		}, "cmdShowInternals");
+		const cmdUp = /* @__PURE__ */ __name(async () => {
 			msgscrollElem.scrollTo({ top: msgscrollElem.scrollTop - 3 * msgscrollElem.getBoundingClientRect().height / 4, behavior: "smooth" });
-		};
-		const cmdDown = async () => {
+		}, "cmdUp");
+		const cmdDown = /* @__PURE__ */ __name(async () => {
 			msgscrollElem.scrollTo({ top: msgscrollElem.scrollTop + 3 * msgscrollElem.getBoundingClientRect().height / 4, behavior: "smooth" });
-		};
-		const cmdHome = async () => {
+		}, "cmdDown");
+		const cmdHome = /* @__PURE__ */ __name(async () => {
 			msgscrollElem.scrollTo({ top: 0 });
-		};
-		const cmdEnd = async () => {
+		}, "cmdHome");
+		const cmdEnd = /* @__PURE__ */ __name(async () => {
 			msgscrollElem.scrollTo({ top: msgscrollElem.scrollHeight });
-		};
+		}, "cmdEnd");
 		const shortcuts = {
 			e: cmdComposeDraft,
 			I: cmdShowInternals,
@@ -3681,12 +3693,12 @@
 		const msgcontentElem = dom.div(css("scrollparent", { position: "relative", flexGrow: "1" }));
 		const trashMailboxID = listMailboxes().find((mb) => mb.Trash)?.ID;
 		const draftMailboxID = listMailboxes().find((mb) => mb.Draft)?.ID;
-		const loadButtons = (pm) => {
-			dom._kids(msgbuttonElem, dom.div(dom._class("pad"), m.MailboxID === draftMailboxID ? dom.clickbutton("Edit", attr.title("Continue editing this draft message."), clickCmd(cmdComposeDraft, shortcuts)) : [], " ", !pm || !pm.ListReplyAddress ? [] : dom.clickbutton("Reply to list", attr.title("Compose a reply to this mailing list."), clickCmd(cmdReplyList, shortcuts)), " ", pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress ? [] : dom.clickbutton("Reply", attr.title("Compose a reply to the sender of this message."), clickCmd(cmdReply, shortcuts)), " ", (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] : dom.clickbutton("Reply all", attr.title("Compose a reply to all participants of this message."), clickCmd(cmdReplyAll, shortcuts)), " ", dom.clickbutton("Forward", attr.title("Compose a forwarding message, optionally including attachments."), clickCmd(cmdForward, shortcuts)), " ", dom.clickbutton("Archive", attr.title("Move to the Archive mailbox."), clickCmd(msglistView.cmdArchive, shortcuts)), " ", m.MailboxID === trashMailboxID ? dom.clickbutton("Delete", attr.title("Permanently delete message."), clickCmd(msglistView.cmdDelete, shortcuts)) : dom.clickbutton("Trash", attr.title("Move to the Trash mailbox."), clickCmd(msglistView.cmdTrash, shortcuts)), " ", dom.clickbutton("Junk", attr.title("Move to Junk mailbox, marking as junk and causing this message to be used in spam classification of new incoming messages."), clickCmd(msglistView.cmdJunk, shortcuts)), " ", dom.clickbutton("Move to...", function click(e) {
+		const loadButtons = /* @__PURE__ */ __name((pm) => {
+			dom._kids(msgbuttonElem, dom.div(dom._class("pad"), m.MailboxID === draftMailboxID ? dom.clickbutton("Edit", attr.title("Continue editing this draft message."), clickCmd(cmdComposeDraft, shortcuts)) : [], " ", !pm || !pm.ListReplyAddress ? [] : dom.clickbutton("Reply to list", attr.title("Compose a reply to this mailing list."), clickCmd(cmdReplyList, shortcuts)), " ", pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress ? [] : dom.clickbutton("Reply", attr.title("Compose a reply to the sender of this message."), clickCmd(cmdReply, shortcuts)), " ", (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] : dom.clickbutton("Reply all", attr.title("Compose a reply to all participants of this message."), clickCmd(cmdReplyAll, shortcuts)), " ", dom.clickbutton("Forward", attr.title("Compose a forwarding message, optionally including attachments."), clickCmd(cmdForward, shortcuts)), " ", dom.clickbutton("Archive", attr.title("Move to the Archive mailbox."), clickCmd(msglistView.cmdArchive, shortcuts)), " ", m.MailboxID === trashMailboxID ? dom.clickbutton("Delete", attr.title("Permanently delete message."), clickCmd(msglistView.cmdDelete, shortcuts)) : dom.clickbutton("Trash", attr.title("Move to the Trash mailbox."), clickCmd(msglistView.cmdTrash, shortcuts)), " ", dom.clickbutton("Junk", attr.title("Move to Junk mailbox, marking as junk and causing this message to be used in spam classification of new incoming messages."), clickCmd(msglistView.cmdJunk, shortcuts)), " ", dom.clickbutton("Move to...", /* @__PURE__ */ __name(function click(e) {
 				movePopover(e, listMailboxes(), [m]);
-			}), " ", dom.clickbutton("Labels...", attr.title("Add/remove labels."), function click(e) {
+			}, "click")), " ", dom.clickbutton("Labels...", attr.title("Add/remove labels."), /* @__PURE__ */ __name(function click(e) {
 				labelsPopover(e, [m], possibleLabels);
-			}), " ", dom.clickbutton("More...", attr.title("Show more actions."), function click(e) {
+			}, "click")), " ", dom.clickbutton("More...", attr.title("Show more actions."), /* @__PURE__ */ __name(function click(e) {
 				popover(e.target, { transparent: true }, dom.div(css("popupMore", { display: "flex", flexDirection: "column", gap: ".5ex", textAlign: "right" }), [
 					dom.clickbutton("Print", attr.title("Print message, opens in new tab and opens print dialog."), clickCmd(cmdPrint, shortcuts)),
 					dom.clickbutton("Mark Not Junk", attr.title("Mark as not junk, causing this message to be used in spam classification of new incoming messages."), clickCmd(msglistView.cmdMarkNotJunk, shortcuts)),
@@ -3696,62 +3708,62 @@
 					dom.clickbutton("Unmute thread", clickCmd(msglistView.cmdUnmute, shortcuts)),
 					dom.clickbutton("Open in new tab", clickCmd(cmdOpenNewTab, shortcuts)),
 					dom.clickbutton("Download raw original message", clickCmd(cmdDownloadRaw, shortcuts)),
-					dom.clickbutton("Export as ...", function click2(e2) {
+					dom.clickbutton("Export as ...", /* @__PURE__ */ __name(function click2(e2) {
 						popoverExport(e2.target, "", [m.ID]);
-					}),
+					}, "click")),
 					dom.clickbutton("Show raw original message in new tab", clickCmd(cmdOpenRaw, shortcuts)),
 					dom.clickbutton("Show currently displayed part as decoded text", clickCmd(cmdOpenRawPart, shortcuts)),
 					dom.clickbutton("Show internals in popup", clickCmd(cmdShowInternals, shortcuts))
 				].map((b) => dom.div(b))));
-			})));
-		};
+			}, "click"))));
+		}, "loadButtons");
 		loadButtons(parsedMessageOpt || null);
 		loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false);
 		const headerTextMildStyle = css("headerTextMild", { textAlign: "right", color: styles.colorMild });
-		const loadHeaderDetails = (pm) => {
+		const loadHeaderDetails = /* @__PURE__ */ __name((pm) => {
 			const table = dom.table(css("msgHeaderDetails", { width: "100%" }), !settings.showAllHeaders ? [] : Object.entries(pm.Headers || {}).sort().map((t) => (t[1] || []).map((v) => dom.tr(dom.td(t[0] + ":", headerTextMildStyle), dom.td(v)))));
 			msgheaderFullElem.replaceWith(table);
 			msgheaderFullElem = table;
-		};
-		const isText = (a) => ["text", "message"].includes(a.Part.MediaType.toLowerCase());
-		const isPDF = (a) => (a.Part.MediaType + "/" + a.Part.MediaSubType).toLowerCase() === "application/pdf";
-		const isViewable = (a) => isText(a) || isImage(a) || isPDF(a);
+		}, "loadHeaderDetails");
+		const isText = /* @__PURE__ */ __name((a) => ["text", "message"].includes(a.Part.MediaType.toLowerCase()), "isText");
+		const isPDF = /* @__PURE__ */ __name((a) => (a.Part.MediaType + "/" + a.Part.MediaSubType).toLowerCase() === "application/pdf", "isPDF");
+		const isViewable = /* @__PURE__ */ __name((a) => isText(a) || isImage(a) || isPDF(a), "isViewable");
 		const attachments = mi.Attachments || [];
 		let beforeViewFocus;
-		const view = (a) => {
+		const view = /* @__PURE__ */ __name((a) => {
 			if (!beforeViewFocus) {
 				beforeViewFocus = document.activeElement;
 			}
 			const pathStr = [0].concat(a.Path || []).join(".");
 			const index = attachments.indexOf(a);
-			const cmdViewPrev = async () => {
+			const cmdViewPrev = /* @__PURE__ */ __name(async () => {
 				if (index > 0) {
 					popupRoot.remove();
 					view(attachments[index - 1]);
 				}
-			};
-			const cmdViewNext = async () => {
+			}, "cmdViewPrev");
+			const cmdViewNext = /* @__PURE__ */ __name(async () => {
 				if (index < attachments.length - 1) {
 					popupRoot.remove();
 					view(attachments[index + 1]);
 				}
-			};
-			const cmdViewFirst = async () => {
+			}, "cmdViewNext");
+			const cmdViewFirst = /* @__PURE__ */ __name(async () => {
 				popupRoot.remove();
 				view(attachments[0]);
-			};
-			const cmdViewLast = async () => {
+			}, "cmdViewFirst");
+			const cmdViewLast = /* @__PURE__ */ __name(async () => {
 				popupRoot.remove();
 				view(attachments[attachments.length - 1]);
-			};
-			const cmdViewClose = async () => {
+			}, "cmdViewLast");
+			const cmdViewClose = /* @__PURE__ */ __name(async () => {
 				popupRoot.remove();
 				if (beforeViewFocus && beforeViewFocus instanceof HTMLElement && beforeViewFocus.parentNode) {
 					beforeViewFocus.focus();
 				}
 				attachmentView = null;
 				beforeViewFocus = null;
-			};
+			}, "cmdViewClose");
 			const attachShortcuts = {
 				h: cmdViewPrev,
 				ArrowLeft: cmdViewPrev,
@@ -3764,24 +3776,24 @@
 			const attachmentsArrowStyle = css("attachmentsArrow", { color: styles.backgroundColor, backgroundColor: styles.color, width: "2em", height: "2em", borderRadius: "1em", lineHeight: "2em", textAlign: "center", fontWeight: "bold" });
 			const attachmentsIframeStyle = css("attachmentsIframe", { flexGrow: 1, boxShadow: styles.boxShadow, margin: "0 5em" });
 			let content;
-			const popupRoot = dom.div(css("attachmentsOverlay", { position: "fixed", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: styles.overlayBackgroundColor, display: "flex", flexDirection: "column", alignContent: "stretch", padding: "1em", zIndex: zindexes.attachments }), function click(e) {
+			const popupRoot = dom.div(css("attachmentsOverlay", { position: "fixed", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: styles.overlayBackgroundColor, display: "flex", flexDirection: "column", alignContent: "stretch", padding: "1em", zIndex: zindexes.attachments }), /* @__PURE__ */ __name(function click(e) {
 				e.stopPropagation();
 				cmdViewClose();
-			}, attr.tabindex("0"), !(index > 0) ? [] : dom.div(css("attachmentsPrevious", { position: "absolute", left: "1em", top: 0, bottom: 0, fontSize: "1.5em", width: "2em", display: "flex", alignItems: "center", cursor: "pointer" }), dom.div(dom._class("silenttitle"), attachmentsArrowStyle, attr.title("To previous viewable attachment."), "\u2190"), attr.tabindex("0"), clickCmd(cmdViewPrev, attachShortcuts), enterCmd(cmdViewPrev, attachShortcuts)), dom.div(css("attachmentsDownloadHeaderBox", { textAlign: "center", paddingBottom: "30px" }), dom.span(dom._class("pad"), function click(e) {
+			}, "click"), attr.tabindex("0"), !(index > 0) ? [] : dom.div(css("attachmentsPrevious", { position: "absolute", left: "1em", top: 0, bottom: 0, fontSize: "1.5em", width: "2em", display: "flex", alignItems: "center", cursor: "pointer" }), dom.div(dom._class("silenttitle"), attachmentsArrowStyle, attr.title("To previous viewable attachment."), "\u2190"), attr.tabindex("0"), clickCmd(cmdViewPrev, attachShortcuts), enterCmd(cmdViewPrev, attachShortcuts)), dom.div(css("attachmentsDownloadHeaderBox", { textAlign: "center", paddingBottom: "30px" }), dom.span(dom._class("pad"), /* @__PURE__ */ __name(function click(e) {
 				e.stopPropagation();
-			}, css("attachmentsDownloadHeader", { backgroundColor: styles.popupBackgroundColor, color: styles.popupColor, boxShadow: styles.boxShadow, border: "1px solid", borderColor: styles.popupBorderColor, borderRadius: ".25em" }), a.Filename || "(unnamed)", " - ", formatSize(a.Part.DecodedSize), " - ", dom.a("Download", attr.download(""), attr.href("msg/" + m.ID + "/download/" + pathStr), function click(e) {
+			}, "click"), css("attachmentsDownloadHeader", { backgroundColor: styles.popupBackgroundColor, color: styles.popupColor, boxShadow: styles.boxShadow, border: "1px solid", borderColor: styles.popupBorderColor, borderRadius: ".25em" }), a.Filename || "(unnamed)", " - ", formatSize(a.Part.DecodedSize), " - ", dom.a("Download", attr.download(""), attr.href("msg/" + m.ID + "/download/" + pathStr), /* @__PURE__ */ __name(function click(e) {
 				e.stopPropagation();
-			}))), isImage(a) ? dom.div(css("attachmentsImageBox", { flexGrow: 1, display: "flex", alignItems: "center", justifyContent: "center", maxHeight: "calc(100% - 50px)", margin: "0 5em" }), dom.img(css("attachmentsImage", { maxWidth: "100%", maxHeight: "100%", boxShadow: styles.boxShadow, margin: "0 30px" }), attr.src("msg/" + m.ID + "/view/" + pathStr))) : isText(a) ? dom.iframe(attr.title("Attachment shown as text."), attachmentsIframeStyle, attr.src("msg/" + m.ID + "/viewtext/" + pathStr)) : isPDF(a) ? dom.iframe(attr.title("Attachment as PDF."), attachmentsIframeStyle, attr.src("msg/" + m.ID + "/view/" + pathStr)) : content = dom.div(function click(e) {
+			}, "click")))), isImage(a) ? dom.div(css("attachmentsImageBox", { flexGrow: 1, display: "flex", alignItems: "center", justifyContent: "center", maxHeight: "calc(100% - 50px)", margin: "0 5em" }), dom.img(css("attachmentsImage", { maxWidth: "100%", maxHeight: "100%", boxShadow: styles.boxShadow, margin: "0 30px" }), attr.src("msg/" + m.ID + "/view/" + pathStr))) : isText(a) ? dom.iframe(attr.title("Attachment shown as text."), attachmentsIframeStyle, attr.src("msg/" + m.ID + "/viewtext/" + pathStr)) : isPDF(a) ? dom.iframe(attr.title("Attachment as PDF."), attachmentsIframeStyle, attr.src("msg/" + m.ID + "/view/" + pathStr)) : content = dom.div(/* @__PURE__ */ __name(function click(e) {
 				e.stopPropagation();
-			}, css("attachmentsBinary", { minWidth: "30em", padding: "2ex", boxShadow: styles.boxShadow, backgroundColor: styles.popupBackgroundColor, margin: "0 5em", textAlign: "center" }), dom.div(style({ marginBottom: "2ex" }), "Attachment could be a binary file."), dom.clickbutton("View as text", function click() {
+			}, "click"), css("attachmentsBinary", { minWidth: "30em", padding: "2ex", boxShadow: styles.boxShadow, backgroundColor: styles.popupBackgroundColor, margin: "0 5em", textAlign: "center" }), dom.div(style({ marginBottom: "2ex" }), "Attachment could be a binary file."), dom.clickbutton("View as text", /* @__PURE__ */ __name(function click() {
 				content.replaceWith(dom.iframe(attr.title("Attachment shown as text, though it could be a binary file."), attachmentsIframeStyle, attr.src("msg/" + m.ID + "/viewtext/" + pathStr)));
-			})), !(index < attachments.length - 1) ? [] : dom.div(css("attachmentsNext", { position: "absolute", right: "1em", top: 0, bottom: 0, fontSize: "1.5em", width: "2em", display: "flex", alignItems: "center", cursor: "pointer" }), dom.div(dom._class("silenttitle"), attachmentsArrowStyle, attr.title("To next viewable attachment."), "\u2192"), attr.tabindex("0"), clickCmd(cmdViewNext, attachShortcuts), enterCmd(cmdViewNext, attachShortcuts)));
+			}, "click"))), !(index < attachments.length - 1) ? [] : dom.div(css("attachmentsNext", { position: "absolute", right: "1em", top: 0, bottom: 0, fontSize: "1.5em", width: "2em", display: "flex", alignItems: "center", cursor: "pointer" }), dom.div(dom._class("silenttitle"), attachmentsArrowStyle, attr.title("To next viewable attachment."), "\u2192"), attr.tabindex("0"), clickCmd(cmdViewNext, attachShortcuts), enterCmd(cmdViewNext, attachShortcuts)));
 			document.body.appendChild(popupRoot);
 			popupRoot.focus();
 			attachmentView = { key: keyHandler(attachShortcuts) };
-		};
+		}, "view");
 		var filesAll = false;
-		const renderAttachments = () => {
+		const renderAttachments = /* @__PURE__ */ __name(() => {
 			const l = mi.Attachments || [];
 			dom._kids(msgattachmentElem, l && l.length === 0 ? [] : dom.div(css("inlineAttachmentsSeparator", { borderTop: "1px solid", borderTopColor: styles.borderColor }), dom.div(dom._class("pad"), "Attachments: ", l.slice(0, filesAll ? l.length : 4).map((a) => {
 				const name = a.Filename || "(unnamed)";
@@ -3790,23 +3802,23 @@
 				const eye = "\u{1F441}";
 				const dl = "\u2913";
 				const dlurl = "msg/" + m.ID + "/download/" + [0].concat(a.Path || []).join(".");
-				const viewbtn = dom.clickbutton(eye, viewable ? " " + name : style({ padding: "0px 0.25em" }), attr.title("View this file. Size: " + size), style({ lineHeight: "1.5" }), function click() {
+				const viewbtn = dom.clickbutton(eye, viewable ? " " + name : style({ padding: "0px 0.25em" }), attr.title("View this file. Size: " + size), style({ lineHeight: "1.5" }), /* @__PURE__ */ __name(function click() {
 					view(a);
-				});
+				}, "click"));
 				const dlbtn = dom.a(dom._class("button"), attr.download(""), attr.href(dlurl), dl, viewable ? style({ padding: "0px 0.25em" }) : " " + name, attr.title("Download this file. Size: " + size), style({ lineHeight: "1.5" }));
 				if (viewable) {
 					return [dom.span(dom._class("btngroup"), urlType === "text" && isImage(a) ? style({ opacity: ".6" }) : [], viewbtn, dlbtn), " "];
 				}
 				return [dom.span(dom._class("btngroup"), dlbtn, viewbtn), " "];
-			}), filesAll || l.length < 6 ? [] : dom.clickbutton("More...", function click() {
+			}), filesAll || l.length < 6 ? [] : dom.clickbutton("More...", /* @__PURE__ */ __name(function click() {
 				filesAll = true;
 				renderAttachments();
-			}), " ", dom.a("Download all as zip", attr.download(""), style({ color: "inherit" }), attr.href("msg/" + m.ID + "/attachments.zip")))));
-		};
+			}, "click")), " ", dom.a("Download all as zip", attr.download(""), style({ color: "inherit" }), attr.href("msg/" + m.ID + "/attachments.zip")))));
+		}, "renderAttachments");
 		renderAttachments();
 		const root = dom.div(css("msgViewRoot", { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, display: "flex", flexDirection: "column" }));
 		dom._kids(root, msgmetaElem, msgcontentElem);
-		const loadText = (pm) => {
+		const loadText = /* @__PURE__ */ __name((pm) => {
 			urlType = "text";
 			const elem = dom.div(dom._class("mono", "textmulti"), style({ whiteSpace: "pre-wrap" }), (pm.Texts || []).map((t) => renderText(t.replace(/\r\n/g, "\n"))), (mi.Attachments || []).filter((f) => isImage(f)).map((f) => {
 				const pathStr = [0].concat(f.Path || []).join(".");
@@ -3816,28 +3828,28 @@
 			dom._kids(msgscrollElem, elem);
 			dom._kids(msgcontentElem, msgscrollElem);
 			renderAttachments();
-		};
-		const loadHTML = () => {
+		}, "loadText");
+		const loadHTML = /* @__PURE__ */ __name(() => {
 			urlType = "html";
 			dom._kids(msgcontentElem, dom.iframe(attr.tabindex("0"), attr.title("HTML version of message with images inlined, without external resources loaded."), attr.src("msg/" + m.ID + "/" + urlType), css("msgIframeHTML", { position: "absolute", width: "100%", height: "100%" })));
 			renderAttachments();
-		};
-		const loadHTMLexternal = () => {
+		}, "loadHTML");
+		const loadHTMLexternal = /* @__PURE__ */ __name(() => {
 			urlType = "htmlexternal";
 			dom._kids(msgcontentElem, dom.iframe(attr.tabindex("0"), attr.title("HTML version of message with images inlined and with external resources loaded."), attr.src("msg/" + m.ID + "/" + urlType), css("msgIframeHTML", { position: "absolute", width: "100%", height: "100%" })));
 			renderAttachments();
-		};
+		}, "loadHTMLexternal");
 		const mv = {
 			root,
 			messageitem: mi,
 			key: keyHandler(shortcuts),
-			aborter: { abort: () => {
-			} },
-			updateKeywords: async (modseq, keywords) => {
+			aborter: { abort: /* @__PURE__ */ __name(() => {
+			}, "abort") },
+			updateKeywords: /* @__PURE__ */ __name(async (modseq, keywords) => {
 				mi.Message.ModSeq = modseq;
 				mi.Message.Keywords = keywords;
 				loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false);
-			}
+			}, "updateKeywords")
 		};
 		(async () => {
 			let pm;
@@ -3872,10 +3884,10 @@
 				dom._kids(msgmodeElem);
 			} else {
 				const text = haveText && pm.ViewMode == ViewMode.ModeText;
-				dom._kids(msgmodeElem, dom.div(dom._class("pad"), msgHeaderSeparatorStyle, !haveText ? dom.span("HTML-only message", attr.title(htmlNote), msgModeWarningStyle, style({ marginRight: ".25em" })) : [], dom.span(dom._class("btngroup"), haveText ? textbtn = dom.clickbutton(text ? dom._class("active") : [], "Text", clickCmd(cmdShowText, shortcuts)) : [], htmlbtn = dom.clickbutton(text || !text && pm.ViewMode == ViewMode.ModeHTMLExt ? [] : dom._class("active"), "HTML", attr.title(htmlNote), async function click() {
+				dom._kids(msgmodeElem, dom.div(dom._class("pad"), msgHeaderSeparatorStyle, !haveText ? dom.span("HTML-only message", attr.title(htmlNote), msgModeWarningStyle, style({ marginRight: ".25em" })) : [], dom.span(dom._class("btngroup"), haveText ? textbtn = dom.clickbutton(text ? dom._class("active") : [], "Text", clickCmd(cmdShowText, shortcuts)) : [], htmlbtn = dom.clickbutton(text || !text && pm.ViewMode == ViewMode.ModeHTMLExt ? [] : dom._class("active"), "HTML", attr.title(htmlNote), /* @__PURE__ */ __name(async function click() {
 					showShortcut("T");
 					await cmdShowHTML();
-				}), htmlextbtn = dom.clickbutton(text || !text && pm.ViewMode != ViewMode.ModeHTMLExt ? [] : dom._class("active"), "HTML with external resources", attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)))));
+				}, "click")), htmlextbtn = dom.clickbutton(text || !text && pm.ViewMode != ViewMode.ModeHTMLExt ? [] : dom._class("active"), "HTML with external resources", attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)))));
 				if (text) {
 					loadText(pm);
 				} else if (pm.ViewMode == ViewMode.ModeHTMLExt) {
@@ -3885,12 +3897,12 @@
 				}
 			}
 			messageLoaded();
-			const tidAdd = (tid) => {
+			const tidAdd = /* @__PURE__ */ __name((tid) => {
 				const l = scheduledTimers.get(miv.messageitem.Message.ID) || [];
 				l.push(tid);
 				scheduledTimers.set(miv.messageitem.Message.ID, l);
-			};
-			const tidRemove = (tid) => {
+			}, "tidAdd");
+			const tidRemove = /* @__PURE__ */ __name((tid) => {
 				const l = scheduledTimers.get(miv.messageitem.Message.ID) || [];
 				const i = l.indexOf(tid);
 				if (i >= 0) {
@@ -3899,7 +3911,7 @@
 				if (l.length === 0) {
 					scheduledTimers.delete(miv.messageitem.Message.ID);
 				}
-			};
+			}, "tidRemove");
 			if (!miv.messageitem.Message.Seen) {
 				const tid = window.setTimeout(async () => {
 					if (!miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID()) {
@@ -3911,7 +3923,7 @@
 			}
 			if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
 				const tid = window.setTimeout(async () => {
-					const mailboxSpecial = () => !!listMailboxes().find((mb) => mb.ID === miv.messageitem.Message.MailboxID && (mb.Name === rejectsMailbox || mb.Name == introboxMailbox));
+					const mailboxSpecial = /* @__PURE__ */ __name(() => !!listMailboxes().find((mb) => mb.ID === miv.messageitem.Message.MailboxID && (mb.Name === rejectsMailbox || mb.Name == introboxMailbox)), "mailboxSpecial");
 					if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxSpecial()) {
 						await withStatus("Marking current message as not junk", client.FlagsAdd([miv.messageitem.Message.ID], ["$notjunk"]));
 					}
@@ -3921,28 +3933,28 @@
 			}
 		})();
 		return mv;
-	};
-	var newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, scrollElemHeight, refineKeyword, viewportEnsureMessages) => {
+	}, "newMsgView");
+	var newMsglistView = /* @__PURE__ */ __name((msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, scrollElemHeight, refineKeyword, viewportEnsureMessages) => {
 		let msgitemViews = [];
 		let collapsedMsgitemViews = [];
 		let oldThreadMessageItems = [];
 		let selected = [];
 		let focus = null;
 		let msgView = null;
-		const moveActionMsgIDs = (skipMBID) => {
+		const moveActionMsgIDs = /* @__PURE__ */ __name((skipMBID) => {
 			const sentMailboxID = listMailboxes().find((mb) => mb.Sent)?.ID;
 			const effselected = mlv.selected();
 			return effselected.filter((miv) => miv.messageitem.Message.MailboxID !== skipMBID).map((miv) => miv.messageitem.Message).filter((m) => effselected.length === 1 || !sentMailboxID || m.MailboxID !== sentMailboxID || !otherMailbox(sentMailboxID)).map((m) => m.ID);
-		};
-		const cmdArchive = async () => {
+		}, "moveActionMsgIDs");
+		const cmdArchive = /* @__PURE__ */ __name(async () => {
 			const mb = listMailboxes().find((mb2) => mb2.Archive);
 			if (mb) {
 				await withStatus("Moving to archive mailbox", client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true));
 			} else {
 				window.alert("No mailbox configured for archiving yet.");
 			}
-		};
-		const cmdDelete = async () => {
+		}, "cmdArchive");
+		const cmdDelete = /* @__PURE__ */ __name(async () => {
 			if (!window.confirm("Are you sure you want to permanently delete?")) {
 				return;
 			}
@@ -3954,33 +3966,33 @@
 				scheduledTimers.delete(id);
 			}
 			await withStatus("Permanently deleting messages", client.MessageDelete(ids));
-		};
-		const cmdTrash = async () => {
+		}, "cmdDelete");
+		const cmdTrash = /* @__PURE__ */ __name(async () => {
 			const mb = listMailboxes().find((mb2) => mb2.Trash);
 			if (mb) {
 				await withStatus("Moving to trash mailbox", client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true));
 			} else {
 				window.alert("No mailbox configured for trash yet.");
 			}
-		};
-		const cmdJunk = async () => {
+		}, "cmdTrash");
+		const cmdJunk = /* @__PURE__ */ __name(async () => {
 			const mb = listMailboxes().find((mb2) => mb2.Junk);
 			if (mb) {
 				await withStatus("Moving to junk mailbox", client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true));
 			} else {
 				window.alert("No mailbox configured for junk yet.");
 			}
-		};
-		const cmdMarkNotJunk = async () => {
+		}, "cmdJunk");
+		const cmdMarkNotJunk = /* @__PURE__ */ __name(async () => {
 			await withStatus("Marking as not junk", client.FlagsAdd(mlv.selected().map((miv) => miv.messageitem.Message.ID), ["$notjunk"]));
-		};
-		const cmdMarkRead = async () => {
+		}, "cmdMarkNotJunk");
+		const cmdMarkRead = /* @__PURE__ */ __name(async () => {
 			await withStatus("Marking as read", client.FlagsAdd(mlv.selected().map((miv) => miv.messageitem.Message.ID), ["\\seen"]));
-		};
-		const cmdMarkUnread = async () => {
+		}, "cmdMarkRead");
+		const cmdMarkUnread = /* @__PURE__ */ __name(async () => {
 			await withStatus("Marking as not read", client.FlagsClear(mlv.selected().map((miv) => miv.messageitem.Message.ID), ["\\seen", "$junk", "$notjunk"]));
-		};
-		const cmdMute = async () => {
+		}, "cmdMarkUnread");
+		const cmdMute = /* @__PURE__ */ __name(async () => {
 			const l = mlv.selected();
 			await withStatus("Muting thread", client.ThreadMute(l.map((miv) => miv.messageitem.Message.ID), true));
 			const oldstate = state();
@@ -3991,11 +4003,11 @@
 			}
 			updateState(oldstate);
 			viewportEnsureMessages();
-		};
-		const cmdUnmute = async () => {
+		}, "cmdMute");
+		const cmdUnmute = /* @__PURE__ */ __name(async () => {
 			await withStatus("Unmuting thread", client.ThreadMute(mlv.selected().map((miv) => miv.messageitem.Message.ID), false));
-		};
-		const selectedRoots = () => {
+		}, "cmdUnmute");
+		const selectedRoots = /* @__PURE__ */ __name(() => {
 			const mivs = [];
 			mlv.selected().forEach((miv) => {
 				const mivroot = miv.threadRoot();
@@ -4004,8 +4016,8 @@
 				}
 			});
 			return mivs;
-		};
-		const cmdToggleMute = async () => {
+		}, "selectedRoots");
+		const cmdToggleMute = /* @__PURE__ */ __name(async () => {
 			if (settings.threading === ThreadMode.ThreadOff) {
 				alert("Toggle muting threads is only available when threading is enabled.");
 				return;
@@ -4023,8 +4035,8 @@
 				updateState(oldstate);
 				viewportEnsureMessages();
 			}
-		};
-		const cmdToggleCollapse = async () => {
+		}, "cmdToggleMute");
+		const cmdToggleCollapse = /* @__PURE__ */ __name(async () => {
 			if (settings.threading === ThreadMode.ThreadOff) {
 				alert("Toggling thread collapse/expand is only available when threading is enabled.");
 				return;
@@ -4055,16 +4067,16 @@
 				const action = collapse ? "Collapsing" : "Expanding";
 				await withStatus(action, client.ThreadCollapse(rootmivs.map((miv) => miv.messageitem.Message.ID), collapse));
 			}
-		};
-		const cmdSelectThread = async () => {
+		}, "cmdToggleCollapse");
+		const cmdSelectThread = /* @__PURE__ */ __name(async () => {
 			if (!focus) {
 				return;
 			}
 			const oldstate = state();
 			selected = msgitemViews.filter((miv) => miv.messageitem.Message.ThreadID === focus.messageitem.Message.ThreadID);
 			updateState(oldstate);
-		};
-		const cmdCollapseExpand = async (collapse) => {
+		}, "cmdSelectThread");
+		const cmdCollapseExpand = /* @__PURE__ */ __name(async (collapse) => {
 			if (settings.threading === ThreadMode.ThreadOff) {
 				alert("Toggling thread collapse/expand is only available when threading is enabled.");
 				return;
@@ -4092,9 +4104,9 @@
 				const action = collapse ? "Collapsing" : "Expanding";
 				await withStatus(action, client.ThreadCollapse(rootmivs.map((miv) => miv.messageitem.Message.ID), collapse));
 			}
-		};
-		const cmdCollapse = async () => cmdCollapseExpand(true);
-		const cmdExpand = async () => cmdCollapseExpand(false);
+		}, "cmdCollapseExpand");
+		const cmdCollapse = /* @__PURE__ */ __name(async () => cmdCollapseExpand(true), "cmdCollapse");
+		const cmdExpand = /* @__PURE__ */ __name(async () => cmdCollapseExpand(false), "cmdExpand");
 		const shortcuts = {
 			d: cmdTrash,
 			Delete: cmdTrash,
@@ -4110,7 +4122,7 @@
 			ArrowLeft: cmdCollapse,
 			ArrowRight: cmdExpand
 		};
-		const checkConsistency = (checkSelection) => {
+		const checkConsistency = /* @__PURE__ */ __name((checkSelection) => {
 			if (!settings.checkConsistency) {
 				return;
 			}
@@ -4198,15 +4210,15 @@
 					throw new ConsistencyError("focus set to unknown miv");
 				}
 			}
-		};
-		const state = () => {
+		}, "checkConsistency");
+		const state = /* @__PURE__ */ __name(() => {
 			const active = {};
 			for (const miv of mlv.selected()) {
 				active[miv.messageitem.Message.ID] = miv;
 			}
 			return { active, focus };
-		};
-		const updateState = async (oldstate, initial, parsedMessageOpt) => {
+		}, "state");
+		const updateState = /* @__PURE__ */ __name(async (oldstate, initial, parsedMessageOpt) => {
 			const newstate = state();
 			if (oldstate.focus !== newstate.focus) {
 				if (oldstate.focus) {
@@ -4246,31 +4258,31 @@
 				dom._kids(msgElem);
 			} else if (effselected.length === 1) {
 				msgElem.classList.toggle("loading", true);
-				const loaded = () => {
+				const loaded = /* @__PURE__ */ __name(() => {
 					msgElem.classList.toggle("loading", false);
-				};
+				}, "loaded");
 				msgView = newMsgView(effselected[0], mlv, listMailboxes, setLocationHash, possibleLabels, loaded, refineKeyword, parsedMessageOpt);
 				dom._kids(msgElem, msgView);
 			} else {
 				const trashMailboxID = listMailboxes().find((mb) => mb.Trash)?.ID;
 				const allTrash = trashMailboxID && !effselected.find((miv) => miv.messageitem.Message.MailboxID !== trashMailboxID);
-				dom._kids(msgElem, dom.div(attr.role("region"), attr.arialabel("Buttons for multiple messages"), css("multimsgBg", { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, display: "flex", alignItems: "center", justifyContent: "center" }), dom.div(css("multimsgBox", { backgroundColor: styles.backgroundColor, border: "1px solid", borderColor: styles.borderColor, padding: "4ex", borderRadius: ".25em" }), dom.div(style({ textAlign: "center", marginBottom: "4ex" }), "" + effselected.length + " messages selected"), dom.div(dom.clickbutton("Archive", attr.title("Move to the Archive mailbox. Messages in the designated Sent mailbox are only moved if a single message is selected, or the current mailbox is the Sent mailbox."), clickCmd(cmdArchive, shortcuts)), " ", allTrash ? dom.clickbutton("Delete", attr.title("Permanently delete messages."), clickCmd(cmdDelete, shortcuts)) : dom.clickbutton("Trash", attr.title("Move to the Trash mailbox. Messages in the designated Sent mailbox are only moved if a single message is selected, or the current mailbox is the Sent mailbox."), clickCmd(cmdTrash, shortcuts)), " ", dom.clickbutton("Junk", attr.title("Move to Junk mailbox, marking as junk and causing this message to be used in spam classification of new incoming messages. Messages in the designated Sent mailbox are only moved if a single message is selected, or the current mailbox is the Sent mailbox."), clickCmd(cmdJunk, shortcuts)), " ", dom.clickbutton("Move to...", function click(e) {
+				dom._kids(msgElem, dom.div(attr.role("region"), attr.arialabel("Buttons for multiple messages"), css("multimsgBg", { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, display: "flex", alignItems: "center", justifyContent: "center" }), dom.div(css("multimsgBox", { backgroundColor: styles.backgroundColor, border: "1px solid", borderColor: styles.borderColor, padding: "4ex", borderRadius: ".25em" }), dom.div(style({ textAlign: "center", marginBottom: "4ex" }), "" + effselected.length + " messages selected"), dom.div(dom.clickbutton("Archive", attr.title("Move to the Archive mailbox. Messages in the designated Sent mailbox are only moved if a single message is selected, or the current mailbox is the Sent mailbox."), clickCmd(cmdArchive, shortcuts)), " ", allTrash ? dom.clickbutton("Delete", attr.title("Permanently delete messages."), clickCmd(cmdDelete, shortcuts)) : dom.clickbutton("Trash", attr.title("Move to the Trash mailbox. Messages in the designated Sent mailbox are only moved if a single message is selected, or the current mailbox is the Sent mailbox."), clickCmd(cmdTrash, shortcuts)), " ", dom.clickbutton("Junk", attr.title("Move to Junk mailbox, marking as junk and causing this message to be used in spam classification of new incoming messages. Messages in the designated Sent mailbox are only moved if a single message is selected, or the current mailbox is the Sent mailbox."), clickCmd(cmdJunk, shortcuts)), " ", dom.clickbutton("Move to...", /* @__PURE__ */ __name(function click(e) {
 					const sentMailboxID = listMailboxes().find((mb) => mb.Sent)?.ID;
 					movePopover(e, listMailboxes(), effselected.map((miv) => miv.messageitem.Message).filter((m) => effselected.length === 1 || !sentMailboxID || m.MailboxID !== sentMailboxID || !otherMailbox(sentMailboxID)));
-				}), " ", dom.clickbutton("Labels...", attr.title("Add/remove labels ..."), function click(e) {
+				}, "click")), " ", dom.clickbutton("Labels...", attr.title("Add/remove labels ..."), /* @__PURE__ */ __name(function click(e) {
 					labelsPopover(e, effselected.map((miv) => miv.messageitem.Message), possibleLabels);
-				}), " ", dom.clickbutton("Mark Not Junk", attr.title("Mark as not junk, causing this message to be used in spam classification of new incoming messages."), clickCmd(cmdMarkNotJunk, shortcuts)), " ", dom.clickbutton("Mark Read", clickCmd(cmdMarkRead, shortcuts)), " ", dom.clickbutton("Mark Unread", clickCmd(cmdMarkUnread, shortcuts)), " ", dom.clickbutton("Mute thread", clickCmd(cmdMute, shortcuts)), " ", dom.clickbutton("Unmute thread", clickCmd(cmdUnmute, shortcuts)), " ", dom.clickbutton("Export as...", function click(e) {
+				}, "click")), " ", dom.clickbutton("Mark Not Junk", attr.title("Mark as not junk, causing this message to be used in spam classification of new incoming messages."), clickCmd(cmdMarkNotJunk, shortcuts)), " ", dom.clickbutton("Mark Read", clickCmd(cmdMarkRead, shortcuts)), " ", dom.clickbutton("Mark Unread", clickCmd(cmdMarkUnread, shortcuts)), " ", dom.clickbutton("Mute thread", clickCmd(cmdMute, shortcuts)), " ", dom.clickbutton("Unmute thread", clickCmd(cmdUnmute, shortcuts)), " ", dom.clickbutton("Export as...", /* @__PURE__ */ __name(function click(e) {
 					popoverExport(e.target, "", effselected.map((miv) => miv.messageitem.Message.ID));
-				})))));
+				}, "click"))))));
 			}
 			setLocationHash();
-		};
-		const moveFocus = (miv) => {
+		}, "updateState");
+		const moveFocus = /* @__PURE__ */ __name((miv) => {
 			const oldstate = state();
 			focus = miv;
 			updateState(oldstate);
-		};
-		const threadExpand = (miv, changeState) => {
+		}, "moveFocus");
+		const threadExpand = /* @__PURE__ */ __name((miv, changeState) => {
 			if (miv.parent) {
 				throw new ConsistencyError("cannot expand non-root");
 			}
@@ -4291,8 +4303,8 @@
 			if (changeState) {
 				updateState(oldstate);
 			}
-		};
-		const threadCollapse = (miv, changeState) => {
+		}, "threadExpand");
+		const threadCollapse = /* @__PURE__ */ __name((miv, changeState) => {
 			if (miv.parent) {
 				throw new ConsistencyError("cannot expand non-root");
 			}
@@ -4326,8 +4338,8 @@
 				updateState(oldstate);
 			}
 			miv.render();
-		};
-		const threadToggle = () => {
+		}, "threadCollapse");
+		const threadToggle = /* @__PURE__ */ __name(() => {
 			const oldstate = state();
 			const roots = msgitemViews.filter((miv) => !miv.parent && miv.kids.length > 0);
 			roots.forEach((miv) => {
@@ -4346,8 +4358,8 @@
 			});
 			updateState(oldstate);
 			viewportEnsureMessages();
-		};
-		const removeSelected = (miv) => {
+		}, "threadToggle");
+		const removeSelected = /* @__PURE__ */ __name((miv) => {
 			const si = selected.indexOf(miv);
 			if (si >= 0) {
 				selected.splice(si, 1);
@@ -4362,9 +4374,9 @@
 					focus = null;
 				}
 			}
-		};
-		const removeUID = (mailboxID, uid) => {
-			const match = (miv) => miv.messageitem.Message.MailboxID === mailboxID && miv.messageitem.Message.UID === uid;
+		}, "removeSelected");
+		const removeUID = /* @__PURE__ */ __name((mailboxID, uid) => {
+			const match = /* @__PURE__ */ __name((miv) => miv.messageitem.Message.MailboxID === mailboxID && miv.messageitem.Message.UID === uid, "match");
 			const ci = collapsedMsgitemViews.findIndex(match);
 			if (ci >= 0) {
 				const miv = collapsedMsgitemViews[ci];
@@ -4382,8 +4394,8 @@
 				oldThreadMessageItems.splice(ti, 1);
 			}
 			return 0;
-		};
-		const removeCollapsed = (ci) => {
+		}, "removeUID");
+		const removeCollapsed = /* @__PURE__ */ __name((ci) => {
 			const miv = collapsedMsgitemViews[ci];
 			collapsedMsgitemViews.splice(ci, 1);
 			removeSelected(miv);
@@ -4403,8 +4415,8 @@
 			pmiv.kids.sort((miva, mivb) => miva.messageitem.Message.Received.getTime() - mivb.messageitem.Message.Received.getTime());
 			trmiv.render();
 			return;
-		};
-		const removeExpanded = (i) => {
+		}, "removeCollapsed");
+		const removeExpanded = /* @__PURE__ */ __name((i) => {
 			log("removeExpanded", { i });
 			const miv = msgitemViews[i];
 			removeSelected(miv);
@@ -4484,10 +4496,10 @@
 			}
 			pmiv.render();
 			ndmivs.forEach((dmiv) => dmiv.render());
-		};
-		const possiblyTakeoutOldThreads = (threadIDs) => {
-			const hasMatch = (mivs, threadID) => mivs.find((miv) => miv.messageitem.Message.ThreadID === threadID && miv.messageitem.MatchQuery);
-			const takeoutOldThread = (mivs, threadID, visible) => {
+		}, "removeExpanded");
+		const possiblyTakeoutOldThreads = /* @__PURE__ */ __name((threadIDs) => {
+			const hasMatch = /* @__PURE__ */ __name((mivs, threadID) => mivs.find((miv) => miv.messageitem.Message.ThreadID === threadID && miv.messageitem.MatchQuery), "hasMatch");
+			const takeoutOldThread = /* @__PURE__ */ __name((mivs, threadID, visible) => {
 				let i = 0;
 				while (i < mivs.length) {
 					const miv = mivs[i];
@@ -4518,7 +4530,7 @@
 					oldThreadMessageItems.push(mi);
 					log("took out old thread message", { mi });
 				}
-			};
+			}, "takeoutOldThread");
 			for (const threadID of threadIDs) {
 				if (hasMatch(msgitemViews, threadID) || hasMatch(collapsedMsgitemViews, threadID)) {
 					log("still have query-matching message for thread", { threadID });
@@ -4527,11 +4539,11 @@
 				takeoutOldThread(msgitemViews, threadID, true);
 				takeoutOldThread(collapsedMsgitemViews, threadID, false);
 			}
-		};
+		}, "possiblyTakeoutOldThreads");
 		const mlv = {
 			root: dom.div(),
-			updateFlags: (mailboxID, uid, modseq, mask, flags, keywords) => {
-				const updateMessageFlags = (m) => {
+			updateFlags: /* @__PURE__ */ __name((mailboxID, uid, modseq, mask, flags, keywords) => {
+				const updateMessageFlags = /* @__PURE__ */ __name((m) => {
 					m.ModSeq = modseq;
 					const maskobj = mask;
 					const flagsobj = flags;
@@ -4542,7 +4554,7 @@
 						}
 					}
 					m.Keywords = keywords;
-				};
+				}, "updateMessageFlags");
 				let miv = msgitemViews.find((miv2) => miv2.messageitem.Message.MailboxID === mailboxID && miv2.messageitem.Message.UID === uid);
 				if (!miv) {
 					miv = collapsedMsgitemViews.find((miv2) => miv2.messageitem.Message.MailboxID === mailboxID && miv2.messageitem.Message.UID === uid);
@@ -4567,10 +4579,10 @@
 				} else {
 					log("could not find msgitemView for uid", uid);
 				}
-			},
+			}, "updateFlags"),
 			// Add messages to view, either messages to fill the view with complete threads, or
 			// individual messages delivered later.
-			addMessageItems: (messageItems, isChange, requestMsgID) => {
+			addMessageItems: /* @__PURE__ */ __name((messageItems, isChange, requestMsgID) => {
 				if (messageItems.length === 0) {
 					return;
 				}
@@ -4597,7 +4609,7 @@
 							}
 						}
 					} else {
-						const match = (miv) => miv.messageitem.Message.ThreadID === threadID;
+						const match = /* @__PURE__ */ __name((miv) => miv.messageitem.Message.ThreadID === threadID, "match");
 						if (!msgitemViews.find(match) && !collapsedMsgitemViews.find(match)) {
 							log("adding new message(s) to oldTheadMessageItems");
 							for (const mi of mil) {
@@ -4759,7 +4771,7 @@
 						if (requestMsgID > 0 && miv.collapsed) {
 							miv.collapsed = !miv.findDescendant((dmiv) => dmiv.messageitem.Message.ID === requestMsgID);
 						}
-						const takeThreadRoot = (xmiv) => {
+						const takeThreadRoot = /* @__PURE__ */ __name((xmiv) => {
 							log("taking threadRoot", { id: xmiv.messageitem.Message.ID });
 							const xdmiv = xmiv.descendants();
 							xdmiv.forEach((xdmiv2) => xdmiv2.remove());
@@ -4768,7 +4780,7 @@
 							xmiv.parent = miv;
 							miv.kids.sort((miva, mivb) => miva.messageitem.Message.Received.getTime() - mivb.messageitem.Message.Received.getTime());
 							return 1 + xdmiv.length;
-						};
+						}, "takeThreadRoot");
 						if (settings.threading !== ThreadMode.ThreadOff) {
 							for (let i = 0; i < msgitemViews.length; ) {
 								const xmiv = msgitemViews[i];
@@ -4825,9 +4837,9 @@
 					}
 				}
 				updateState(oldstate);
-			},
+			}, "addMessageItems"),
 			// Remove messages, they can be in different threads.
-			removeUIDs: (mailboxID, uids) => {
+			removeUIDs: /* @__PURE__ */ __name((mailboxID, uids) => {
 				const oldstate = state();
 				const hadSelected = selected.length > 0;
 				const threadIDs = /* @__PURE__ */ new Set();
@@ -4843,9 +4855,9 @@
 					selected = [focus];
 				}
 				updateState(oldstate);
-			},
+			}, "removeUIDs"),
 			// Set new muted/collapsed flags for messages in thread.
-			updateMessageThreadFields: (messageIDs, muted, collapsed) => {
+			updateMessageThreadFields: /* @__PURE__ */ __name((messageIDs, muted, collapsed) => {
 				for (const id of messageIDs) {
 					let miv = msgitemViews.find((miv2) => miv2.messageitem.Message.ID === id);
 					if (!miv) {
@@ -4868,14 +4880,14 @@
 						}
 					}
 				}
-			},
+			}, "updateMessageThreadFields"),
 			// For location hash.
-			activeMessageID: () => selected.length === 1 ? selected[0].messageitem.Message.ID : 0,
-			redraw: (miv) => {
+			activeMessageID: /* @__PURE__ */ __name(() => selected.length === 1 ? selected[0].messageitem.Message.ID : 0, "activeMessageID"),
+			redraw: /* @__PURE__ */ __name((miv) => {
 				miv.root.classList.toggle("focus", miv === focus);
 				miv.root.classList.toggle("active", selected.indexOf(miv) >= 0);
-			},
-			clear: () => {
+			}, "redraw"),
+			clear: /* @__PURE__ */ __name(() => {
 				dom._kids(mlv.root);
 				msgitemViews.forEach((miv) => miv.remove());
 				msgitemViews = [];
@@ -4886,19 +4898,19 @@
 				dom._kids(msgElem);
 				msgView = null;
 				setLocationHash();
-			},
-			unselect: () => {
+			}, "clear"),
+			unselect: /* @__PURE__ */ __name(() => {
 				const oldstate = state();
 				selected = [];
 				updateState(oldstate);
-			},
-			select: (miv) => {
+			}, "unselect"),
+			select: /* @__PURE__ */ __name((miv) => {
 				const oldstate = state();
 				focus = miv;
 				selected = [miv];
 				updateState(oldstate);
-			},
-			selected: () => {
+			}, "select"),
+			selected: /* @__PURE__ */ __name(() => {
 				const l = [];
 				for (const miv of selected) {
 					l.push(miv);
@@ -4907,8 +4919,8 @@
 					}
 				}
 				return l;
-			},
-			openMessage: (parsedMessage) => {
+			}, "selected"),
+			openMessage: /* @__PURE__ */ __name((parsedMessage) => {
 				let miv = msgitemViews.find((miv2) => miv2.messageitem.Message.ID === parsedMessage.ID);
 				if (!miv) {
 					return false;
@@ -4918,8 +4930,8 @@
 				selected = [miv];
 				updateState(oldstate, true, parsedMessage);
 				return true;
-			},
-			click: (miv, ctrl, shift) => {
+			}, "openMessage"),
+			click: /* @__PURE__ */ __name((miv, ctrl, shift) => {
 				if (msgitemViews.length === 0) {
 					return;
 				}
@@ -4965,8 +4977,8 @@
 				}
 				focus = miv;
 				updateState(oldstate);
-			},
-			key: async (k, e) => {
+			}, "click"),
+			key: /* @__PURE__ */ __name(async (k, e) => {
 				const moveKeys = [
 					" ",
 					"ArrowUp",
@@ -4995,7 +5007,7 @@
 					"U"
 				];
 				if (!e.altKey && !e.metaKey && moveKeys.includes(e.key)) {
-					const moveclick = (index, clip) => {
+					const moveclick = /* @__PURE__ */ __name((index, clip) => {
 						if (clip && index < 0) {
 							index = 0;
 						} else if (clip && index >= msgitemViews.length) {
@@ -5009,7 +5021,7 @@
 						} else {
 							mlv.click(msgitemViews[index], false, e.shiftKey);
 						}
-					};
+					}, "moveclick");
 					let i = msgitemViews.findIndex((miv) => miv === focus);
 					if (e.key === " ") {
 						if (i >= 0) {
@@ -5083,12 +5095,12 @@
 				} else {
 					log("key not handled", k);
 				}
-			},
-			mailboxes: () => listMailboxes(),
-			activeMailbox: () => activeMailbox(),
-			itemHeight: () => msgitemViews.length > 0 ? msgitemViews[0].root.getBoundingClientRect().height : 25,
-			threadExpand: (miv) => threadExpand(miv, true),
-			threadCollapse: (miv) => threadCollapse(miv, true),
+			}, "key"),
+			mailboxes: /* @__PURE__ */ __name(() => listMailboxes(), "mailboxes"),
+			activeMailbox: /* @__PURE__ */ __name(() => activeMailbox(), "activeMailbox"),
+			itemHeight: /* @__PURE__ */ __name(() => msgitemViews.length > 0 ? msgitemViews[0].root.getBoundingClientRect().height : 25, "itemHeight"),
+			threadExpand: /* @__PURE__ */ __name((miv) => threadExpand(miv, true), "threadExpand"),
+			threadCollapse: /* @__PURE__ */ __name((miv) => threadCollapse(miv, true), "threadCollapse"),
 			threadToggle,
 			viewportEnsureMessages,
 			cmdArchive,
@@ -5102,81 +5114,81 @@
 			cmdUnmute
 		};
 		return mlv;
-	};
-	var popoverExport = (reference, mailboxName, messageIDs) => {
+	}, "newMsglistView");
+	var popoverExport = /* @__PURE__ */ __name((reference, mailboxName, messageIDs) => {
 		let format;
 		let archive;
 		let mboxbtn;
-		const removeExport = popover(reference, {}, dom.h1("Export"), dom.form(function submit() {
+		const removeExport = popover(reference, {}, dom.h1("Export"), dom.form(/* @__PURE__ */ __name(function submit() {
 			window.setTimeout(() => removeExport(), 100);
-		}, attr.target("_blank"), attr.method("POST"), attr.action("export"), dom.input(attr.type("hidden"), attr.name("csrf"), attr.value(localStorageGet("webmailcsrftoken") || "")), dom.input(attr.type("hidden"), attr.name("mailbox"), attr.value(mailboxName)), dom.input(attr.type("hidden"), attr.name("messageids"), attr.value((messageIDs || []).join(","))), format = dom.input(attr.type("hidden"), attr.name("format")), archive = dom.input(attr.type("hidden"), attr.name("archive")), dom.div(css("exportFields", { display: "flex", flexDirection: "column", gap: ".5ex" }), mailboxName ? dom.div(dom.label(dom.input(attr.type("checkbox"), attr.name("recursive"), attr.value("on"), function change(e) {
+		}, "submit"), attr.target("_blank"), attr.method("POST"), attr.action("export"), dom.input(attr.type("hidden"), attr.name("csrf"), attr.value(localStorageGet("webmailcsrftoken") || "")), dom.input(attr.type("hidden"), attr.name("mailbox"), attr.value(mailboxName)), dom.input(attr.type("hidden"), attr.name("messageids"), attr.value((messageIDs || []).join(","))), format = dom.input(attr.type("hidden"), attr.name("format")), archive = dom.input(attr.type("hidden"), attr.name("archive")), dom.div(css("exportFields", { display: "flex", flexDirection: "column", gap: ".5ex" }), mailboxName ? dom.div(dom.label(dom.input(attr.type("checkbox"), attr.name("recursive"), attr.value("on"), /* @__PURE__ */ __name(function change(e) {
 			mboxbtn.disabled = e.target.checked;
-		}), " Recursive")) : [], dom.div(!mailboxName && !messageIDs ? "Mbox " : mboxbtn = dom.submitbutton("Mbox", attr.title("Export as mbox file, not wrapped in an archive."), function click() {
+		}, "change")), " Recursive")) : [], dom.div(!mailboxName && !messageIDs ? "Mbox " : mboxbtn = dom.submitbutton("Mbox", attr.title("Export as mbox file, not wrapped in an archive."), /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
 			archive.value = "none";
-		}), " ", dom.submitbutton("zip", function click() {
+		}, "click")), " ", dom.submitbutton("zip", /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
 			archive.value = "zip";
-		}), " ", dom.submitbutton("tgz", function click() {
+		}, "click")), " ", dom.submitbutton("tgz", /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
 			archive.value = "tgz";
-		}), " ", dom.submitbutton("tar", function click() {
+		}, "click")), " ", dom.submitbutton("tar", /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
 			archive.value = "tar";
-		})), dom.div("Maildir ", dom.submitbutton("zip", function click() {
+		}, "click"))), dom.div("Maildir ", dom.submitbutton("zip", /* @__PURE__ */ __name(function click() {
 			format.value = "maildir";
 			archive.value = "zip";
-		}), " ", dom.submitbutton("tgz", function click() {
+		}, "click")), " ", dom.submitbutton("tgz", /* @__PURE__ */ __name(function click() {
 			format.value = "maildir";
 			archive.value = "tgz";
-		}), " ", dom.submitbutton("tar", function click() {
+		}, "click")), " ", dom.submitbutton("tar", /* @__PURE__ */ __name(function click() {
 			format.value = "maildir";
 			archive.value = "tar";
-		})))));
-	};
-	var newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
+		}, "click"))))));
+	}, "popoverExport");
+	var newMailboxView = /* @__PURE__ */ __name((xmb, mailboxlistView, otherMailbox) => {
 		const plusbox = "\u229E";
 		const minusbox = "\u229F";
-		const cmdCollapse = async () => {
+		const cmdCollapse = /* @__PURE__ */ __name(async () => {
 			settings.mailboxCollapsed[mbv.mailbox.ID] = true;
 			settingsPut(settings);
 			mailboxlistView.updateHidden();
 			mbv.root.focus();
-		};
-		const cmdExpand = async () => {
+		}, "cmdCollapse");
+		const cmdExpand = /* @__PURE__ */ __name(async () => {
 			delete settings.mailboxCollapsed[mbv.mailbox.ID];
 			settingsPut(settings);
 			mailboxlistView.updateHidden();
 			mbv.root.focus();
-		};
-		const collapseElem = dom.span(dom._class("mailboxCollapse"), minusbox, function click(e) {
+		}, "cmdExpand");
+		const collapseElem = dom.span(dom._class("mailboxCollapse"), minusbox, /* @__PURE__ */ __name(function click(e) {
 			e.stopPropagation();
 			cmdCollapse();
-		});
-		const expandElem = dom.span(plusbox, function click(e) {
+		}, "click"));
+		const expandElem = dom.span(plusbox, /* @__PURE__ */ __name(function click(e) {
 			e.stopPropagation();
 			cmdExpand();
-		});
+		}, "click"));
 		let name, unread;
 		let actionBtn;
-		const cmdOpenActions = async () => {
+		const cmdOpenActions = /* @__PURE__ */ __name(async () => {
 			const trashmb = mailboxlistView.mailboxes().find((mb) => mb.Trash);
-			const remove = popover(actionBtn, { transparent: true }, dom.div(style({ display: "flex", flexDirection: "column", gap: ".5ex" }), dom.div(dom.clickbutton("Mark as read", attr.title("Mark all messages in the mailbox and its sub mailboxes as read."), async function click() {
+			const remove = popover(actionBtn, { transparent: true }, dom.div(style({ display: "flex", flexDirection: "column", gap: ".5ex" }), dom.div(dom.clickbutton("Mark as read", attr.title("Mark all messages in the mailbox and its sub mailboxes as read."), /* @__PURE__ */ __name(async function click() {
 				remove();
 				const mailboxIDs = [mbv.mailbox.ID, ...mailboxlistView.mailboxes().filter((mb) => mb.Name.startsWith(mbv.mailbox.Name + "/")).map((mb) => mb.ID)];
 				await withStatus("Marking mailboxes as read", client.MailboxesMarkRead(mailboxIDs));
-			})), dom.div(dom.clickbutton("Create mailbox", attr.title("Create new mailbox within this mailbox."), function click(e) {
+			}, "click"))), dom.div(dom.clickbutton("Create mailbox", attr.title("Create new mailbox within this mailbox."), /* @__PURE__ */ __name(function click(e) {
 				let fieldset;
 				let name2;
 				const ref = e.target;
-				const removeCreate = popover(ref, {}, dom.form(async function submit(e2) {
+				const removeCreate = popover(ref, {}, dom.form(/* @__PURE__ */ __name(async function submit(e2) {
 					e2.preventDefault();
 					await withStatus("Creating mailbox", client.MailboxCreate(mbv.mailbox.Name + "/" + name2.value), fieldset);
 					removeCreate();
-				}, fieldset = dom.fieldset(dom.label("Name ", name2 = dom.input(attr.required("yes"))), " ", dom.submitbutton("Create"))));
+				}, "submit"), fieldset = dom.fieldset(dom.label("Name ", name2 = dom.input(attr.required("yes"))), " ", dom.submitbutton("Create"))));
 				remove();
 				name2.focus();
-			})), dom.div(dom.clickbutton("Move to trash", attr.title("Move mailbox, its messages and its mailboxes to the trash."), async function click() {
+			}, "click"))), dom.div(dom.clickbutton("Move to trash", attr.title("Move mailbox, its messages and its mailboxes to the trash."), /* @__PURE__ */ __name(async function click() {
 				if (!trashmb) {
 					window.alert("No mailbox configured for trash yet.");
 					return;
@@ -5186,61 +5198,61 @@
 				}
 				remove();
 				await withStatus("Moving mailbox to trash", client.MailboxRename(mbv.mailbox.ID, trashmb.Name + "/" + mbv.mailbox.Name));
-			})), dom.div(dom.clickbutton("Delete mailbox", attr.title("Permanently delete this mailbox and all its messages."), async function click() {
+			}, "click"))), dom.div(dom.clickbutton("Delete mailbox", attr.title("Permanently delete this mailbox and all its messages."), /* @__PURE__ */ __name(async function click() {
 				if (!window.confirm("Are you sure you want to permanently delete this mailbox and all its messages?")) {
 					return;
 				}
 				remove();
 				await withStatus("Deleting mailbox", client.MailboxDelete(mbv.mailbox.ID));
-			})), dom.div(dom.clickbutton("Empty mailbox", attr.title("Remove all messages from the mailbox, but not mailboxes inside this mailbox or their messages."), async function click() {
+			}, "click"))), dom.div(dom.clickbutton("Empty mailbox", attr.title("Remove all messages from the mailbox, but not mailboxes inside this mailbox or their messages."), /* @__PURE__ */ __name(async function click() {
 				if (!window.confirm("Are you sure you want to empty this mailbox, permanently removing its messages? Mailboxes inside this mailbox are not affected.")) {
 					return;
 				}
 				remove();
 				await withStatus("Emptying mailbox", client.MailboxEmpty(mbv.mailbox.ID));
-			})), dom.div(dom.clickbutton("Rename mailbox", function click() {
+			}, "click"))), dom.div(dom.clickbutton("Rename mailbox", /* @__PURE__ */ __name(function click() {
 				remove();
 				let fieldset, name2;
-				const remove2 = popover(actionBtn, {}, dom.form(async function submit(e) {
+				const remove2 = popover(actionBtn, {}, dom.form(/* @__PURE__ */ __name(async function submit(e) {
 					e.preventDefault();
 					await withStatus("Renaming mailbox", client.MailboxRename(mbv.mailbox.ID, name2.value), fieldset);
 					remove2();
-				}, fieldset = dom.fieldset(dom.label("Name ", name2 = dom.input(attr.required(""), attr.value(mbv.mailbox.Name), prop({ selectionStart: 0, selectionEnd: mbv.mailbox.Name.length }))), " ", dom.submitbutton("Rename"))));
+				}, "submit"), fieldset = dom.fieldset(dom.label("Name ", name2 = dom.input(attr.required(""), attr.value(mbv.mailbox.Name), prop({ selectionStart: 0, selectionEnd: mbv.mailbox.Name.length }))), " ", dom.submitbutton("Rename"))));
 				name2.focus();
-			})), dom.div(dom.clickbutton("Set role for mailbox...", attr.title("Set a special-use role on the mailbox, making it the designated mailbox for either Archived, Sent, Draft, Trashed or Junk messages."), async function click() {
+			}, "click"))), dom.div(dom.clickbutton("Set role for mailbox...", attr.title("Set a special-use role on the mailbox, making it the designated mailbox for either Archived, Sent, Draft, Trashed or Junk messages."), /* @__PURE__ */ __name(async function click() {
 				remove();
-				const setUse = async (set) => {
+				const setUse = /* @__PURE__ */ __name(async (set) => {
 					const mb = { ...mbv.mailbox };
 					mb.Archive = mb.Draft = mb.Junk = mb.Sent = mb.Trash = false;
 					set(mb);
 					await withStatus("Marking mailbox as special use", client.MailboxSetSpecialUse(mb));
-				};
-				popover(actionBtn, { transparent: true }, dom.div(style({ display: "flex", flexDirection: "column", gap: ".5ex" }), dom.div(dom.clickbutton("Archive", async function click2() {
+				}, "setUse");
+				popover(actionBtn, { transparent: true }, dom.div(style({ display: "flex", flexDirection: "column", gap: ".5ex" }), dom.div(dom.clickbutton("Archive", /* @__PURE__ */ __name(async function click2() {
 					await setUse((mb) => {
 						mb.Archive = true;
 					});
-				})), dom.div(dom.clickbutton("Draft", async function click2() {
+				}, "click"))), dom.div(dom.clickbutton("Draft", /* @__PURE__ */ __name(async function click2() {
 					await setUse((mb) => {
 						mb.Draft = true;
 					});
-				})), dom.div(dom.clickbutton("Junk", async function click2() {
+				}, "click"))), dom.div(dom.clickbutton("Junk", /* @__PURE__ */ __name(async function click2() {
 					await setUse((mb) => {
 						mb.Junk = true;
 					});
-				})), dom.div(dom.clickbutton("Sent", async function click2() {
+				}, "click"))), dom.div(dom.clickbutton("Sent", /* @__PURE__ */ __name(async function click2() {
 					await setUse((mb) => {
 						mb.Sent = true;
 					});
-				})), dom.div(dom.clickbutton("Trash", async function click2() {
+				}, "click"))), dom.div(dom.clickbutton("Trash", /* @__PURE__ */ __name(async function click2() {
 					await setUse((mb) => {
 						mb.Trash = true;
 					});
-				}))));
-			})), dom.div(dom.clickbutton("Export as...", function click() {
+				}, "click")))));
+			}, "click"))), dom.div(dom.clickbutton("Export as...", /* @__PURE__ */ __name(function click() {
 				popoverExport(actionBtn, mbv.mailbox.Name, null);
 				remove();
-			}))));
-		};
+			}, "click")))));
+		}, "cmdOpenActions");
 		let drags = 0;
 		const mailboxItemStyle = css("mailboxItem", { cursor: "pointer", borderRadius: ".15em", userSelect: "none" });
 		ensureCSS(".mailboxItem.dropping", { background: styles.highlightBackground }, true);
@@ -5250,7 +5262,7 @@
 		ensureCSS(".mailboxItem:hover .mailboxHoverOnly, .mailboxItem:focus .mailboxHoverOnly", { visibility: "visible" });
 		ensureCSS(".mailboxCollapse", { visibility: "hidden" });
 		ensureCSS(".mailboxItem:hover .mailboxCollapse, .mailboxItem:focus .mailboxCollapse", { visibility: "visible" });
-		const root = dom.div(mailboxItemStyle, attr.tabindex("0"), async function keydown(e) {
+		const root = dom.div(mailboxItemStyle, attr.tabindex("0"), /* @__PURE__ */ __name(async function keydown(e) {
 			if (e.key === "Enter") {
 				e.stopPropagation();
 				await withStatus("Opening mailbox", mbv.open(true));
@@ -5267,7 +5279,7 @@
 			} else if (e.key === "b") {
 				cmdOpenActions();
 			}
-		}, async function dblclick() {
+		}, "keydown"), /* @__PURE__ */ __name(async function dblclick() {
 			if (mailboxlistView.mailboxLeaf(mbv)) {
 				return;
 			}
@@ -5276,23 +5288,23 @@
 			} else {
 				cmdCollapse();
 			}
-		}, async function click() {
+		}, "dblclick"), /* @__PURE__ */ __name(async function click() {
 			mbv.root.focus();
 			await withStatus("Opening mailbox", mbv.open(true));
-		}, function dragover(e) {
+		}, "click"), /* @__PURE__ */ __name(function dragover(e) {
 			e.preventDefault();
 			e.dataTransfer.dropEffect = "move";
-		}, function dragenter(e) {
+		}, "dragover"), /* @__PURE__ */ __name(function dragenter(e) {
 			e.stopPropagation();
 			drags++;
 			mbv.root.classList.toggle("dropping", true);
-		}, function dragleave(e) {
+		}, "dragenter"), /* @__PURE__ */ __name(function dragleave(e) {
 			e.stopPropagation();
 			drags--;
 			if (drags <= 0) {
 				mbv.root.classList.toggle("dropping", false);
 			}
-		}, async function drop(e) {
+		}, "dragleave"), /* @__PURE__ */ __name(async function drop(e) {
 			e.preventDefault();
 			mbv.root.classList.toggle("dropping", false);
 			const sentMailboxID = mailboxlistView.mailboxes().find((mb) => mb.Sent)?.ID;
@@ -5304,19 +5316,19 @@
 				const mbSrcID = mailboxMsgIDs.find((mbMsgID) => mbMsgID[1] === msgID)[0];
 				await moveAskRuleset(msgID, mbSrcID, xmb, mailboxlistView.mailboxes());
 			}
-		}, dom.div(css("mailbox", { padding: ".15em .25em", display: "flex", justifyContent: "space-between" }), name = dom.div(css("mailboxName", { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" })), dom.div(style({ whiteSpace: "nowrap" }), actionBtn = dom.clickbutton(
+		}, "drop"), dom.div(css("mailbox", { padding: ".15em .25em", display: "flex", justifyContent: "space-between" }), name = dom.div(css("mailboxName", { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" })), dom.div(style({ whiteSpace: "nowrap" }), actionBtn = dom.clickbutton(
 			dom._class("mailboxHoverOnly"),
 			"...",
 			attr.tabindex("-1"),
 			// Without, tab breaks because this disappears when mailbox loses focus.
 			attr.arialabel("Mailbox actions"),
 			attr.title("Actions on mailbox, like deleting, emptying, renaming."),
-			function click(e) {
+			/* @__PURE__ */ __name(function click(e) {
 				e.stopPropagation();
 				cmdOpenActions();
-			}
+			}, "click")
 		), " ", unread = dom.b(dom._class("silenttitle")))));
-		const update = () => {
+		const update = /* @__PURE__ */ __name(() => {
 			let moreElems = [];
 			if (settings.mailboxCollapsed[mbv.mailbox.ID]) {
 				moreElems = [" ", expandElem];
@@ -5336,7 +5348,7 @@
 			}
 			dom._kids(name, dom.span(mbv.parents > 0 ? style({ paddingLeft: "" + mbv.parents * 2 / 3 + "em" }) : [], mbv.shortname, attr.title("Total messages: " + ntotal), moreElems));
 			dom._kids(unread, nunread === 0 ? ["", attr.title("")] : ["" + nunread, attr.title("" + nunread + " unread")]);
-		};
+		}, "update");
 		const mbv = {
 			root,
 			// Set by update(), typically through MailboxlistView updateMailboxNames after inserting.
@@ -5345,37 +5357,37 @@
 			hidden: false,
 			update,
 			mailbox: xmb,
-			open: async (load) => {
+			open: /* @__PURE__ */ __name(async (load) => {
 				await mailboxlistView.openMailboxView(mbv, load, false);
-			},
-			setCounts: (total, unread2) => {
+			}, "open"),
+			setCounts: /* @__PURE__ */ __name((total, unread2) => {
 				mbv.mailbox.Total = total;
 				mbv.mailbox.Unread = unread2;
 				mailboxlistView.updateCounts();
-			},
-			setSpecialUse: (specialUse) => {
+			}, "setCounts"),
+			setSpecialUse: /* @__PURE__ */ __name((specialUse) => {
 				mbv.mailbox.Archive = specialUse.Archive;
 				mbv.mailbox.Draft = specialUse.Draft;
 				mbv.mailbox.Junk = specialUse.Junk;
 				mbv.mailbox.Sent = specialUse.Sent;
 				mbv.mailbox.Trash = specialUse.Trash;
-			},
-			setKeywords: (keywords) => {
+			}, "setSpecialUse"),
+			setKeywords: /* @__PURE__ */ __name((keywords) => {
 				mbv.mailbox.Keywords = keywords;
-			}
+			}, "setKeywords")
 		};
 		return mbv;
-	};
-	var newMailboxlistView = (msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox) => {
+	}, "newMailboxView");
+	var newMailboxlistView = /* @__PURE__ */ __name((msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox) => {
 		let mailboxViews = [];
 		let mailboxViewActive;
-		const updateMailboxNames = () => {
+		const updateMailboxNames = /* @__PURE__ */ __name(() => {
 			const draftmb = mailboxViews.find((mbv) => mbv.mailbox.Draft)?.mailbox;
 			const sentmb = mailboxViews.find((mbv) => mbv.mailbox.Sent)?.mailbox;
 			const archivemb = mailboxViews.find((mbv) => mbv.mailbox.Archive)?.mailbox;
 			const trashmb = mailboxViews.find((mbv) => mbv.mailbox.Trash)?.mailbox;
 			const junkmb = mailboxViews.find((mbv) => mbv.mailbox.Junk)?.mailbox;
-			const stem = (s) => s.split("/")[0];
+			const stem = /* @__PURE__ */ __name((s) => s.split("/")[0], "stem");
 			const special = [
 				(mb) => stem(mb.Name) === "Inbox",
 				(mb) => introboxMailbox !== "" && stem(mb.Name) === stem(introboxMailbox),
@@ -5431,8 +5443,8 @@
 				prevmailboxname = mb.Name;
 			});
 			updateHidden();
-		};
-		const mailboxHidden = (mb, mailboxesMap) => {
+		}, "updateMailboxNames");
+		const mailboxHidden = /* @__PURE__ */ __name((mb, mailboxesMap) => {
 			let s = "";
 			for (const e of mb.Name.split("/")) {
 				if (s) {
@@ -5445,14 +5457,14 @@
 				}
 			}
 			return false;
-		};
-		const mailboxLeaf = (mbv) => {
+		}, "mailboxHidden");
+		const mailboxLeaf = /* @__PURE__ */ __name((mbv) => {
 			const index = mailboxViews.findIndex((v) => v === mbv);
 			const prefix = mbv.mailbox.Name + "/";
 			const r = index < 0 || index + 1 >= mailboxViews.length || !mailboxViews[index + 1].mailbox.Name.startsWith(prefix);
 			return r;
-		};
-		const updateHidden = () => {
+		}, "mailboxLeaf");
+		const updateHidden = /* @__PURE__ */ __name(() => {
 			const mailboxNameMap = {};
 			mailboxViews.forEach((mbv) => mailboxNameMap[mbv.mailbox.Name] = mbv.mailbox);
 			for (const mbv of mailboxViews) {
@@ -5460,29 +5472,29 @@
 			}
 			mailboxViews.forEach((mbv) => mbv.update());
 			dom._kids(mailboxesElem, mailboxViews.filter((mbv) => !mbv.hidden));
-		};
+		}, "updateHidden");
 		const root = dom.div();
 		const mailboxesElem = dom.div();
-		dom._kids(root, dom.div(attr.role("region"), attr.arialabel("Mailboxes"), dom.div(dom.h1("Mailboxes", css("mailboxesTitle", { display: "inline", fontSize: "inherit" })), " ", dom.clickbutton("...", attr.arialabel("Mailboxes actions"), attr.title("Actions on mailboxes like creating a new mailbox or exporting all email."), function click(e) {
+		dom._kids(root, dom.div(attr.role("region"), attr.arialabel("Mailboxes"), dom.div(dom.h1("Mailboxes", css("mailboxesTitle", { display: "inline", fontSize: "inherit" })), " ", dom.clickbutton("...", attr.arialabel("Mailboxes actions"), attr.title("Actions on mailboxes like creating a new mailbox or exporting all email."), /* @__PURE__ */ __name(function click(e) {
 			e.stopPropagation();
-			const remove = popover(e.target, { transparent: true }, dom.div(css("mailboxesActions", { display: "flex", flexDirection: "column", gap: ".5ex" }), dom.div(dom.clickbutton("Create mailbox", attr.arialabel("Create new mailbox."), attr.title("Create new mailbox."), style({ padding: "0 .25em" }), function click2(e2) {
+			const remove = popover(e.target, { transparent: true }, dom.div(css("mailboxesActions", { display: "flex", flexDirection: "column", gap: ".5ex" }), dom.div(dom.clickbutton("Create mailbox", attr.arialabel("Create new mailbox."), attr.title("Create new mailbox."), style({ padding: "0 .25em" }), /* @__PURE__ */ __name(function click2(e2) {
 				let fieldset;
 				let name;
 				const ref = e2.target;
-				const removeCreate = popover(ref, {}, dom.form(async function submit(e3) {
+				const removeCreate = popover(ref, {}, dom.form(/* @__PURE__ */ __name(async function submit(e3) {
 					e3.preventDefault();
 					await withStatus("Creating mailbox", client.MailboxCreate(name.value), fieldset);
 					removeCreate();
-				}, fieldset = dom.fieldset(dom.label("Name ", name = dom.input(attr.required("yes"), focusPlaceholder("Lists/Go/Nuts"))), " ", dom.submitbutton("Create"))));
+				}, "submit"), fieldset = dom.fieldset(dom.label("Name ", name = dom.input(attr.required("yes"), focusPlaceholder("Lists/Go/Nuts"))), " ", dom.submitbutton("Create"))));
 				remove();
 				name.focus();
-			})), dom.div(dom.clickbutton("Export as...", function click2(e2) {
+			}, "click"))), dom.div(dom.clickbutton("Export as...", /* @__PURE__ */ __name(function click2(e2) {
 				const ref = e2.target;
 				popoverExport(ref, "", null);
 				remove();
-			}))));
-		})), mailboxesElem));
-		const loadMailboxes = (mailboxes, mbnameOpt) => {
+			}, "click")))));
+		}, "click"))), mailboxesElem));
+		const loadMailboxes = /* @__PURE__ */ __name((mailboxes, mbnameOpt) => {
 			mailboxViews = mailboxes.map((mb) => newMailboxView(mb, mblv, otherMailbox));
 			updateMailboxNames();
 			if (mbnameOpt) {
@@ -5491,16 +5503,16 @@
 					openMailboxView(mbv, false, false);
 				}
 			}
-		};
-		const closeMailbox = () => {
+		}, "loadMailboxes");
+		const closeMailbox = /* @__PURE__ */ __name(() => {
 			if (!mailboxViewActive) {
 				return;
 			}
 			mailboxViewActive.root.classList.toggle("active", false);
 			mailboxViewActive = null;
 			updatePageTitle();
-		};
-		const openMailboxView = async (mbv, load, focus) => {
+		}, "closeMailbox");
+		const openMailboxView = /* @__PURE__ */ __name(async (mbv, load, focus) => {
 			unloadSearch();
 			if (mailboxViewActive) {
 				mailboxViewActive.root.classList.toggle("active", false);
@@ -5520,7 +5532,7 @@
 			if (focus) {
 				mbv.root.focus();
 			}
-		};
+		}, "openMailboxView");
 		const mblv = {
 			root,
 			loadMailboxes,
@@ -5528,33 +5540,33 @@
 			openMailboxView,
 			mailboxLeaf,
 			updateHidden,
-			updateCounts: () => mailboxViews.forEach((mbv) => mbv.update()),
-			activeMailbox: () => mailboxViewActive ? mailboxViewActive.mailbox : null,
-			mailboxes: () => mailboxViews.map((mbv) => mbv.mailbox),
-			findMailboxByID: (id) => mailboxViews.find((mbv) => mbv.mailbox.ID === id)?.mailbox || null,
-			findMailboxByName: (name) => mailboxViews.find((mbv) => mbv.mailbox.Name === name)?.mailbox || null,
-			openMailboxID: async (id, focus) => {
+			updateCounts: /* @__PURE__ */ __name(() => mailboxViews.forEach((mbv) => mbv.update()), "updateCounts"),
+			activeMailbox: /* @__PURE__ */ __name(() => mailboxViewActive ? mailboxViewActive.mailbox : null, "activeMailbox"),
+			mailboxes: /* @__PURE__ */ __name(() => mailboxViews.map((mbv) => mbv.mailbox), "mailboxes"),
+			findMailboxByID: /* @__PURE__ */ __name((id) => mailboxViews.find((mbv) => mbv.mailbox.ID === id)?.mailbox || null, "findMailboxByID"),
+			findMailboxByName: /* @__PURE__ */ __name((name) => mailboxViews.find((mbv) => mbv.mailbox.Name === name)?.mailbox || null, "findMailboxByName"),
+			openMailboxID: /* @__PURE__ */ __name(async (id, focus) => {
 				const mbv = mailboxViews.find((mbv2) => mbv2.mailbox.ID === id);
 				if (mbv) {
 					await openMailboxView(mbv, false, focus);
 				} else {
 					throw new Error("unknown mailbox");
 				}
-			},
-			addMailbox: (mb) => {
+			}, "openMailboxID"),
+			addMailbox: /* @__PURE__ */ __name((mb) => {
 				const mbv = newMailboxView(mb, mblv, otherMailbox);
 				mailboxViews.push(mbv);
 				updateMailboxNames();
-			},
-			renameMailbox: (mailboxID, newName) => {
+			}, "addMailbox"),
+			renameMailbox: /* @__PURE__ */ __name((mailboxID, newName) => {
 				const mbv = mailboxViews.find((mbv2) => mbv2.mailbox.ID === mailboxID);
 				if (!mbv) {
 					throw new Error("rename event: unknown mailbox");
 				}
 				mbv.mailbox.Name = newName;
 				updateMailboxNames();
-			},
-			removeMailbox: (mailboxID) => {
+			}, "renameMailbox"),
+			removeMailbox: /* @__PURE__ */ __name((mailboxID) => {
 				const mbv = mailboxViews.find((mbv2) => mbv2.mailbox.ID === mailboxID);
 				if (!mbv) {
 					throw new Error("remove event: unknown mailbox");
@@ -5568,8 +5580,8 @@
 				const index = mailboxViews.findIndex((mbv2) => mbv2.mailbox.ID === mailboxID);
 				mailboxViews.splice(index, 1);
 				updateMailboxNames();
-			},
-			setMailboxCounts: (mailboxID, total, unread) => {
+			}, "removeMailbox"),
+			setMailboxCounts: /* @__PURE__ */ __name((mailboxID, total, unread) => {
 				const mbv = mailboxViews.find((mbv2) => mbv2.mailbox.ID === mailboxID);
 				if (!mbv) {
 					throw new Error("mailbox message/unread count changed: unknown mailbox");
@@ -5578,46 +5590,46 @@
 				if (mbv === mailboxViewActive) {
 					updatePageTitle();
 				}
-			},
-			setMailboxSpecialUse: (mailboxID, specialUse) => {
+			}, "setMailboxCounts"),
+			setMailboxSpecialUse: /* @__PURE__ */ __name((mailboxID, specialUse) => {
 				const mbv = mailboxViews.find((mbv2) => mbv2.mailbox.ID === mailboxID);
 				if (!mbv) {
 					throw new Error("special-use flags changed: unknown mailbox");
 				}
 				mbv.setSpecialUse(specialUse);
 				updateMailboxNames();
-			},
-			setMailboxKeywords: (mailboxID, keywords) => {
+			}, "setMailboxSpecialUse"),
+			setMailboxKeywords: /* @__PURE__ */ __name((mailboxID, keywords) => {
 				const mbv = mailboxViews.find((mbv2) => mbv2.mailbox.ID === mailboxID);
 				if (!mbv) {
 					throw new Error("keywords changed: unknown mailbox");
 				}
 				mbv.setKeywords(keywords);
-			}
+			}, "setMailboxKeywords")
 		};
 		return mblv;
-	};
-	var newSearchView = (searchbarElem, mailboxlistView, startSearch, searchViewClose) => {
+	}, "newMailboxlistView");
+	var newSearchView = /* @__PURE__ */ __name((searchbarElem, mailboxlistView, startSearch, searchViewClose) => {
 		let form;
 		let words, mailbox, mailboxkids, from, to, oldestDate, oldestTime, newestDate, newestTime, subject, flagViews, labels, minsize, maxsize;
 		let attachmentNone, attachmentAny, attachmentImage, attachmentPDF, attachmentArchive, attachmentSpreadsheet, attachmentDocument, attachmentPresentation;
-		const makeDateTime = (dt, tm) => {
+		const makeDateTime = /* @__PURE__ */ __name((dt, tm) => {
 			if (!dt && !tm) {
 				return "";
 			}
 			if (!dt) {
 				const now = /* @__PURE__ */ new Date();
-				const pad0 = (v) => v <= 9 ? "0" + v : "" + v;
+				const pad0 = /* @__PURE__ */ __name((v) => v <= 9 ? "0" + v : "" + v, "pad0");
 				dt = [now.getFullYear(), pad0(now.getMonth() + 1), pad0(now.getDate())].join("-");
 			}
 			if (dt && tm) {
 				return dt + "T" + tm;
 			}
 			return dt;
-		};
-		const packString = (s) => needsDquote(s) ? dquote(s) : s;
-		const packNotString = (s) => "-" + (needsDquote(s) || s.startsWith("-") ? dquote(s) : s);
-		const updateSearchbar = () => {
+		}, "makeDateTime");
+		const packString = /* @__PURE__ */ __name((s) => needsDquote(s) ? dquote(s) : s, "packString");
+		const packNotString = /* @__PURE__ */ __name((s) => "-" + (needsDquote(s) || s.startsWith("-") ? dquote(s) : s), "packNotString");
+		const updateSearchbar = /* @__PURE__ */ __name(() => {
 			let tokens = [];
 			if (mailbox.value && mailbox.value !== "-1") {
 				const v = mailbox.value === "0" ? "" : mailbox.selectedOptions[0].text;
@@ -5638,11 +5650,11 @@
 				tokens.push([false, "end", false, end]);
 			}
 			tokens.push(...parseSearchTokens(subject.value).map((t) => [t[0], "s", false, t[3]]));
-			const check = (elem, tag, value) => {
+			const check = /* @__PURE__ */ __name((elem, tag, value) => {
 				if (elem.checked) {
 					tokens.push([false, tag, false, value]);
 				}
-			};
+			}, "check");
 			check(attachmentNone, "a", "none");
 			check(attachmentAny, "a", "any");
 			check(attachmentImage, "a", "image");
@@ -5665,8 +5677,8 @@
 				tokens.push([false, "maxsize", false, maxstr]);
 			}
 			searchbarElem.value = tokens.map(packToken).join(" ");
-		};
-		const setDateTime = (s, dateElem, timeElem) => {
+		}, "updateSearchbar");
+		const setDateTime = /* @__PURE__ */ __name((s, dateElem, timeElem) => {
 			if (!s) {
 				return;
 			}
@@ -5679,11 +5691,11 @@
 			if (tm) {
 				timeElem.value = tm;
 			}
-		};
-		const updateForm = () => {
+		}, "setDateTime");
+		const updateForm = /* @__PURE__ */ __name(() => {
 			const [f, notf, strs] = parseSearch(searchbarElem.value, mailboxlistView);
 			form.reset();
-			const packTwo = (l, lnot) => (l || []).map(packString).concat((lnot || []).map(packNotString)).join(" ");
+			const packTwo = /* @__PURE__ */ __name((l, lnot) => (l || []).map(packString).concat((lnot || []).map(packNotString)).join(" "), "packTwo");
 			if (f.MailboxName) {
 				const o = [...mailbox.options].find((o2) => o2.text === f.MailboxName) || mailbox.options[0];
 				if (o) {
@@ -5719,7 +5731,7 @@
 			const otherlabels = [];
 			const othernotlabels = [];
 			flagViews.forEach((fv) => fv.active = null);
-			const setLabels = (flabels, other, not) => {
+			const setLabels = /* @__PURE__ */ __name((flabels, other, not) => {
 				(flabels || []).forEach((l) => {
 					l = l.toLowerCase();
 					const fv = flagViews.find((fv2) => fv2.flag.toLowerCase() === l);
@@ -5730,7 +5742,7 @@
 						other.push(l);
 					}
 				});
-			};
+			}, "setLabels");
 			setLabels(f.Labels, otherlabels, false);
 			setLabels(notf.Labels, othernotlabels, true);
 			labels.value = packTwo(otherlabels, othernotlabels);
@@ -5752,8 +5764,8 @@
 			if (strs.SizeMax) {
 				maxsize.value = strs.SizeMax;
 			}
-		};
-		const attachmentChecks = (elem, set) => {
+		}, "updateForm");
+		const attachmentChecks = /* @__PURE__ */ __name((elem, set) => {
 			if (elem.checked || set) {
 				for (const e of [attachmentNone, attachmentAny, attachmentImage, attachmentPDF, attachmentArchive, attachmentSpreadsheet, attachmentDocument, attachmentPresentation]) {
 					if (e !== elem) {
@@ -5763,97 +5775,97 @@
 					}
 				}
 			}
-		};
+		}, "attachmentChecks");
 		const changeHandlers = [
-			function change() {
+			/* @__PURE__ */ __name(function change() {
 				updateSearchbar();
-			},
-			function keyup() {
+			}, "change"),
+			/* @__PURE__ */ __name(function keyup() {
 				updateSearchbar();
-			}
+			}, "keyup")
 		];
 		const attachmentHandlers = [
-			function change(e) {
+			/* @__PURE__ */ __name(function change(e) {
 				attachmentChecks(e.target);
-			},
-			function mousedown(e) {
+			}, "change"),
+			/* @__PURE__ */ __name(function mousedown(e) {
 				const target = e.target;
 				if (e.buttons === 1 && target.checked) {
 					target.checked = false;
 					e.preventDefault();
 				}
-			},
+			}, "mousedown"),
 			...changeHandlers
 		];
 		let headersCell;
 		let headerViews;
-		const newHeaderView = (first) => {
+		const newHeaderView = /* @__PURE__ */ __name((first) => {
 			let key, value;
-			const root2 = dom.div(style({ display: "flex" }), key = dom.input(focusPlaceholder("Header name"), style({ width: "40%" }), changeHandlers), dom.div(style({ width: ".5em" })), value = dom.input(focusPlaceholder("Header value"), style({ flexGrow: 1 }), changeHandlers), dom.div(style({ width: "2.5em", paddingLeft: ".25em" }), dom.clickbutton("+", style({ padding: "0 .25em" }), attr.arialabel("Add row for another header filter."), attr.title("Add row for another header filter."), function click() {
+			const root2 = dom.div(style({ display: "flex" }), key = dom.input(focusPlaceholder("Header name"), style({ width: "40%" }), changeHandlers), dom.div(style({ width: ".5em" })), value = dom.input(focusPlaceholder("Header value"), style({ flexGrow: 1 }), changeHandlers), dom.div(style({ width: "2.5em", paddingLeft: ".25em" }), dom.clickbutton("+", style({ padding: "0 .25em" }), attr.arialabel("Add row for another header filter."), attr.title("Add row for another header filter."), /* @__PURE__ */ __name(function click() {
 				addHeaderView();
-			}), " ", first ? [] : dom.clickbutton("-", style({ padding: "0 .25em" }), attr.arialabel("Remove row."), attr.title("Remove row."), function click() {
+			}, "click")), " ", first ? [] : dom.clickbutton("-", style({ padding: "0 .25em" }), attr.arialabel("Remove row."), attr.title("Remove row."), /* @__PURE__ */ __name(function click() {
 				root2.remove();
 				const index = headerViews.findIndex((v) => v === hv);
 				headerViews.splice(index, 1);
 				updateSearchbar();
-			})));
+			}, "click"))));
 			const hv = { root: root2, key, value };
 			return hv;
-		};
-		const addHeaderView = () => {
+		}, "newHeaderView");
+		const addHeaderView = /* @__PURE__ */ __name(() => {
 			const hv = newHeaderView(false);
 			headersCell.appendChild(hv.root);
 			headerViews.push(hv);
-		};
-		const setPeriod = (d) => {
+		}, "addHeaderView");
+		const setPeriod = /* @__PURE__ */ __name((d) => {
 			newestDate.value = "";
 			newestTime.value = "";
-			const pad0 = (v) => v <= 9 ? "0" + v : "" + v;
+			const pad0 = /* @__PURE__ */ __name((v) => v <= 9 ? "0" + v : "" + v, "pad0");
 			const dt = [d.getFullYear(), pad0(d.getMonth() + 1), pad0(d.getDate())].join("-");
 			const tm = "" + pad0(d.getHours()) + ":" + pad0(d.getMinutes());
 			oldestDate.value = dt;
 			oldestTime.value = tm;
 			updateSearchbar();
-		};
+		}, "setPeriod");
 		const searchTableStyle = css("searchTable", { width: "100%" });
 		ensureCSS(".searchTable td", { padding: ".25em" });
-		const root = dom.div(css("searchOverlay", { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: styles.overlayBackgroundColor, zIndex: zindexes.compose }), function click(e) {
+		const root = dom.div(css("searchOverlay", { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: styles.overlayBackgroundColor, zIndex: zindexes.compose }), /* @__PURE__ */ __name(function click(e) {
 			e.stopPropagation();
 			searchViewClose();
-		}, function keyup(e) {
+		}, "click"), /* @__PURE__ */ __name(function keyup(e) {
 			if (e.key === "Escape") {
 				e.stopPropagation();
 				searchViewClose();
 			}
-		}, dom.search(
+		}, "keyup"), dom.search(
 			css("searchContent", { position: "absolute", width: "50em", padding: ".5ex", backgroundColor: styles.popupBackgroundColor, boxShadow: styles.boxShadow, border: "1px solid", borderColor: styles.popupBorderColor, color: styles.popupColor, borderRadius: ".15em" }),
-			function click(e) {
+			/* @__PURE__ */ __name(function click(e) {
 				e.stopPropagation();
-			},
+			}, "click"),
 			// This is a separate form, inside the form with the overall search field because
 			// when updating the form based on the parsed searchbar, we first need to reset it.
-			form = dom.form(dom.table(searchTableStyle, dom.tr(dom.td(dom.label("Mailbox", attr.for("searchMailbox")), attr.title("Filter by mailbox, including children of the mailbox.")), dom.td(mailbox = dom.select(attr.id("searchMailbox"), style({ width: "100%" }), dom.option("All mailboxes except Trash/Junk/Rejects", attr.value("-1")), dom.option("All mailboxes", attr.value("0")), changeHandlers), dom.div(style({ paddingTop: ".5ex" }), dom.label(mailboxkids = dom.input(attr.type("checkbox"), changeHandlers), " Also search in mailboxes below the selected mailbox.")))), dom.tr(dom.td(dom.label("Text", attr.for("searchWords"))), dom.td(words = dom.input(attr.id("searchWords"), attr.title("Filter by text, case-insensitive, substring match, not necessarily whole words."), focusPlaceholder('word "exact match" -notword'), style({ width: "100%" }), changeHandlers))), dom.tr(dom.td(dom.label("From", attr.for("searchFrom"))), dom.td(from = dom.input(attr.id("searchFrom"), style({ width: "100%" }), focusPlaceholder("Address or name"), newAddressComplete(), changeHandlers))), dom.tr(dom.td(dom.label("To", attr.for("searchTo")), attr.title("Search on addressee, including Cc and Bcc headers.")), dom.td(to = dom.input(attr.id("searchTo"), focusPlaceholder("Address or name, also matches Cc and Bcc addresses"), style({ width: "100%" }), newAddressComplete(), changeHandlers))), dom.tr(dom.td(dom.label("Subject", attr.for("searchSubject"))), dom.td(subject = dom.input(attr.id("searchSubject"), style({ width: "100%" }), focusPlaceholder('"exact match"'), changeHandlers))), dom.tr(dom.td("Received between", style({ whiteSpace: "nowrap" })), dom.td(style({ lineHeight: 2 }), dom.div(oldestDate = dom.input(attr.type("date"), focusPlaceholder("2023-07-20"), changeHandlers), oldestTime = dom.input(attr.type("time"), focusPlaceholder("23:10"), changeHandlers), " ", dom.clickbutton("x", style({ padding: "0 .3em" }), attr.arialabel("Clear start date."), attr.title("Clear start date."), function click() {
+			form = dom.form(dom.table(searchTableStyle, dom.tr(dom.td(dom.label("Mailbox", attr.for("searchMailbox")), attr.title("Filter by mailbox, including children of the mailbox.")), dom.td(mailbox = dom.select(attr.id("searchMailbox"), style({ width: "100%" }), dom.option("All mailboxes except Trash/Junk/Rejects", attr.value("-1")), dom.option("All mailboxes", attr.value("0")), changeHandlers), dom.div(style({ paddingTop: ".5ex" }), dom.label(mailboxkids = dom.input(attr.type("checkbox"), changeHandlers), " Also search in mailboxes below the selected mailbox.")))), dom.tr(dom.td(dom.label("Text", attr.for("searchWords"))), dom.td(words = dom.input(attr.id("searchWords"), attr.title("Filter by text, case-insensitive, substring match, not necessarily whole words."), focusPlaceholder('word "exact match" -notword'), style({ width: "100%" }), changeHandlers))), dom.tr(dom.td(dom.label("From", attr.for("searchFrom"))), dom.td(from = dom.input(attr.id("searchFrom"), style({ width: "100%" }), focusPlaceholder("Address or name"), newAddressComplete(), changeHandlers))), dom.tr(dom.td(dom.label("To", attr.for("searchTo")), attr.title("Search on addressee, including Cc and Bcc headers.")), dom.td(to = dom.input(attr.id("searchTo"), focusPlaceholder("Address or name, also matches Cc and Bcc addresses"), style({ width: "100%" }), newAddressComplete(), changeHandlers))), dom.tr(dom.td(dom.label("Subject", attr.for("searchSubject"))), dom.td(subject = dom.input(attr.id("searchSubject"), style({ width: "100%" }), focusPlaceholder('"exact match"'), changeHandlers))), dom.tr(dom.td("Received between", style({ whiteSpace: "nowrap" })), dom.td(style({ lineHeight: 2 }), dom.div(oldestDate = dom.input(attr.type("date"), focusPlaceholder("2023-07-20"), changeHandlers), oldestTime = dom.input(attr.type("time"), focusPlaceholder("23:10"), changeHandlers), " ", dom.clickbutton("x", style({ padding: "0 .3em" }), attr.arialabel("Clear start date."), attr.title("Clear start date."), /* @__PURE__ */ __name(function click() {
 				oldestDate.value = "";
 				oldestTime.value = "";
 				updateSearchbar();
-			}), " and ", newestDate = dom.input(attr.type("date"), focusPlaceholder("2023-07-20"), changeHandlers), newestTime = dom.input(attr.type("time"), focusPlaceholder("23:10"), changeHandlers), " ", dom.clickbutton("x", style({ padding: "0 .3em" }), attr.arialabel("Clear end date."), attr.title("Clear end date."), function click() {
+			}, "click")), " and ", newestDate = dom.input(attr.type("date"), focusPlaceholder("2023-07-20"), changeHandlers), newestTime = dom.input(attr.type("time"), focusPlaceholder("23:10"), changeHandlers), " ", dom.clickbutton("x", style({ padding: "0 .3em" }), attr.arialabel("Clear end date."), attr.title("Clear end date."), /* @__PURE__ */ __name(function click() {
 				newestDate.value = "";
 				newestTime.value = "";
 				updateSearchbar();
-			})), dom.div(dom.clickbutton("1 day", function click() {
+			}, "click"))), dom.div(dom.clickbutton("1 day", /* @__PURE__ */ __name(function click() {
 				setPeriod(new Date((/* @__PURE__ */ new Date()).getTime() - 24 * 3600 * 1e3));
-			}), " ", dom.clickbutton("1 week", function click() {
+			}, "click")), " ", dom.clickbutton("1 week", /* @__PURE__ */ __name(function click() {
 				setPeriod(new Date((/* @__PURE__ */ new Date()).getTime() - 7 * 24 * 3600 * 1e3));
-			}), " ", dom.clickbutton("1 month", function click() {
+			}, "click")), " ", dom.clickbutton("1 month", /* @__PURE__ */ __name(function click() {
 				setPeriod(new Date((/* @__PURE__ */ new Date()).getTime() - 31 * 24 * 3600 * 1e3));
-			}), " ", dom.clickbutton("1 year", function click() {
+			}, "click")), " ", dom.clickbutton("1 year", /* @__PURE__ */ __name(function click() {
 				setPeriod(new Date((/* @__PURE__ */ new Date()).getTime() - 365 * 24 * 3600 * 1e3));
-			})))), dom.tr(dom.td("Attachments"), dom.td(dom.label(style({ whiteSpace: "nowrap" }), attachmentNone = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("none"), attachmentHandlers), " None"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentAny = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("any"), attachmentHandlers), " Any"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentImage = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("image"), attachmentHandlers), " Images"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentPDF = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("pdf"), attachmentHandlers), " PDFs"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentArchive = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("archive"), attachmentHandlers), " Archives"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentSpreadsheet = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("spreadsheet"), attachmentHandlers), " Spreadsheets"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentDocument = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("document"), attachmentHandlers), " Documents"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentPresentation = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("presentation"), attachmentHandlers), " Presentations"), " ")), dom.tr(dom.td("Labels"), dom.td(style({ lineHeight: 2 }), join(flagViews = Object.entries({ Read: "\\Seen", Replied: "\\Answered", Flagged: "\\Flagged", Deleted: "\\Deleted", Draft: "\\Draft", Forwarded: "$Forwarded", Junk: "$Junk", NotJunk: "$NotJunk", Phishing: "$Phishing", MDNSent: "$MDNSent" }).map((t) => {
+			}, "click"))))), dom.tr(dom.td("Attachments"), dom.td(dom.label(style({ whiteSpace: "nowrap" }), attachmentNone = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("none"), attachmentHandlers), " None"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentAny = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("any"), attachmentHandlers), " Any"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentImage = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("image"), attachmentHandlers), " Images"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentPDF = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("pdf"), attachmentHandlers), " PDFs"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentArchive = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("archive"), attachmentHandlers), " Archives"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentSpreadsheet = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("spreadsheet"), attachmentHandlers), " Spreadsheets"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentDocument = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("document"), attachmentHandlers), " Documents"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentPresentation = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("presentation"), attachmentHandlers), " Presentations"), " ")), dom.tr(dom.td("Labels"), dom.td(style({ lineHeight: 2 }), join(flagViews = Object.entries({ Read: "\\Seen", Replied: "\\Answered", Flagged: "\\Flagged", Deleted: "\\Deleted", Draft: "\\Draft", Forwarded: "$Forwarded", Junk: "$Junk", NotJunk: "$NotJunk", Phishing: "$Phishing", MDNSent: "$MDNSent" }).map((t) => {
 				const [name, flag] = t;
 				const v = {
 					active: null,
 					flag,
-					root: dom.clickbutton(name, function click() {
+					root: dom.clickbutton(name, /* @__PURE__ */ __name(function click() {
 						if (v.active === null) {
 							v.active = true;
 						} else if (v.active === true) {
@@ -5863,43 +5875,43 @@
 						}
 						v.update();
 						updateSearchbar();
-					}),
-					update: () => {
+					}, "click")),
+					update: /* @__PURE__ */ __name(() => {
 						css("searchFlagTrue", { backgroundColor: styles.buttonTristateOnBackground }, true);
 						css("searchFlagFalse", { backgroundColor: styles.buttonTristateOffBackground }, true);
 						v.root.classList.toggle("searchFlagTrue", v.active === true);
 						v.root.classList.toggle("searchFlagFalse", v.active === false);
-					}
+					}, "update")
 				};
 				return v;
-			}), () => " "), " ", labels = dom.input(focusPlaceholder('todo -done "-dashingname"'), attr.title("User-defined labels."), changeHandlers))), dom.tr(dom.td("Headers"), headersCell = dom.td(headerViews = [newHeaderView(true)])), dom.tr(dom.td("Size between"), dom.td(minsize = dom.input(style({ width: "6em" }), focusPlaceholder("10kb"), changeHandlers), " and ", maxsize = dom.input(style({ width: "6em" }), focusPlaceholder("1mb"), changeHandlers)))), dom.div(style({ padding: "1ex", textAlign: "right" }), dom.submitbutton("Search")), async function submit2(e) {
+			}), () => " "), " ", labels = dom.input(focusPlaceholder('todo -done "-dashingname"'), attr.title("User-defined labels."), changeHandlers))), dom.tr(dom.td("Headers"), headersCell = dom.td(headerViews = [newHeaderView(true)])), dom.tr(dom.td("Size between"), dom.td(minsize = dom.input(style({ width: "6em" }), focusPlaceholder("10kb"), changeHandlers), " and ", maxsize = dom.input(style({ width: "6em" }), focusPlaceholder("1mb"), changeHandlers)))), dom.div(style({ padding: "1ex", textAlign: "right" }), dom.submitbutton("Search")), /* @__PURE__ */ __name(async function submit2(e) {
 				e.preventDefault();
 				await searchView.submit();
-			})
+			}, "submit"))
 		));
-		const submit = async () => {
+		const submit = /* @__PURE__ */ __name(async () => {
 			const [f, notf, _] = parseSearch(searchbarElem.value, mailboxlistView);
 			await startSearch(f, notf);
-		};
+		}, "submit");
 		let loaded = false;
 		const searchView = {
 			root,
 			submit,
-			ensureLoaded: () => {
+			ensureLoaded: /* @__PURE__ */ __name(() => {
 				if (loaded || mailboxlistView.mailboxes().length === 0) {
 					return;
 				}
 				loaded = true;
 				dom._kids(mailbox, dom.option("All mailboxes except Trash/Junk/Rejects", attr.value("-1")), dom.option("All mailboxes", attr.value("0")), mailboxlistView.mailboxes().map((mb) => dom.option(mb.Name, attr.value("" + mb.ID))));
 				searchView.updateForm();
-			},
+			}, "ensureLoaded"),
 			updateForm
 		};
 		return searchView;
-	};
-	var parseComposeMailto = (mailto) => {
+	}, "newSearchView");
+	var parseComposeMailto = /* @__PURE__ */ __name((mailto) => {
 		const u = new URL(mailto);
-		const addresses = (s) => s.split(",").filter((s2) => !!s2);
+		const addresses = /* @__PURE__ */ __name((s) => s.split(",").filter((s2) => !!s2), "addresses");
 		const opts = {};
 		opts.to = addresses(u.pathname).map((s) => decodeURIComponent(s));
 		for (const [xk, v] of new URLSearchParams(u.search)) {
@@ -5917,8 +5929,8 @@
 			}
 		}
 		return opts;
-	};
-	var init = async () => {
+	}, "parseComposeMailto");
+	var init = /* @__PURE__ */ __name(async () => {
 		let connectionElem;
 		let layoutElem;
 		let accountElem;
@@ -5945,7 +5957,7 @@
 		let requestNotFilter = newNotFilter();
 		let requestMsgID = 0;
 		[moxversion, moxgoos, moxgoarch] = await client.Version();
-		const updatePageTitle = () => {
+		const updatePageTitle = /* @__PURE__ */ __name(() => {
 			const mb = mailboxlistView && mailboxlistView.activeMailbox();
 			const addr = loginAddress ? loginAddress.User + "@" + formatDomain(loginAddress.Domain) : "";
 			if (!mb) {
@@ -5953,8 +5965,8 @@
 			} else {
 				document.title = ["(" + mb.Unread + ") " + mb.Name, addr, "Mox Webmail"].join(" - ");
 			}
-		};
-		const setLocationHash = () => {
+		}, "updatePageTitle");
+		const setLocationHash = /* @__PURE__ */ __name(() => {
 			const msgid = requestMsgID || msglistView.activeMessageID();
 			let trail = msgid ? "," + msgid : "";
 			if (composeView && composeView.MsgID) {
@@ -5972,28 +5984,28 @@
 			const l = window.location;
 			const url = l.protocol + "//" + l.host + l.pathname + l.search + hash;
 			window.history.replaceState(void 0, "", url);
-		};
-		const loadSearch = (q) => {
+		}, "setLocationHash");
+		const loadSearch = /* @__PURE__ */ __name((q) => {
 			search = { active: true, query: q };
 			searchbarElem.value = q;
 			searchbarElem.classList.toggle("searchbarActive", true);
 			searchbarElemBox.style.flexGrow = "4";
-		};
-		const unloadSearch = () => {
+		}, "loadSearch");
+		const unloadSearch = /* @__PURE__ */ __name(() => {
 			searchbarElem.value = "";
 			searchbarElem.classList.toggle("searchbarActive", false);
 			searchbarElem.style.zIndex = "";
 			searchbarElemBox.style.flexGrow = "";
 			search = { active: false, query: "" };
 			searchView.root.remove();
-		};
-		const clearList = () => {
+		}, "unloadSearch");
+		const clearList = /* @__PURE__ */ __name(() => {
 			msglistView.clear();
 			listendElem.remove();
 			listloadingElem.remove();
 			listerrElem.remove();
-		};
-		const requestNewView = async (clearMsgID, filterOpt, notFilterOpt) => {
+		}, "clearList");
+		const requestNewView = /* @__PURE__ */ __name(async (clearMsgID, filterOpt, notFilterOpt) => {
 			if (!sseID) {
 				throw new Error("not connected");
 			}
@@ -6012,8 +6024,8 @@
 			requestViewEnd = false;
 			const bounds = msglistscrollElem.getBoundingClientRect();
 			await requestMessages(bounds, requestMsgID);
-		};
-		const requestMessages = async (scrollBounds, destMessageID) => {
+		}, "requestNewView");
+		const requestMessages = /* @__PURE__ */ __name(async (scrollBounds, destMessageID) => {
 			const fetchCount = Math.max(50, 3 * Math.ceil(scrollBounds.height / msglistView.itemHeight()));
 			const page2 = {
 				AnchorMessageID: requestAnchorMessageID,
@@ -6040,9 +6052,9 @@
 			dom._kids(queryactivityElem, "loading...");
 			msglistscrollElem.appendChild(listloadingElem);
 			await client.Request(request);
-		};
+		}, "requestMessages");
 		let msgElem = dom.div(css("msgElem", { position: "absolute", right: 0, left: 0, top: 0, bottom: 0, backgroundColor: styles.backgroundColorMild }));
-		const possibleLabels = () => {
+		const possibleLabels = /* @__PURE__ */ __name(() => {
 			if (requestFilter.MailboxID > 0) {
 				const mb = mailboxlistView.findMailboxByID(requestFilter.MailboxID);
 				if (mb) {
@@ -6058,35 +6070,35 @@
 			const l = Object.keys(all);
 			l.sort();
 			return l;
-		};
-		const refineKeyword = async (kw) => {
+		}, "possibleLabels");
+		const refineKeyword = /* @__PURE__ */ __name(async (kw) => {
 			settingsPut({ ...settings, refine: "label:" + kw });
 			refineToggleActive(refineLabelBtn);
 			dom._kids(refineLabelBtn, "Label: " + kw);
 			await withStatus("Requesting messages", requestNewView(false));
-		};
-		const viewportEnsureMessages = async () => {
+		}, "refineKeyword");
+		const viewportEnsureMessages = /* @__PURE__ */ __name(async () => {
 			const bounds = msglistscrollElem.getBoundingClientRect();
 			if (msglistscrollElem.scrollTop < msglistscrollElem.scrollHeight - 3 * bounds.height) {
 				return;
 			}
 			await withStatus("Requesting more messages", requestMessages(bounds, 0));
-		};
-		const otherMailbox = (mailboxID) => requestFilter.MailboxID !== mailboxID ? mailboxlistView.findMailboxByID(mailboxID) || null : null;
-		const listMailboxes = () => mailboxlistView.mailboxes();
-		const activeMailbox = () => mailboxlistView.activeMailbox();
+		}, "viewportEnsureMessages");
+		const otherMailbox = /* @__PURE__ */ __name((mailboxID) => requestFilter.MailboxID !== mailboxID ? mailboxlistView.findMailboxByID(mailboxID) || null : null, "otherMailbox");
+		const listMailboxes = /* @__PURE__ */ __name(() => mailboxlistView.mailboxes(), "listMailboxes");
+		const activeMailbox = /* @__PURE__ */ __name(() => mailboxlistView.activeMailbox(), "activeMailbox");
 		const msglistView = newMsglistView(msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, () => msglistscrollElem ? msglistscrollElem.getBoundingClientRect().height : 0, refineKeyword, viewportEnsureMessages);
 		const mailboxlistView = newMailboxlistView(msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox);
 		let refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineFlaggedBtn, refineLabelBtn;
-		const refineToggleActive = (btn) => {
+		const refineToggleActive = /* @__PURE__ */ __name((btn) => {
 			for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineFlaggedBtn, refineLabelBtn]) {
 				e.classList.toggle("active", e === btn);
 			}
 			if (btn !== null && btn !== refineLabelBtn) {
 				dom._kids(refineLabelBtn, "Label");
 			}
-		};
-		const refineToggle = async (refine, btn) => {
+		}, "refineToggleActive");
+		const refineToggle = /* @__PURE__ */ __name(async (refine, btn) => {
 			if (settings.refine === refine) {
 				settingsPut({ ...settings, refine: "" });
 				refineToggleActive(null);
@@ -6096,33 +6108,33 @@
 			}
 			dom._kids(refineLabelBtn, settings.refine.startsWith("label:") ? "Label: " + settings.refine.substring("label:".length) : "Label");
 			await withStatus("Requesting messages", requestNewView(false));
-		};
+		}, "refineToggle");
 		let threadMode;
 		const msgColumnDraggerStyle = css("msgColumnDragger", { position: "absolute", top: 0, bottom: 0, width: "1px", backgroundColor: styles.popupBorderColor, left: "2.5px" });
-		let msglistElem = dom.div(css("msgList", { backgroundColor: styles.msglistBackgroundColor, position: "absolute", left: "0", right: 0, top: 0, bottom: 0, display: "flex", flexDirection: "column" }), dom.div(attr.role("region"), attr.arialabel("Filter and sorting buttons for message list"), css("msgListFilterSorting", { display: "flex", justifyContent: "space-between", backgroundColor: styles.backgroundColorMild, borderBottom: "1px solid", borderBottomColor: styles.borderColor, padding: ".25em .5em" }), dom.div(dom.h1("Refine:", css("refineTitle", { fontWeight: "normal", fontSize: "inherit", display: "inline", margin: 0 }), attr.title("Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.")), " ", dom.span(dom._class("btngroup"), refineUnreadBtn = dom.clickbutton(settings.refine === "unread" ? dom._class("active") : [], "Unread", attr.title("Only show messages marked as unread."), async function click(e) {
+		let msglistElem = dom.div(css("msgList", { backgroundColor: styles.msglistBackgroundColor, position: "absolute", left: "0", right: 0, top: 0, bottom: 0, display: "flex", flexDirection: "column" }), dom.div(attr.role("region"), attr.arialabel("Filter and sorting buttons for message list"), css("msgListFilterSorting", { display: "flex", justifyContent: "space-between", backgroundColor: styles.backgroundColorMild, borderBottom: "1px solid", borderBottomColor: styles.borderColor, padding: ".25em .5em" }), dom.div(dom.h1("Refine:", css("refineTitle", { fontWeight: "normal", fontSize: "inherit", display: "inline", margin: 0 }), attr.title("Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.")), " ", dom.span(dom._class("btngroup"), refineUnreadBtn = dom.clickbutton(settings.refine === "unread" ? dom._class("active") : [], "Unread", attr.title("Only show messages marked as unread."), /* @__PURE__ */ __name(async function click(e) {
 			await refineToggle("unread", e.target);
-		}), refineReadBtn = dom.clickbutton(settings.refine === "read" ? dom._class("active") : [], "Read", attr.title("Only show messages marked as read."), async function click(e) {
+		}, "click")), refineReadBtn = dom.clickbutton(settings.refine === "read" ? dom._class("active") : [], "Read", attr.title("Only show messages marked as read."), /* @__PURE__ */ __name(async function click(e) {
 			await refineToggle("read", e.target);
-		}), refineAttachmentsBtn = dom.clickbutton(settings.refine === "attachments" ? dom._class("active") : [], "Attachments", attr.title("Only show messages with attachments."), async function click(e) {
+		}, "click")), refineAttachmentsBtn = dom.clickbutton(settings.refine === "attachments" ? dom._class("active") : [], "Attachments", attr.title("Only show messages with attachments."), /* @__PURE__ */ __name(async function click(e) {
 			await refineToggle("attachments", e.target);
-		}), refineFlaggedBtn = dom.clickbutton(settings.refine === "flagged" ? dom._class("active") : [], "Flagged", attr.title("Only show flagged/starred messages."), async function click(e) {
+		}, "click")), refineFlaggedBtn = dom.clickbutton(settings.refine === "flagged" ? dom._class("active") : [], "Flagged", attr.title("Only show flagged/starred messages."), /* @__PURE__ */ __name(async function click(e) {
 			await refineToggle("flagged", e.target);
-		}), refineLabelBtn = dom.clickbutton(settings.refine.startsWith("label:") ? [dom._class("active"), "Label: " + settings.refine.substring("label:".length)] : "Label", attr.title("Only show messages with the selected label."), async function click(e) {
+		}, "click")), refineLabelBtn = dom.clickbutton(settings.refine.startsWith("label:") ? [dom._class("active"), "Label: " + settings.refine.substring("label:".length)] : "Label", attr.title("Only show messages with the selected label."), /* @__PURE__ */ __name(async function click(e) {
 			const labels = possibleLabels();
 			const remove = popover(e.target, {}, dom.div(style({ display: "flex", flexDirection: "column", gap: "1ex" }), labels.map((l) => {
-				const selectLabel = async () => {
+				const selectLabel = /* @__PURE__ */ __name(async () => {
 					await refineToggle("label:" + l, e.target);
 					remove();
-				};
-				return dom.div(dom.clickbutton(styleClasses.keyword, keywordButtonStyle, l, async function click2() {
+				}, "selectLabel");
+				return dom.div(dom.clickbutton(styleClasses.keyword, keywordButtonStyle, l, /* @__PURE__ */ __name(async function click2() {
 					await selectLabel();
-				}));
+				}, "click")));
 			}), labels.length === 0 ? dom.div("No labels yet, set one on a message first.") : []));
-		})), " ", dom.clickbutton("x", style({ padding: "0 .25em" }), attr.arialabel("Clear refinement filters."), attr.title("Clear refinement filters."), async function click(e) {
+		}, "click"))), " ", dom.clickbutton("x", style({ padding: "0 .25em" }), attr.arialabel("Clear refinement filters."), attr.title("Clear refinement filters."), /* @__PURE__ */ __name(async function click(e) {
 			settingsPut({ ...settings, refine: "" });
 			refineToggleActive(e.target);
 			await withStatus("Requesting messages", requestNewView(false));
-		})), dom.div(queryactivityElem = dom.span(), " ", threadMode = dom.select(attr.arialabel("Thread modes."), attr.title("Off: Threading disabled, messages are shown individually.\nOn: Group messages in threads, expanded by default except when (previously) manually collapsed.\nUnread: Only expand thread with unread messages, ignoring and not saving whether they were manually collapsed."), dom.option("Threads: Off", attr.value(ThreadMode.ThreadOff), settings.threading === ThreadMode.ThreadOff ? attr.selected("") : []), dom.option("Threads: On", attr.value(ThreadMode.ThreadOn), settings.threading === ThreadMode.ThreadOn ? attr.selected("") : []), dom.option("Threads: Unread", attr.value(ThreadMode.ThreadUnread), settings.threading === ThreadMode.ThreadUnread ? attr.selected("") : []), async function change() {
+		}, "click"))), dom.div(queryactivityElem = dom.span(), " ", threadMode = dom.select(attr.arialabel("Thread modes."), attr.title("Off: Threading disabled, messages are shown individually.\nOn: Group messages in threads, expanded by default except when (previously) manually collapsed.\nUnread: Only expand thread with unread messages, ignoring and not saving whether they were manually collapsed."), dom.option("Threads: Off", attr.value(ThreadMode.ThreadOff), settings.threading === ThreadMode.ThreadOff ? attr.selected("") : []), dom.option("Threads: On", attr.value(ThreadMode.ThreadOn), settings.threading === ThreadMode.ThreadOn ? attr.selected("") : []), dom.option("Threads: Unread", attr.value(ThreadMode.ThreadUnread), settings.threading === ThreadMode.ThreadUnread ? attr.selected("") : []), /* @__PURE__ */ __name(async function change() {
 			let reset = settings.threading === ThreadMode.ThreadOff;
 			settingsPut({ ...settings, threading: threadMode.value });
 			reset = reset || settings.threading === ThreadMode.ThreadOff;
@@ -6131,18 +6143,18 @@
 			} else {
 				msglistView.threadToggle();
 			}
-		}), " ", dom.clickbutton("\u2191\u2193", attr.title("Toggle sorting by date received."), settings.orderAsc ? dom._class("invert") : [], async function click(e) {
+		}, "change")), " ", dom.clickbutton("\u2191\u2193", attr.title("Toggle sorting by date received."), settings.orderAsc ? dom._class("invert") : [], /* @__PURE__ */ __name(async function click(e) {
 			settingsPut({ ...settings, orderAsc: !settings.orderAsc });
 			e.target.classList.toggle("invert", settings.orderAsc);
 			await withStatus("Requesting messages", requestNewView(true));
-		}))), dom.div(style({ height: "1ex", position: "relative" }), dom.div(dom._class("msgItemFlags")), dom.div(dom._class("msgItemFlagsOffset"), css("msgItemFlagsGrab", { position: "absolute", width: "6px", top: 0, bottom: 0, marginLeft: "-3px", cursor: "ew-resize" }), dom.div(msgColumnDraggerStyle), function mousedown(e) {
+		}, "click")))), dom.div(style({ height: "1ex", position: "relative" }), dom.div(dom._class("msgItemFlags")), dom.div(dom._class("msgItemFlagsOffset"), css("msgItemFlagsGrab", { position: "absolute", width: "6px", top: 0, bottom: 0, marginLeft: "-3px", cursor: "ew-resize" }), dom.div(msgColumnDraggerStyle), /* @__PURE__ */ __name(function mousedown(e) {
 			startDrag(e, (e2) => {
 				const bounds = msglistscrollElem.getBoundingClientRect();
 				const width = Math.round(e2.clientX - bounds.x);
 				settingsPut({ ...settings, msglistflagsWidth: width });
 				updateMsglistWidths();
 			});
-		}), dom.div(dom._class("msgItemFrom")), dom.div(dom._class("msgItemFromOffset"), css("msgItemFlagsGrab", { position: "absolute", width: "6px", top: 0, bottom: 0, marginLeft: "-3px", cursor: "ew-resize" }), dom.div(msgColumnDraggerStyle), function mousedown(e) {
+		}, "mousedown")), dom.div(dom._class("msgItemFrom")), dom.div(dom._class("msgItemFromOffset"), css("msgItemFlagsGrab", { position: "absolute", width: "6px", top: 0, bottom: 0, marginLeft: "-3px", cursor: "ew-resize" }), dom.div(msgColumnDraggerStyle), /* @__PURE__ */ __name(function mousedown(e) {
 			startDrag(e, (e2) => {
 				const bounds = msglistscrollElem.getBoundingClientRect();
 				const x = Math.round(e2.clientX - bounds.x - lastflagswidth);
@@ -6151,21 +6163,21 @@
 				settingsPut({ ...settings, msglistfromPct: pct });
 				updateMsglistWidths();
 			});
-		}), dom.div(dom._class("msgItemSubject")), dom.div(dom._class("msgItemSubjectOffset"), css("msgItemFlagsGrab", { position: "absolute", width: "6px", top: 0, bottom: 0, marginLeft: "-3px", cursor: "ew-resize" }), dom.div(msgColumnDraggerStyle), function mousedown(e) {
+		}, "mousedown")), dom.div(dom._class("msgItemSubject")), dom.div(dom._class("msgItemSubjectOffset"), css("msgItemFlagsGrab", { position: "absolute", width: "6px", top: 0, bottom: 0, marginLeft: "-3px", cursor: "ew-resize" }), dom.div(msgColumnDraggerStyle), /* @__PURE__ */ __name(function mousedown(e) {
 			startDrag(e, (e2) => {
 				const bounds = msglistscrollElem.getBoundingClientRect();
 				const width = Math.round(bounds.x + bounds.width - e2.clientX);
 				settingsPut({ ...settings, msglistageWidth: width });
 				updateMsglistWidths();
 			});
-		}), dom.div(dom._class("msgItemAge"))), dom.div(style({ flexGrow: "1", position: "relative" }), msglistscrollElem = dom.div(yscrollStyle, attr.role("region"), attr.arialabel("Message list"), async function scroll() {
+		}, "mousedown")), dom.div(dom._class("msgItemAge"))), dom.div(style({ flexGrow: "1", position: "relative" }), msglistscrollElem = dom.div(yscrollStyle, attr.role("region"), attr.arialabel("Message list"), /* @__PURE__ */ __name(async function scroll() {
 			if (!sseID || requestViewEnd || requestID) {
 				return;
 			}
 			await viewportEnsureMessages();
-		}, dom.div(style({ width: "100%", borderSpacing: "0" }), msglistView))));
+		}, "scroll"), dom.div(style({ width: "100%", borderSpacing: "0" }), msglistView))));
 		let searchbarElem;
-		const startSearch = async (f, notf) => {
+		const startSearch = /* @__PURE__ */ __name(async (f, notf) => {
 			if (!sseID) {
 				window.alert("Error: not connect");
 				return;
@@ -6182,26 +6194,26 @@
 			searchbarElem.blur();
 			document.body.focus();
 			await withStatus("Requesting messages", requestNewView(true, f, notf));
-		};
-		const searchViewClose = () => {
+		}, "startSearch");
+		const searchViewClose = /* @__PURE__ */ __name(() => {
 			if (!search.active) {
 				unloadSearch();
 			} else {
 				searchbarElem.value = search.query;
 				searchView.root.remove();
 			}
-		};
+		}, "searchViewClose");
 		let mailboxesElem, topcomposeboxElem, mailboxessplitElem;
 		let splitElem;
 		let searchbarElemBox;
-		const searchbarInitial = () => {
+		const searchbarInitial = /* @__PURE__ */ __name(() => {
 			const mailboxActive = mailboxlistView.activeMailbox();
 			if (mailboxActive && mailboxActive.Name !== "Inbox") {
 				return packToken([false, "mb", false, mailboxActive.Name]) + " ";
 			}
 			return "";
-		};
-		const ensureSearchView = () => {
+		}, "searchbarInitial");
+		const ensureSearchView = /* @__PURE__ */ __name(() => {
 			if (searchView.root.parentElement) {
 				return;
 			}
@@ -6213,24 +6225,24 @@
 			searchbarElem.parentElement.appendChild(searchView.root);
 			searchbarElemBox.style.flexGrow = "4";
 			searchbarElem.style.zIndex = zindexes.searchbar;
-		};
-		const cmdSearch = async () => {
+		}, "ensureSearchView");
+		const cmdSearch = /* @__PURE__ */ __name(async () => {
 			searchbarElem.focus();
 			if (!searchbarElem.value) {
 				searchbarElem.value = searchbarInitial();
 			}
 			ensureSearchView();
 			searchView.updateForm();
-		};
-		const cmdCompose = async () => {
+		}, "cmdSearch");
+		const cmdCompose = /* @__PURE__ */ __name(async () => {
 			let body = "";
 			let sig = accountSettings?.Signature || "";
 			if (sig) {
 				body += "\n\n" + sig;
 			}
 			compose({ body, editOffset: 0 }, listMailboxes, setLocationHash);
-		};
-		const cmdOpenInbox = async () => {
+		}, "cmdCompose");
+		const cmdOpenInbox = /* @__PURE__ */ __name(async () => {
 			const mb = mailboxlistView.findMailboxByName("Inbox");
 			if (mb) {
 				await mailboxlistView.openMailboxID(mb.ID, true);
@@ -6238,13 +6250,13 @@
 				f.MailboxID = mb.ID;
 				await withStatus("Requesting messages", requestNewView(true, f, newNotFilter()));
 			}
-		};
-		const cmdFocusMsg = async () => {
+		}, "cmdOpenInbox");
+		const cmdFocusMsg = /* @__PURE__ */ __name(async () => {
 			const btn = msgElem.querySelector("button");
 			if (btn && btn instanceof HTMLElement) {
 				btn.focus();
 			}
-		};
+		}, "cmdFocusMsg");
 		const shortcuts = {
 			i: cmdOpenInbox,
 			"/": cmdSearch,
@@ -6256,26 +6268,26 @@
 		};
 		const topMailboxesStyle = css("topMailboxes", { backgroundColor: styles.mailboxesTopBackgroundColor });
 		css("searchbarActive", { background: styles.mailboxActiveBackground });
-		const webmailroot = dom.div(css("webmailRoot", { display: "flex", flexDirection: "column", alignContent: "stretch", height: "100dvh" }), dom.div(topMailboxesStyle, style({ display: "flex" }), attr.role("region"), attr.arialabel("Top bar"), topcomposeboxElem = dom.div(dom._class("pad"), style({ width: settings.mailboxesWidth + "px", textAlign: "center" }), dom.clickbutton("Compose", attr.title("Compose new email message."), function click() {
+		const webmailroot = dom.div(css("webmailRoot", { display: "flex", flexDirection: "column", alignContent: "stretch", height: "100dvh" }), dom.div(topMailboxesStyle, style({ display: "flex" }), attr.role("region"), attr.arialabel("Top bar"), topcomposeboxElem = dom.div(dom._class("pad"), style({ width: settings.mailboxesWidth + "px", textAlign: "center" }), dom.clickbutton("Compose", attr.title("Compose new email message."), /* @__PURE__ */ __name(function click() {
 			shortcutCmd(cmdCompose, shortcuts);
-		})), dom.div(dom._class("pad"), css("searchbarBox", { paddingLeft: 0, display: "flex", flexGrow: 1 }), searchbarElemBox = dom.search(style({ display: "flex", marginRight: ".5em" }), dom.form(style({ display: "flex", flexGrow: 1 }), searchbarElem = dom.input(attr.placeholder("Search..."), style({ position: "relative", width: "100%" }), attr.title("Search messages based on criteria like matching free-form text, in a mailbox, labels, addressees."), focusPlaceholder('word "with space" -notword mb:Inbox f:from@x.example t:rcpt@x.example start:2023-7-1 end:2023-7-8 s:"subject" a:images l:$Forwarded h:Reply-To:other@x.example minsize:500kb'), function click() {
+		}, "click"))), dom.div(dom._class("pad"), css("searchbarBox", { paddingLeft: 0, display: "flex", flexGrow: 1 }), searchbarElemBox = dom.search(style({ display: "flex", marginRight: ".5em" }), dom.form(style({ display: "flex", flexGrow: 1 }), searchbarElem = dom.input(attr.placeholder("Search..."), style({ position: "relative", width: "100%" }), attr.title("Search messages based on criteria like matching free-form text, in a mailbox, labels, addressees."), focusPlaceholder('word "with space" -notword mb:Inbox f:from@x.example t:rcpt@x.example start:2023-7-1 end:2023-7-8 s:"subject" a:images l:$Forwarded h:Reply-To:other@x.example minsize:500kb'), /* @__PURE__ */ __name(function click() {
 			cmdSearch();
 			showShortcut("/");
-		}, function focus() {
+		}, "click"), /* @__PURE__ */ __name(function focus() {
 			searchbarElemBox.style.flexGrow = "4";
 			if (!searchbarElem.value) {
 				searchbarElem.value = searchbarInitial();
 			}
-		}, function blur() {
+		}, "focus"), /* @__PURE__ */ __name(function blur() {
 			if (searchbarElem.value === searchbarInitial()) {
 				searchbarElem.value = "";
 			}
 			if (!search.active) {
 				searchbarElemBox.style.flexGrow = "";
 			}
-		}, function change() {
+		}, "blur"), /* @__PURE__ */ __name(function change() {
 			searchView.updateForm();
-		}, function keyup(e) {
+		}, "change"), /* @__PURE__ */ __name(function keyup(e) {
 			if (e.key === "Escape") {
 				e.stopPropagation();
 				searchViewClose();
@@ -6285,7 +6297,7 @@
 				ensureSearchView();
 			}
 			searchView.updateForm();
-		}), dom.clickbutton("x", attr.arialabel("Cancel and clear search and open Inbox."), attr.title("Cancel and clear search and open Inbox."), style({ marginLeft: ".25em", padding: "0 .3em" }), async function click() {
+		}, "keyup")), dom.clickbutton("x", attr.arialabel("Cancel and clear search and open Inbox."), attr.title("Cancel and clear search and open Inbox."), style({ marginLeft: ".25em", padding: "0 .3em" }), /* @__PURE__ */ __name(async function click() {
 			searchbarElem.value = "";
 			if (!search.active) {
 				return;
@@ -6299,17 +6311,17 @@
 			const f = newFilter();
 			f.MailboxID = mb.ID;
 			await withStatus("Requesting messages", requestNewView(true, f, newNotFilter()));
-		}), async function submit(e) {
+		}, "click")), /* @__PURE__ */ __name(async function submit(e) {
 			e.preventDefault();
 			await searchView.submit();
-		})), connectionElem = dom.div(), statusElem = dom.div(css("status", { marginLeft: ".5em", flexGrow: "1" }), attr.role("status")), dom.div(style({ paddingLeft: "1em" }), layoutElem = dom.select(attr.title("Layout of message list and message panes. Top/bottom has message list above message view. Left/Right has message list left, message view right. Auto selects based on window width and automatically switches on resize. Wide screens get left/right, smaller screens get top/bottom."), dom.option("Auto layout", attr.value("auto"), settings.layout === "auto" ? attr.selected("") : []), dom.option("Top/bottom", attr.value("topbottom"), settings.layout === "topbottom" ? attr.selected("") : []), dom.option("Left/right", attr.value("leftright"), settings.layout === "leftright" ? attr.selected("") : []), function change() {
+		}, "submit"))), connectionElem = dom.div(), statusElem = dom.div(css("status", { marginLeft: ".5em", flexGrow: "1" }), attr.role("status")), dom.div(style({ paddingLeft: "1em" }), layoutElem = dom.select(attr.title("Layout of message list and message panes. Top/bottom has message list above message view. Left/Right has message list left, message view right. Auto selects based on window width and automatically switches on resize. Wide screens get left/right, smaller screens get top/bottom."), dom.option("Auto layout", attr.value("auto"), settings.layout === "auto" ? attr.selected("") : []), dom.option("Top/bottom", attr.value("topbottom"), settings.layout === "topbottom" ? attr.selected("") : []), dom.option("Left/right", attr.value("leftright"), settings.layout === "leftright" ? attr.selected("") : []), /* @__PURE__ */ __name(function change() {
 			settingsPut({ ...settings, layout: layoutElem.value });
 			if (layoutElem.value === "auto") {
 				autoselectLayout();
 			} else {
 				selectLayout(layoutElem.value);
 			}
-		}), " ", dom.clickbutton("Tooltip", attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), " ", dom.clickbutton("Help", attr.title("Show popup with basic usage information and a keyboard shortcuts."), clickCmd(cmdHelp, shortcuts)), " ", dom.clickbutton("Settings", attr.title("Change settings for composing messages."), clickCmd(cmdSettings, shortcuts)), " ", accountElem = dom.span(), " ", loginAddressElem = dom.span(), " ", dom.clickbutton("Logout", attr.title("Logout, invalidating this session."), async function click(e) {
+		}, "change")), " ", dom.clickbutton("Tooltip", attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), " ", dom.clickbutton("Help", attr.title("Show popup with basic usage information and a keyboard shortcuts."), clickCmd(cmdHelp, shortcuts)), " ", dom.clickbutton("Settings", attr.title("Change settings for composing messages."), clickCmd(cmdSettings, shortcuts)), " ", accountElem = dom.span(), " ", loginAddressElem = dom.span(), " ", dom.clickbutton("Logout", attr.title("Logout, invalidating this session."), /* @__PURE__ */ __name(async function click(e) {
 			await withStatus("Logging out", client.Logout(), e.target);
 			localStorageRemove("webmailcsrftoken");
 			if (eventSource) {
@@ -6317,7 +6329,7 @@
 				eventSource = null;
 			}
 			window.location.reload();
-		})))), dom.div(css("mailboxesListMsgBox", { flexGrow: "1", position: "relative" }), mailboxesElem = dom.div(topMailboxesStyle, style({ width: settings.mailboxesWidth + "px" }), css("mailboxesBox", { display: "flex", flexDirection: "column", alignContent: "stretch", position: "absolute", left: 0, top: 0, bottom: 0 }), dom.div(dom._class("pad"), yscrollAutoStyle, style({ flexGrow: "1", position: "relative" }), mailboxlistView.root)), mailboxessplitElem = dom.div(css("mailboxesListGrab", { position: "absolute", width: "5px", top: 0, bottom: 0, cursor: "ew-resize", zIndex: zindexes.splitter }), style({ left: "calc(" + settings.mailboxesWidth + "px - 2px)" }), dom.div(css("mailboxesListLine", { position: "absolute", width: "1px", top: 0, bottom: 0, left: "2px", right: "2px", backgroundColor: styles.popupBorderColor })), function mousedown(e) {
+		}, "click"))))), dom.div(css("mailboxesListMsgBox", { flexGrow: "1", position: "relative" }), mailboxesElem = dom.div(topMailboxesStyle, style({ width: settings.mailboxesWidth + "px" }), css("mailboxesBox", { display: "flex", flexDirection: "column", alignContent: "stretch", position: "absolute", left: 0, top: 0, bottom: 0 }), dom.div(dom._class("pad"), yscrollAutoStyle, style({ flexGrow: "1", position: "relative" }), mailboxlistView.root)), mailboxessplitElem = dom.div(css("mailboxesListGrab", { position: "absolute", width: "5px", top: 0, bottom: 0, cursor: "ew-resize", zIndex: zindexes.splitter }), style({ left: "calc(" + settings.mailboxesWidth + "px - 2px)" }), dom.div(css("mailboxesListLine", { position: "absolute", width: "1px", top: 0, bottom: 0, left: "2px", right: "2px", backgroundColor: styles.popupBorderColor })), /* @__PURE__ */ __name(function mousedown(e) {
 			startDrag(e, (e2) => {
 				mailboxesElem.style.width = Math.round(e2.clientX) + "px";
 				topcomposeboxElem.style.width = Math.round(e2.clientX) + "px";
@@ -6325,7 +6337,7 @@
 				splitElem.style.left = "calc(" + e2.clientX + "px + 1px)";
 				settingsPut({ ...settings, mailboxesWidth: Math.round(e2.clientX) });
 			});
-		}), splitElem = dom.div(css("listMsgBox", { position: "absolute", left: "calc(" + settings.mailboxesWidth + "px + 1px)", right: 0, top: 0, bottom: 0, borderTop: "1px solid", borderTopColor: styles.borderColor }))));
+		}, "mousedown")), splitElem = dom.div(css("listMsgBox", { position: "absolute", left: "calc(" + settings.mailboxesWidth + "px + 1px)", right: 0, top: 0, bottom: 0, borderTop: "1px solid", borderTopColor: styles.borderColor }))));
 		const searchView = newSearchView(searchbarElem, mailboxlistView, startSearch, searchViewClose);
 		document.body.addEventListener("keydown", async (e) => {
 			switch (e.key) {
@@ -6374,13 +6386,13 @@
 			msglistView.key(k, e);
 		});
 		let currentLayout = "";
-		const selectLayout = (want) => {
+		const selectLayout = /* @__PURE__ */ __name((want) => {
 			if (want === currentLayout) {
 				return;
 			}
 			if (want === "leftright") {
 				let left, split, right;
-				dom._kids(splitElem, left = dom.div(css("layoutLeft", { position: "absolute", left: 0, top: 0, bottom: 0 }), style({ width: "calc(" + settings.leftWidthPct + "% - 1px)" }), msglistElem), split = dom.div(css("listMsgLeftRightGrab", { position: "absolute", width: "5px", top: 0, bottom: 0, cursor: "ew-resize", zIndex: zindexes.splitter }), style({ left: "calc(" + settings.leftWidthPct + "% - 2px)" }), dom.div(css("listMsgLeftRightLine", { position: "absolute", backgroundColor: styles.popupBorderColor, top: 0, bottom: 0, width: "1px", left: "2px", right: "2px" })), async function mousedown(e) {
+				dom._kids(splitElem, left = dom.div(css("layoutLeft", { position: "absolute", left: 0, top: 0, bottom: 0 }), style({ width: "calc(" + settings.leftWidthPct + "% - 1px)" }), msglistElem), split = dom.div(css("listMsgLeftRightGrab", { position: "absolute", width: "5px", top: 0, bottom: 0, cursor: "ew-resize", zIndex: zindexes.splitter }), style({ left: "calc(" + settings.leftWidthPct + "% - 2px)" }), dom.div(css("listMsgLeftRightLine", { position: "absolute", backgroundColor: styles.popupBorderColor, top: 0, bottom: 0, width: "1px", left: "2px", right: "2px" })), /* @__PURE__ */ __name(async function mousedown(e) {
 					right.style.pointerEvents = "none";
 					await startDrag(e, (e2) => {
 						const bounds = left.getBoundingClientRect();
@@ -6392,10 +6404,10 @@
 						updateMsglistWidths();
 					});
 					right.style.pointerEvents = "";
-				}), right = dom.div(css("layoutRight", { position: "absolute", right: 0, top: 0, bottom: 0 }), style({ left: "calc(" + settings.leftWidthPct + "% + 1px)" }), msgElem));
+				}, "mousedown")), right = dom.div(css("layoutRight", { position: "absolute", right: 0, top: 0, bottom: 0 }), style({ left: "calc(" + settings.leftWidthPct + "% + 1px)" }), msgElem));
 			} else {
 				let top, split, bottom;
-				dom._kids(splitElem, top = dom.div(css("layoutTop", { position: "absolute", top: 0, left: 0, right: 0 }), style({ height: "calc(" + settings.topHeightPct + "% - 1px)" }), msglistElem), split = dom.div(css("listMsgTopBottomGrab", { position: "absolute", height: "5px", left: "0", right: "0", cursor: "ns-resize", zIndex: zindexes.splitter }), style({ top: "calc(" + settings.topHeightPct + "% - 2px)" }), dom.div(css("listmsgTopBottomLine", { position: "absolute", backgroundColor: styles.popupBorderColor, left: 0, right: 0, height: "1px", top: "2px", bottom: "2px" })), function mousedown(e) {
+				dom._kids(splitElem, top = dom.div(css("layoutTop", { position: "absolute", top: 0, left: 0, right: 0 }), style({ height: "calc(" + settings.topHeightPct + "% - 1px)" }), msglistElem), split = dom.div(css("listMsgTopBottomGrab", { position: "absolute", height: "5px", left: "0", right: "0", cursor: "ns-resize", zIndex: zindexes.splitter }), style({ top: "calc(" + settings.topHeightPct + "% - 2px)" }), dom.div(css("listmsgTopBottomLine", { position: "absolute", backgroundColor: styles.popupBorderColor, left: 0, right: 0, height: "1px", top: "2px", bottom: "2px" })), /* @__PURE__ */ __name(function mousedown(e) {
 					startDrag(e, (e2) => {
 						const bounds = top.getBoundingClientRect();
 						const y = Math.round(e2.clientY - bounds.y);
@@ -6404,29 +6416,29 @@
 						bottom.style.top = "calc(" + y + "px + 1px)";
 						settingsPut({ ...settings, topHeightPct: Math.round(100 * bounds.height / splitElem.getBoundingClientRect().height) });
 					});
-				}), bottom = dom.div(css("layoutBottom", { position: "absolute", bottom: 0, left: 0, right: 0 }), style({ top: "calc(" + settings.topHeightPct + "% + 1px)" }), msgElem));
+				}, "mousedown")), bottom = dom.div(css("layoutBottom", { position: "absolute", bottom: 0, left: 0, right: 0 }), style({ top: "calc(" + settings.topHeightPct + "% + 1px)" }), msgElem));
 			}
 			currentLayout = want;
 			checkMsglistWidth();
-		};
-		const autoselectLayout = () => {
+		}, "selectLayout");
+		const autoselectLayout = /* @__PURE__ */ __name(() => {
 			const want = window.innerWidth <= 2 * 2560 / 3 ? "topbottom" : "leftright";
 			selectLayout(want);
-		};
+		}, "autoselectLayout");
 		const styleElem = dom.style(attr.type("text/css"));
 		document.head.appendChild(styleElem);
 		const stylesheet = styleElem.sheet;
 		let lastmsglistwidth = -1;
-		const checkMsglistWidth = () => {
+		const checkMsglistWidth = /* @__PURE__ */ __name(() => {
 			const width = msglistscrollElem.getBoundingClientRect().width;
 			if (lastmsglistwidth === width || width <= 0) {
 				return;
 			}
 			updateMsglistWidths();
-		};
+		}, "checkMsglistWidth");
 		let lastflagswidth, lastagewidth;
 		let rulesInserted = false;
-		const updateMsglistWidths = () => {
+		const updateMsglistWidths = /* @__PURE__ */ __name(() => {
 			const width = msglistscrollElem.clientWidth - 2;
 			lastmsglistwidth = width;
 			let flagswidth = settings.msglistflagsWidth;
@@ -6466,7 +6478,7 @@
 			});
 			lastflagswidth = flagswidth;
 			lastagewidth = agewidth;
-		};
+		}, "updateMsglistWidths");
 		if (layoutElem.value === "auto") {
 			autoselectLayout();
 		} else {
@@ -6557,18 +6569,18 @@
 				connect(true);
 			}
 		});
-		const showNotConnected = () => {
-			dom._kids(connectionElem, attr.role("status"), dom.span(css("connectionStatus", { backgroundColor: styles.warningBackgroundColor, padding: "0 .15em", borderRadius: ".15em" }), "Not connected", attr.title("Not receiving real-time updates, including of new deliveries.")), " ", dom.clickbutton("Reconnect", function click() {
+		const showNotConnected = /* @__PURE__ */ __name(() => {
+			dom._kids(connectionElem, attr.role("status"), dom.span(css("connectionStatus", { backgroundColor: styles.warningBackgroundColor, padding: "0 .15em", borderRadius: ".15em" }), "Not connected", attr.title("Not receiving real-time updates, including of new deliveries.")), " ", dom.clickbutton("Reconnect", /* @__PURE__ */ __name(function click() {
 				if (!eventSource && !connecting) {
 					noreconnect = false;
 					connect(true);
 				}
-			}));
-		};
-		const capitalizeFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+			}, "click")));
+		}, "showNotConnected");
+		const capitalizeFirst = /* @__PURE__ */ __name((s) => s.charAt(0).toUpperCase() + s.slice(1), "capitalizeFirst");
 		let openComposeOptions;
 		let connectOpenComposeMessageID = 0;
-		const connect = async (isreconnect) => {
+		const connect = /* @__PURE__ */ __name(async (isreconnect) => {
 			if (shutdownReconnectTimer) {
 				window.clearTimeout(shutdownReconnectTimer);
 				shutdownReconnectTimer = 0;
@@ -6653,7 +6665,7 @@
 				dom._kids(statusElem);
 				dom._kids(connectionElem);
 			});
-			const sseError = (errmsg2, addNotRetrying) => {
+			const sseError = /* @__PURE__ */ __name((errmsg2, addNotRetrying) => {
 				sseID = 0;
 				eventSource.close();
 				eventSource = null;
@@ -6683,7 +6695,7 @@
 				} else {
 					connect(true);
 				}
-			};
+			}, "sseError");
 			eventSource.addEventListener("error", (e) => {
 				log("eventsource error", { e }, JSON.stringify(e));
 				sseError("Connection failed", true);
@@ -6699,14 +6711,14 @@
 					connect(true);
 				}, 3e3 + Math.floor(Math.random() * 5e3));
 			});
-			const checkParse = (fn) => {
+			const checkParse = /* @__PURE__ */ __name((fn) => {
 				try {
 					return fn();
 				} catch (err) {
 					window.alert("invalid event from server: " + (err.message || "(no message)"));
 					throw err;
 				}
-			};
+			}, "checkParse");
 			eventSource.addEventListener("start", (e) => {
 				const data = JSON.parse(e.data);
 				if (lastServerVersion && data.Version !== lastServerVersion) {
@@ -6912,9 +6924,9 @@
 					window.alert("Error processing changes (reloading advised): " + errmsg(err));
 				}
 			});
-		};
+		}, "connect");
 		connect(false);
-	};
+	}, "init");
 	window.addEventListener("load", async () => {
 		try {
 			await init();
@@ -6929,7 +6941,7 @@
 		pathname: window.location.pathname,
 		search: window.location.search
 	};
-	var showUnhandledError = (err, lineno, colno) => {
+	var showUnhandledError = /* @__PURE__ */ __name((err, lineno, colno) => {
 		console.log("unhandled error", err);
 		if (settings.ignoreErrorsUntil > (/* @__PURE__ */ new Date()).getTime() / 1e3) {
 			return;
@@ -6943,7 +6955,7 @@
 			stack = " (not available)";
 		}
 		const xerrmsg = err.toString();
-		const box = dom.div(css("unhandledErrorBox", { position: "absolute", bottom: "1ex", left: "1ex", backgroundColor: "rgba(255, 110, 110, .9)", maxWidth: "14em", padding: ".25em .5em", borderRadius: ".25em", fontSize: ".8em", wordBreak: "break-all", zIndex: zindexes.shortcut }), dom.div(style({ marginBottom: ".5ex" }), "" + xerrmsg), dom.clickbutton("Details", function click() {
+		const box = dom.div(css("unhandledErrorBox", { position: "absolute", bottom: "1ex", left: "1ex", backgroundColor: "rgba(255, 110, 110, .9)", maxWidth: "14em", padding: ".25em .5em", borderRadius: ".25em", fontSize: ".8em", wordBreak: "break-all", zIndex: zindexes.shortcut }), dom.div(style({ marginBottom: ".5ex" }), "" + xerrmsg), dom.clickbutton("Details", /* @__PURE__ */ __name(function click() {
 			box.remove();
 			let msg = `Mox version: ${moxversion} (${moxgoos}/${moxgoarch})
 Browser: ${window.navigator.userAgent}
@@ -6960,17 +6972,17 @@ Details of the error and browser:
 
 \`\`\`
 ` + msg + "```\n";
-			const remove = popup(style({ maxWidth: "60em" }), dom.h1("A JavaScript error occurred"), dom.pre(dom._class("mono"), css("unhandledErrorMsg", { backgroundColor: styles.backgroundColorMild, padding: "1ex", borderRadius: ".15em", border: "1px solid", borderColor: styles.borderColor, whiteSpace: "pre-wrap" }), msg), dom.br(), dom.div("There is a good chance this is a bug in Mox Webmail."), dom.div('Consider filing a bug report ("issue") at ', link("https://github.com/mjl-/mox/issues/new?title=" + encodeURIComponent('mox webmail js error: "' + xerrmsg + '"') + "&body=" + encodeURIComponent(body), "https://github.com/mjl-/mox/issues/new"), ". The link includes the error details."), dom.div("Before reporting you could check previous ", link('https://github.com/mjl-/mox/issues?q=is%3Aissue+"mox+webmail+js+error%3A"', "webmail bug reports"), "."), dom.br(), dom.div("Your feedback will help improve mox, thanks!"), dom.br(), dom.div(style({ textAlign: "right" }), dom.clickbutton("Close and silence errors for 1 week", function click2() {
+			const remove = popup(style({ maxWidth: "60em" }), dom.h1("A JavaScript error occurred"), dom.pre(dom._class("mono"), css("unhandledErrorMsg", { backgroundColor: styles.backgroundColorMild, padding: "1ex", borderRadius: ".15em", border: "1px solid", borderColor: styles.borderColor, whiteSpace: "pre-wrap" }), msg), dom.br(), dom.div("There is a good chance this is a bug in Mox Webmail."), dom.div('Consider filing a bug report ("issue") at ', link("https://github.com/mjl-/mox/issues/new?title=" + encodeURIComponent('mox webmail js error: "' + xerrmsg + '"') + "&body=" + encodeURIComponent(body), "https://github.com/mjl-/mox/issues/new"), ". The link includes the error details."), dom.div("Before reporting you could check previous ", link('https://github.com/mjl-/mox/issues?q=is%3Aissue+"mox+webmail+js+error%3A"', "webmail bug reports"), "."), dom.br(), dom.div("Your feedback will help improve mox, thanks!"), dom.br(), dom.div(style({ textAlign: "right" }), dom.clickbutton("Close and silence errors for 1 week", /* @__PURE__ */ __name(function click2() {
 				remove();
 				settingsPut({ ...settings, ignoreErrorsUntil: Math.round((/* @__PURE__ */ new Date()).getTime() / 1e3 + 7 * 24 * 3600) });
-			}), " ", dom.clickbutton("Close", function click2() {
+			}, "click")), " ", dom.clickbutton("Close", /* @__PURE__ */ __name(function click2() {
 				remove();
-			})));
-		}), " ", dom.clickbutton("Ignore", function click() {
+			}, "click"))));
+		}, "click")), " ", dom.clickbutton("Ignore", /* @__PURE__ */ __name(function click() {
 			box.remove();
-		}));
+		}, "click")));
 		document.body.appendChild(box);
-	};
+	}, "showUnhandledError");
 	window.addEventListener("unhandledrejection", (e) => {
 		if (!e.reason) {
 			return;

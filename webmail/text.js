@@ -1,7 +1,10 @@
 (() => {
+	var __defProp = Object.defineProperty;
+	var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
 	// .js/lib.js
 	var scriptblocks = [0, 128, 256, 384, 592, 688, 768, 880, 1024, 1280, 1328, 1424, 1536, 1792, 1872, 1920, 1984, 2048, 2112, 2144, 2160, 2208, 2304, 2432, 2560, 2688, 2816, 2944, 3072, 3200, 3328, 3456, 3584, 3712, 3840, 4096, 4256, 4352, 4608, 4992, 5024, 5120, 5760, 5792, 5888, 5920, 5952, 5984, 6016, 6144, 6320, 6400, 6480, 6528, 6624, 6656, 6688, 6832, 6912, 7040, 7104, 7168, 7248, 7296, 7312, 7360, 7376, 7424, 7552, 7616, 7680, 7936, 8192, 8304, 8352, 8400, 8448, 8528, 8592, 8704, 8960, 9216, 9280, 9312, 9472, 9600, 9632, 9728, 9984, 10176, 10224, 10240, 10496, 10624, 10752, 11008, 11264, 11360, 11392, 11520, 11568, 11648, 11744, 11776, 11904, 12032, 12272, 12288, 12352, 12448, 12544, 12592, 12688, 12704, 12736, 12784, 12800, 13056, 13312, 19904, 19968, 40960, 42128, 42192, 42240, 42560, 42656, 42752, 42784, 43008, 43056, 43072, 43136, 43232, 43264, 43312, 43360, 43392, 43488, 43520, 43616, 43648, 43744, 43776, 43824, 43888, 43968, 44032, 55216, 55296, 56192, 56320, 57344, 63744, 64256, 64336, 65024, 65040, 65056, 65072, 65104, 65136, 65280, 65520, 65536, 65664, 65792, 65856, 65936, 66e3, 66176, 66208, 66272, 66304, 66352, 66384, 66432, 66464, 66560, 66640, 66688, 66736, 66816, 66864, 66928, 67072, 67456, 67584, 67648, 67680, 67712, 67808, 67840, 67872, 67968, 68e3, 68096, 68192, 68224, 68288, 68352, 68416, 68448, 68480, 68608, 68736, 68864, 69216, 69248, 69312, 69376, 69424, 69488, 69552, 69600, 69632, 69760, 69840, 69888, 69968, 70016, 70112, 70144, 70272, 70320, 70400, 70656, 70784, 71040, 71168, 71264, 71296, 71424, 71680, 71840, 71936, 72096, 72192, 72272, 72368, 72384, 72448, 72704, 72816, 72960, 73056, 73440, 73472, 73648, 73664, 73728, 74752, 74880, 77712, 77824, 78896, 82944, 92160, 92736, 92784, 92880, 92928, 93760, 93952, 94176, 94208, 100352, 101120, 101632, 110576, 110592, 110848, 110896, 110960, 113664, 113824, 118528, 118784, 119040, 119296, 119488, 119520, 119552, 119648, 119808, 120832, 122624, 122880, 122928, 123136, 123536, 123584, 124112, 124896, 124928, 125184, 126064, 126208, 126464, 126976, 127024, 127136, 127232, 127488, 127744, 128512, 128592, 128640, 128768, 128896, 129024, 129280, 129536, 129648, 129792, 131072, 173824, 177984, 178208, 183984, 194560, 196608, 201552, 917504, 917760, 983040, 1048576];
-	var findBlock = (code) => {
+	var findBlock = /* @__PURE__ */ __name((code) => {
 		let s = 0;
 		let e = scriptblocks.length;
 		while (s < e - 1) {
@@ -13,8 +16,8 @@
 			}
 		}
 		return s;
-	};
-	var formatText = (e, s) => {
+	}, "findBlock");
+	var formatText = /* @__PURE__ */ __name((e, s) => {
 		if (!s) {
 			return;
 		}
@@ -34,7 +37,7 @@
 		let str = "";
 		let block = -1;
 		let mod = 1;
-		const put = (nextblock) => {
+		const put = /* @__PURE__ */ __name((nextblock) => {
 			if (n === 0 && nextblock === 0) {
 				mod = 0;
 			}
@@ -48,7 +51,7 @@
 			}
 			n++;
 			str = "";
-		};
+		}, "put");
 		for (const c of s) {
 			if (c === " " || c === "	" || c === "\r" || c === "\n") {
 				str += c;
@@ -65,8 +68,8 @@
 			str += c;
 		}
 		put(-1);
-	};
-	var _domKids = (e, l) => {
+	}, "formatText");
+	var _domKids = /* @__PURE__ */ __name((e, l) => {
 		l.forEach((c) => {
 			const xc = c;
 			if (typeof c === "string") {
@@ -108,97 +111,97 @@
 			}
 		});
 		return e;
-	};
+	}, "_domKids");
 	var dom = {
-		_kids: function(e, ...kl) {
+		_kids: /* @__PURE__ */ __name(function(e, ...kl) {
 			while (e.firstChild) {
 				e.removeChild(e.firstChild);
 			}
 			_domKids(e, kl);
-		},
-		_attrs: (x) => {
+		}, "_kids"),
+		_attrs: /* @__PURE__ */ __name((x) => {
 			return { _attrs: x };
-		},
-		_class: (...x) => {
+		}, "_attrs"),
+		_class: /* @__PURE__ */ __name((...x) => {
 			return { _class: x };
-		},
+		}, "_class"),
 		// The createElement calls are spelled out so typescript can derive function
 		// signatures with a specific HTML*Element return type.
-		div: (...l) => _domKids(document.createElement("div"), l),
-		span: (...l) => _domKids(document.createElement("span"), l),
-		a: (...l) => _domKids(document.createElement("a"), l),
-		input: (...l) => _domKids(document.createElement("input"), l),
-		textarea: (...l) => _domKids(document.createElement("textarea"), l),
-		select: (...l) => _domKids(document.createElement("select"), l),
-		option: (...l) => _domKids(document.createElement("option"), l),
-		clickbutton: (...l) => _domKids(document.createElement("button"), [attr.type("button"), ...l]),
-		submitbutton: (...l) => _domKids(document.createElement("button"), [attr.type("submit"), ...l]),
-		form: (...l) => _domKids(document.createElement("form"), l),
-		fieldset: (...l) => _domKids(document.createElement("fieldset"), l),
-		table: (...l) => _domKids(document.createElement("table"), l),
-		thead: (...l) => _domKids(document.createElement("thead"), l),
-		tbody: (...l) => _domKids(document.createElement("tbody"), l),
-		tfoot: (...l) => _domKids(document.createElement("tfoot"), l),
-		tr: (...l) => _domKids(document.createElement("tr"), l),
-		td: (...l) => _domKids(document.createElement("td"), l),
-		th: (...l) => _domKids(document.createElement("th"), l),
-		datalist: (...l) => _domKids(document.createElement("datalist"), l),
-		h1: (...l) => _domKids(document.createElement("h1"), l),
-		h2: (...l) => _domKids(document.createElement("h2"), l),
-		h3: (...l) => _domKids(document.createElement("h3"), l),
-		br: (...l) => _domKids(document.createElement("br"), l),
-		hr: (...l) => _domKids(document.createElement("hr"), l),
-		pre: (...l) => _domKids(document.createElement("pre"), l),
-		label: (...l) => _domKids(document.createElement("label"), l),
-		ul: (...l) => _domKids(document.createElement("ul"), l),
-		li: (...l) => _domKids(document.createElement("li"), l),
-		iframe: (...l) => _domKids(document.createElement("iframe"), l),
-		b: (...l) => _domKids(document.createElement("b"), l),
-		img: (...l) => _domKids(document.createElement("img"), l),
-		style: (...l) => _domKids(document.createElement("style"), l),
-		search: (...l) => _domKids(document.createElement("search"), l),
-		p: (...l) => _domKids(document.createElement("p"), l)
+		div: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("div"), l), "div"),
+		span: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("span"), l), "span"),
+		a: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("a"), l), "a"),
+		input: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("input"), l), "input"),
+		textarea: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("textarea"), l), "textarea"),
+		select: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("select"), l), "select"),
+		option: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("option"), l), "option"),
+		clickbutton: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("button"), [attr.type("button"), ...l]), "clickbutton"),
+		submitbutton: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("button"), [attr.type("submit"), ...l]), "submitbutton"),
+		form: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("form"), l), "form"),
+		fieldset: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("fieldset"), l), "fieldset"),
+		table: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("table"), l), "table"),
+		thead: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("thead"), l), "thead"),
+		tbody: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("tbody"), l), "tbody"),
+		tfoot: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("tfoot"), l), "tfoot"),
+		tr: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("tr"), l), "tr"),
+		td: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("td"), l), "td"),
+		th: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("th"), l), "th"),
+		datalist: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("datalist"), l), "datalist"),
+		h1: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("h1"), l), "h1"),
+		h2: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("h2"), l), "h2"),
+		h3: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("h3"), l), "h3"),
+		br: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("br"), l), "br"),
+		hr: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("hr"), l), "hr"),
+		pre: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("pre"), l), "pre"),
+		label: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("label"), l), "label"),
+		ul: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("ul"), l), "ul"),
+		li: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("li"), l), "li"),
+		iframe: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("iframe"), l), "iframe"),
+		b: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("b"), l), "b"),
+		img: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("img"), l), "img"),
+		style: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("style"), l), "style"),
+		search: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("search"), l), "search"),
+		p: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("p"), l), "p")
 	};
-	var _attr = (k, v) => {
+	var _attr = /* @__PURE__ */ __name((k, v) => {
 		const o = {};
 		o[k] = v;
 		return { _attrs: o };
-	};
+	}, "_attr");
 	var attr = {
-		title: (s) => _attr("title", s),
-		value: (s) => _attr("value", s),
-		type: (s) => _attr("type", s),
-		tabindex: (s) => _attr("tabindex", s),
-		src: (s) => _attr("src", s),
-		placeholder: (s) => _attr("placeholder", s),
-		href: (s) => _attr("href", s),
-		checked: (s) => _attr("checked", s),
-		selected: (s) => _attr("selected", s),
-		id: (s) => _attr("id", s),
-		datalist: (s) => _attr("datalist", s),
-		rows: (s) => _attr("rows", s),
-		target: (s) => _attr("target", s),
-		rel: (s) => _attr("rel", s),
-		required: (s) => _attr("required", s),
-		multiple: (s) => _attr("multiple", s),
-		download: (s) => _attr("download", s),
-		disabled: (s) => _attr("disabled", s),
-		draggable: (s) => _attr("draggable", s),
-		rowspan: (s) => _attr("rowspan", s),
-		colspan: (s) => _attr("colspan", s),
-		for: (s) => _attr("for", s),
-		role: (s) => _attr("role", s),
-		arialabel: (s) => _attr("aria-label", s),
-		arialive: (s) => _attr("aria-live", s),
-		name: (s) => _attr("name", s),
-		min: (s) => _attr("min", s),
-		max: (s) => _attr("max", s),
-		action: (s) => _attr("action", s),
-		method: (s) => _attr("method", s),
-		autocomplete: (s) => _attr("autocomplete", s),
-		list: (s) => _attr("list", s),
-		form: (s) => _attr("form", s),
-		size: (s) => _attr("size", s)
+		title: /* @__PURE__ */ __name((s) => _attr("title", s), "title"),
+		value: /* @__PURE__ */ __name((s) => _attr("value", s), "value"),
+		type: /* @__PURE__ */ __name((s) => _attr("type", s), "type"),
+		tabindex: /* @__PURE__ */ __name((s) => _attr("tabindex", s), "tabindex"),
+		src: /* @__PURE__ */ __name((s) => _attr("src", s), "src"),
+		placeholder: /* @__PURE__ */ __name((s) => _attr("placeholder", s), "placeholder"),
+		href: /* @__PURE__ */ __name((s) => _attr("href", s), "href"),
+		checked: /* @__PURE__ */ __name((s) => _attr("checked", s), "checked"),
+		selected: /* @__PURE__ */ __name((s) => _attr("selected", s), "selected"),
+		id: /* @__PURE__ */ __name((s) => _attr("id", s), "id"),
+		datalist: /* @__PURE__ */ __name((s) => _attr("datalist", s), "datalist"),
+		rows: /* @__PURE__ */ __name((s) => _attr("rows", s), "rows"),
+		target: /* @__PURE__ */ __name((s) => _attr("target", s), "target"),
+		rel: /* @__PURE__ */ __name((s) => _attr("rel", s), "rel"),
+		required: /* @__PURE__ */ __name((s) => _attr("required", s), "required"),
+		multiple: /* @__PURE__ */ __name((s) => _attr("multiple", s), "multiple"),
+		download: /* @__PURE__ */ __name((s) => _attr("download", s), "download"),
+		disabled: /* @__PURE__ */ __name((s) => _attr("disabled", s), "disabled"),
+		draggable: /* @__PURE__ */ __name((s) => _attr("draggable", s), "draggable"),
+		rowspan: /* @__PURE__ */ __name((s) => _attr("rowspan", s), "rowspan"),
+		colspan: /* @__PURE__ */ __name((s) => _attr("colspan", s), "colspan"),
+		for: /* @__PURE__ */ __name((s) => _attr("for", s), "for"),
+		role: /* @__PURE__ */ __name((s) => _attr("role", s), "role"),
+		arialabel: /* @__PURE__ */ __name((s) => _attr("aria-label", s), "arialabel"),
+		arialive: /* @__PURE__ */ __name((s) => _attr("aria-live", s), "arialive"),
+		name: /* @__PURE__ */ __name((s) => _attr("name", s), "name"),
+		min: /* @__PURE__ */ __name((s) => _attr("min", s), "min"),
+		max: /* @__PURE__ */ __name((s) => _attr("max", s), "max"),
+		action: /* @__PURE__ */ __name((s) => _attr("action", s), "action"),
+		method: /* @__PURE__ */ __name((s) => _attr("method", s), "method"),
+		autocomplete: /* @__PURE__ */ __name((s) => _attr("autocomplete", s), "autocomplete"),
+		list: /* @__PURE__ */ __name((s) => _attr("list", s), "list"),
+		form: /* @__PURE__ */ __name((s) => _attr("form", s), "form"),
+		size: /* @__PURE__ */ __name((s) => _attr("size", s), "size")
 	};
 
 	// .js/webmail/api.js
@@ -311,58 +314,58 @@
 		"Quoting": { "Name": "Quoting", "Docs": "", "Values": [{ "Name": "Default", "Value": "", "Docs": "" }, { "Name": "Bottom", "Value": "bottom", "Docs": "" }, { "Name": "Top", "Value": "top", "Docs": "" }] }
 	};
 	var parser = {
-		Request: (v) => parse("Request", v),
-		Query: (v) => parse("Query", v),
-		Filter: (v) => parse("Filter", v),
-		NotFilter: (v) => parse("NotFilter", v),
-		Page: (v) => parse("Page", v),
-		MessageItem: (v) => parse("MessageItem", v),
-		Message: (v) => parse("Message", v),
-		MessageEnvelope: (v) => parse("MessageEnvelope", v),
-		MessageAddress: (v) => parse("MessageAddress", v),
-		Domain: (v) => parse("Domain", v),
-		Attachment: (v) => parse("Attachment", v),
-		Part: (v) => parse("Part", v),
-		Envelope: (v) => parse("Envelope", v),
-		Address: (v) => parse("Address", v),
-		ParsedMessage: (v) => parse("ParsedMessage", v),
-		FromAddressSettings: (v) => parse("FromAddressSettings", v),
-		ComposeMessage: (v) => parse("ComposeMessage", v),
-		SubmitMessage: (v) => parse("SubmitMessage", v),
-		File: (v) => parse("File", v),
-		ForwardAttachments: (v) => parse("ForwardAttachments", v),
-		Mailbox: (v) => parse("Mailbox", v),
-		RecipientSecurity: (v) => parse("RecipientSecurity", v),
-		Settings: (v) => parse("Settings", v),
-		Ruleset: (v) => parse("Ruleset", v),
-		EventStart: (v) => parse("EventStart", v),
-		DomainAddressConfig: (v) => parse("DomainAddressConfig", v),
-		EventViewErr: (v) => parse("EventViewErr", v),
-		EventViewReset: (v) => parse("EventViewReset", v),
-		EventViewMsgs: (v) => parse("EventViewMsgs", v),
-		EventViewChanges: (v) => parse("EventViewChanges", v),
-		ChangeMsgAdd: (v) => parse("ChangeMsgAdd", v),
-		Flags: (v) => parse("Flags", v),
-		ChangeMsgRemove: (v) => parse("ChangeMsgRemove", v),
-		ChangeMsgFlags: (v) => parse("ChangeMsgFlags", v),
-		ChangeMsgThread: (v) => parse("ChangeMsgThread", v),
-		ChangeMailboxRemove: (v) => parse("ChangeMailboxRemove", v),
-		ChangeMailboxAdd: (v) => parse("ChangeMailboxAdd", v),
-		ChangeMailboxRename: (v) => parse("ChangeMailboxRename", v),
-		ChangeMailboxCounts: (v) => parse("ChangeMailboxCounts", v),
-		ChangeMailboxSpecialUse: (v) => parse("ChangeMailboxSpecialUse", v),
-		SpecialUse: (v) => parse("SpecialUse", v),
-		ChangeMailboxKeywords: (v) => parse("ChangeMailboxKeywords", v),
-		UID: (v) => parse("UID", v),
-		ModSeq: (v) => parse("ModSeq", v),
-		Validation: (v) => parse("Validation", v),
-		CSRFToken: (v) => parse("CSRFToken", v),
-		ThreadMode: (v) => parse("ThreadMode", v),
-		AttachmentType: (v) => parse("AttachmentType", v),
-		Localpart: (v) => parse("Localpart", v),
-		ViewMode: (v) => parse("ViewMode", v),
-		SecurityResult: (v) => parse("SecurityResult", v),
-		Quoting: (v) => parse("Quoting", v)
+		Request: /* @__PURE__ */ __name((v) => parse("Request", v), "Request"),
+		Query: /* @__PURE__ */ __name((v) => parse("Query", v), "Query"),
+		Filter: /* @__PURE__ */ __name((v) => parse("Filter", v), "Filter"),
+		NotFilter: /* @__PURE__ */ __name((v) => parse("NotFilter", v), "NotFilter"),
+		Page: /* @__PURE__ */ __name((v) => parse("Page", v), "Page"),
+		MessageItem: /* @__PURE__ */ __name((v) => parse("MessageItem", v), "MessageItem"),
+		Message: /* @__PURE__ */ __name((v) => parse("Message", v), "Message"),
+		MessageEnvelope: /* @__PURE__ */ __name((v) => parse("MessageEnvelope", v), "MessageEnvelope"),
+		MessageAddress: /* @__PURE__ */ __name((v) => parse("MessageAddress", v), "MessageAddress"),
+		Domain: /* @__PURE__ */ __name((v) => parse("Domain", v), "Domain"),
+		Attachment: /* @__PURE__ */ __name((v) => parse("Attachment", v), "Attachment"),
+		Part: /* @__PURE__ */ __name((v) => parse("Part", v), "Part"),
+		Envelope: /* @__PURE__ */ __name((v) => parse("Envelope", v), "Envelope"),
+		Address: /* @__PURE__ */ __name((v) => parse("Address", v), "Address"),
+		ParsedMessage: /* @__PURE__ */ __name((v) => parse("ParsedMessage", v), "ParsedMessage"),
+		FromAddressSettings: /* @__PURE__ */ __name((v) => parse("FromAddressSettings", v), "FromAddressSettings"),
+		ComposeMessage: /* @__PURE__ */ __name((v) => parse("ComposeMessage", v), "ComposeMessage"),
+		SubmitMessage: /* @__PURE__ */ __name((v) => parse("SubmitMessage", v), "SubmitMessage"),
+		File: /* @__PURE__ */ __name((v) => parse("File", v), "File"),
+		ForwardAttachments: /* @__PURE__ */ __name((v) => parse("ForwardAttachments", v), "ForwardAttachments"),
+		Mailbox: /* @__PURE__ */ __name((v) => parse("Mailbox", v), "Mailbox"),
+		RecipientSecurity: /* @__PURE__ */ __name((v) => parse("RecipientSecurity", v), "RecipientSecurity"),
+		Settings: /* @__PURE__ */ __name((v) => parse("Settings", v), "Settings"),
+		Ruleset: /* @__PURE__ */ __name((v) => parse("Ruleset", v), "Ruleset"),
+		EventStart: /* @__PURE__ */ __name((v) => parse("EventStart", v), "EventStart"),
+		DomainAddressConfig: /* @__PURE__ */ __name((v) => parse("DomainAddressConfig", v), "DomainAddressConfig"),
+		EventViewErr: /* @__PURE__ */ __name((v) => parse("EventViewErr", v), "EventViewErr"),
+		EventViewReset: /* @__PURE__ */ __name((v) => parse("EventViewReset", v), "EventViewReset"),
+		EventViewMsgs: /* @__PURE__ */ __name((v) => parse("EventViewMsgs", v), "EventViewMsgs"),
+		EventViewChanges: /* @__PURE__ */ __name((v) => parse("EventViewChanges", v), "EventViewChanges"),
+		ChangeMsgAdd: /* @__PURE__ */ __name((v) => parse("ChangeMsgAdd", v), "ChangeMsgAdd"),
+		Flags: /* @__PURE__ */ __name((v) => parse("Flags", v), "Flags"),
+		ChangeMsgRemove: /* @__PURE__ */ __name((v) => parse("ChangeMsgRemove", v), "ChangeMsgRemove"),
+		ChangeMsgFlags: /* @__PURE__ */ __name((v) => parse("ChangeMsgFlags", v), "ChangeMsgFlags"),
+		ChangeMsgThread: /* @__PURE__ */ __name((v) => parse("ChangeMsgThread", v), "ChangeMsgThread"),
+		ChangeMailboxRemove: /* @__PURE__ */ __name((v) => parse("ChangeMailboxRemove", v), "ChangeMailboxRemove"),
+		ChangeMailboxAdd: /* @__PURE__ */ __name((v) => parse("ChangeMailboxAdd", v), "ChangeMailboxAdd"),
+		ChangeMailboxRename: /* @__PURE__ */ __name((v) => parse("ChangeMailboxRename", v), "ChangeMailboxRename"),
+		ChangeMailboxCounts: /* @__PURE__ */ __name((v) => parse("ChangeMailboxCounts", v), "ChangeMailboxCounts"),
+		ChangeMailboxSpecialUse: /* @__PURE__ */ __name((v) => parse("ChangeMailboxSpecialUse", v), "ChangeMailboxSpecialUse"),
+		SpecialUse: /* @__PURE__ */ __name((v) => parse("SpecialUse", v), "SpecialUse"),
+		ChangeMailboxKeywords: /* @__PURE__ */ __name((v) => parse("ChangeMailboxKeywords", v), "ChangeMailboxKeywords"),
+		UID: /* @__PURE__ */ __name((v) => parse("UID", v), "UID"),
+		ModSeq: /* @__PURE__ */ __name((v) => parse("ModSeq", v), "ModSeq"),
+		Validation: /* @__PURE__ */ __name((v) => parse("Validation", v), "Validation"),
+		CSRFToken: /* @__PURE__ */ __name((v) => parse("CSRFToken", v), "CSRFToken"),
+		ThreadMode: /* @__PURE__ */ __name((v) => parse("ThreadMode", v), "ThreadMode"),
+		AttachmentType: /* @__PURE__ */ __name((v) => parse("AttachmentType", v), "AttachmentType"),
+		Localpart: /* @__PURE__ */ __name((v) => parse("Localpart", v), "Localpart"),
+		ViewMode: /* @__PURE__ */ __name((v) => parse("ViewMode", v), "ViewMode"),
+		SecurityResult: /* @__PURE__ */ __name((v) => parse("SecurityResult", v), "SecurityResult"),
+		Quoting: /* @__PURE__ */ __name((v) => parse("Quoting", v), "Quoting")
 	};
 	var defaultOptions = { slicesNullable: true, mapsNullable: true, nullableOptional: true };
 	var defaultBaseURL = (function() {
@@ -374,11 +377,14 @@
 		}
 		return location.protocol + "//" + location.host + p + "api/";
 	})();
-	var verifyArg = (path, v, typewords, toJS, allowUnknownKeys, types2, opts) => {
+	var verifyArg = /* @__PURE__ */ __name((path, v, typewords, toJS, allowUnknownKeys, types2, opts) => {
 		return new verifier(types2, toJS, allowUnknownKeys, opts).verify(path, v, typewords);
-	};
-	var parse = (name, v) => verifyArg(name, v, [name], true, false, types, defaultOptions);
+	}, "verifyArg");
+	var parse = /* @__PURE__ */ __name((name, v) => verifyArg(name, v, [name], true, false, types, defaultOptions), "parse");
 	var verifier = class {
+		static {
+			__name(this, "verifier");
+		}
 		types;
 		toJS;
 		allowUnknownKeys;
@@ -392,23 +398,23 @@
 		verify(path, v, typewords) {
 			typewords = typewords.slice(0);
 			const ww = typewords.shift();
-			const error = (msg) => {
+			const error = /* @__PURE__ */ __name((msg) => {
 				if (path != "") {
 					msg = path + ": " + msg;
 				}
 				throw new Error(msg);
-			};
+			}, "error");
 			if (typeof ww !== "string") {
 				error("bad typewords");
 				return;
 			}
 			const w = ww;
-			const ensure = (ok, expect) => {
+			const ensure = /* @__PURE__ */ __name((ok, expect) => {
 				if (!ok) {
 					error("got " + JSON.stringify(v) + ", expected " + expect);
 				}
 				return v;
-			};
+			}, "ensure");
 			switch (w) {
 				case "nullable":
 					if (v === null || v === void 0 && this.opts.nullableOptional) {
@@ -547,7 +553,7 @@
 	document.head.prepend(cssStyle);
 	var styleSheet = cssStyle.sheet;
 	var cssRules = {};
-	var ensureCSS = (selector, styles2, important) => {
+	var ensureCSS = /* @__PURE__ */ __name((selector, styles2, important) => {
 		const checkConsistency = location.hostname === "localhost";
 		if (cssRules[selector]) {
 			if (checkConsistency) {
@@ -582,11 +588,11 @@
 				st.setProperty(k, "" + v, important ? "important" : "");
 			}
 		}
-	};
-	var css = (className, styles2, important) => {
+	}, "ensureCSS");
+	var css = /* @__PURE__ */ __name((className, styles2, important) => {
 		ensureCSS("." + className, styles2, important);
 		return dom._class(className);
-	};
+	}, "css");
 	ensureCSS(":root", {
 		"--color": ["black", "#ddd"],
 		"--colorMild": ["#555", "#bbb"],
@@ -719,8 +725,8 @@
 		"image/apng",
 		"image/svg+xml"
 	];
-	var isImage = (a) => imageTypes.includes((a.Part.MediaType + "/" + a.Part.MediaSubType).toLowerCase());
-	var addLinks = (text) => {
+	var isImage = /* @__PURE__ */ __name((a) => imageTypes.includes((a.Part.MediaType + "/" + a.Part.MediaSubType).toLowerCase()), "isImage");
+	var addLinks = /* @__PURE__ */ __name((text) => {
 		const re = RegExp("(?:(http|https)://|mailto:)([:%0-9a-zA-Z._~!$&'/()*+,;=-]+@)?([\\[\\]0-9a-zA-Z.-]+)(:[0-9]+)?([:@%0-9a-zA-Z._~!$&'/()*+,;=-]*)(\\?[:@%0-9a-zA-Z._~!$&'/()*+,;=?-]*)?(#[:@%0-9a-zA-Z._~!$&'/()*+,;=?-]*)?");
 		const r = [];
 		while (text.length > 0) {
@@ -745,8 +751,8 @@
 			r.push(dom.a(url, attr.href(url), url.startsWith("mailto:") ? [] : [attr.target("_blank"), attr.rel("noopener noreferrer")]));
 		}
 		return r;
-	};
-	var renderText = (text) => {
+	}, "addLinks");
+	var renderText = /* @__PURE__ */ __name((text) => {
 		return dom.div(text.split("\n").map((line) => {
 			let q = 0;
 			for (const c of line) {
@@ -761,10 +767,10 @@
 			}
 			return dom.div(styleClasses.quoted[q % styleClasses.quoted.length], addLinks(line));
 		}));
-	};
+	}, "renderText");
 
 	// .js/webmail/text.js
-	var init = async () => {
+	var init = /* @__PURE__ */ __name(async () => {
 		const pm = parser.ParsedMessage(parsedMessage);
 		const mi = parser.MessageItem(messageItem);
 		const root = dom.div(dom.div(dom._class("pad", "mono", "textmulti"), css("msgTextPreformatted", { whiteSpace: "pre-wrap" }), (pm.Texts || []).map((t) => renderText(t.replace(/\r\n/g, "\n"))), (mi.Attachments || []).filter((f) => isImage(f)).map((f) => {
@@ -775,7 +781,7 @@
 			moxBeforeDisplay(root);
 		}
 		dom._kids(document.body, root);
-	};
+	}, "init");
 	init().catch((err) => {
 		window.alert("Error: " + (err.message || "(no message)"));
 	});
