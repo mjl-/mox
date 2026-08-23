@@ -194,19 +194,19 @@ func PolicyRecords(ctx context.Context) ([]PolicyRecord, error) {
 // Get returns an "sts" or "no-policy-found" in reportResult in most cases (when
 // not a local/internal error). It may add an "sts" result without policy contents
 // ("policy-string") in case of errors while fetching the policy.
-func Get(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain) (policy *mtasts.Policy, reportResult tlsrpt.Result, fresh bool, err error) {
+func Get(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain) (policy *mtasts.Policy, reportResult tlsrpt.Result, fresh bool, rerr error) {
 	log := mlog.New("mtastsdb", elog)
 	defer func() {
 		result := "ok"
-		if err != nil && errors.Is(err, ErrBackoff) {
+		if rerr != nil && errors.Is(rerr, ErrBackoff) {
 			result = "backoff"
-		} else if err != nil && errors.Is(err, ErrNotFound) {
+		} else if rerr != nil && errors.Is(rerr, ErrNotFound) {
 			result = "notfound"
-		} else if err != nil {
+		} else if rerr != nil {
 			result = "error"
 		}
 		metricGet.WithLabelValues(result).Inc()
-		log.Debugx("mtastsdb get result", err, slog.Any("domain", domain), slog.Bool("fresh", fresh))
+		log.Debugx("mtastsdb get result", rerr, slog.Any("domain", domain), slog.Bool("fresh", fresh))
 	}()
 
 	cachedPolicy, err := lookup(ctx, log, domain)

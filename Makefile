@@ -45,6 +45,9 @@ install-staticcheck:
 install-ineffassign:
 	CGO_ENABLED=0 go install github.com/gordonklaus/ineffassign@v0.1.0
 
+install-xshadow:
+	CGO_ENABLED=0 go install xmjl.nl/shadow/cmd/xshadow@latest
+
 check:
 	CGO_ENABLED=0 go vet -tags integration
 	CGO_ENABLED=0 go vet -tags website website/website.go
@@ -60,18 +63,12 @@ check:
 	CGO_ENABLED=0 staticcheck -tags errata rfc/errata.go
 	CGO_ENABLED=0 staticcheck -tags xr rfc/xr.go
 
-# needed for check-shadow
-install-shadow:
-	CGO_ENABLED=0 go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
-
-# having "err" shadowed is common, best to not have others
-check-shadow:
-	CGO_ENABLED=0 go vet -vettool=$$(which shadow) ./... 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags integration -vettool=$$(which shadow) 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags website -vettool=$$(which shadow) website/website.go 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags link -vettool=$$(which shadow) rfc/link.go 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags errata -vettool=$$(which shadow) rfc/errata.go 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which shadow) rfc/xr.go 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -vettool=$$(which xshadow) ./...
+	CGO_ENABLED=0 go vet -tags integration -vettool=$$(which xshadow)
+	CGO_ENABLED=0 go vet -tags website -vettool=$$(which xshadow) website/website.go
+	CGO_ENABLED=0 go vet -tags link -vettool=$$(which xshadow) rfc/link.go
+	CGO_ENABLED=0 go vet -tags errata -vettool=$$(which xshadow) rfc/errata.go
+	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which xshadow) rfc/xr.go
 
 fuzz:
 	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseSignature -fuzztime 5m ./dkim

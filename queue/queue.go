@@ -783,8 +783,8 @@ func msgqueueKick() {
 
 // NextAttemptAdd adds a duration to the NextAttempt for all matching messages, and
 // kicks the queue.
-func NextAttemptAdd(ctx context.Context, filter Filter, d time.Duration) (affected int, err error) {
-	err = DB.Write(ctx, func(tx *bstore.Tx) error {
+func NextAttemptAdd(ctx context.Context, filter Filter, d time.Duration) (affected int, rerr error) {
+	err := DB.Write(ctx, func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[Msg](tx)
 		if err := filter.apply(q); err != nil {
 			return err
@@ -811,7 +811,7 @@ func NextAttemptAdd(ctx context.Context, filter Filter, d time.Duration) (affect
 
 // NextAttemptSet sets NextAttempt for all matching messages to a new time, and
 // kicks the queue.
-func NextAttemptSet(ctx context.Context, filter Filter, t time.Time) (affected int, err error) {
+func NextAttemptSet(ctx context.Context, filter Filter, t time.Time) (affected int, rerr error) {
 	q := bstore.QueryDB[Msg](ctx, DB)
 	if err := filter.apply(q); err != nil {
 		return 0, err
@@ -825,8 +825,8 @@ func NextAttemptSet(ctx context.Context, filter Filter, t time.Time) (affected i
 }
 
 // HoldSet sets Hold for all matching messages and kicks the queue.
-func HoldSet(ctx context.Context, filter Filter, hold bool) (affected int, err error) {
-	err = DB.Write(ctx, func(tx *bstore.Tx) error {
+func HoldSet(ctx context.Context, filter Filter, hold bool) (affected int, rerr error) {
+	err := DB.Write(ctx, func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[Msg](tx)
 		if err := filter.apply(q); err != nil {
 			return err
@@ -846,7 +846,7 @@ func HoldSet(ctx context.Context, filter Filter, hold bool) (affected int, err e
 }
 
 // TransportSet changes the transport to use for the matching messages.
-func TransportSet(ctx context.Context, filter Filter, transport string) (affected int, err error) {
+func TransportSet(ctx context.Context, filter Filter, transport string) (affected int, rerr error) {
 	q := bstore.QueryDB[Msg](ctx, DB)
 	if err := filter.apply(q); err != nil {
 		return 0, err
@@ -877,9 +877,9 @@ func Drop(ctx context.Context, log mlog.Log, f Filter) (affected int, err error)
 	return failDrop(ctx, log, f, false)
 }
 
-func failDrop(ctx context.Context, log mlog.Log, filter Filter, fail bool) (affected int, err error) {
+func failDrop(ctx context.Context, log mlog.Log, filter Filter, fail bool) (affected int, rerr error) {
 	var msgs []Msg
-	err = DB.Write(ctx, func(tx *bstore.Tx) error {
+	err := DB.Write(ctx, func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[Msg](tx)
 		if err := filter.apply(q); err != nil {
 			return err
@@ -931,7 +931,7 @@ func failDrop(ctx context.Context, log mlog.Log, filter Filter, fail bool) (affe
 }
 
 // RequireTLSSet updates the RequireTLS field of matching messages.
-func RequireTLSSet(ctx context.Context, filter Filter, requireTLS *bool) (affected int, err error) {
+func RequireTLSSet(ctx context.Context, filter Filter, requireTLS *bool) (affected int, rerr error) {
 	q := bstore.QueryDB[Msg](ctx, DB)
 	if err := filter.apply(q); err != nil {
 		return 0, err

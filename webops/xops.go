@@ -588,7 +588,7 @@ func readPart(p message.Part, maxSize int64) (string, error) {
 
 // ReadableParts returns the contents of the first text and/or html parts,
 // descending into multiparts, truncated to maxSize bytes if longer.
-func ReadableParts(p message.Part, maxSize int64) (text string, html string, found bool, err error) {
+func ReadableParts(p message.Part, maxSize int64) (text string, html string, found bool, rerr error) {
 	// todo: may want to merge this logic with webmail's message parsing.
 
 	// For non-multipart messages, top-level part.
@@ -604,6 +604,7 @@ func ReadableParts(p message.Part, maxSize int64) (text string, html string, fou
 	// subparts unless we have a multipart/alternative.
 	// todo: we may have to look at disposition "inline".
 	var haveText, haveHTML bool
+	var err error
 	for _, pp := range p.Parts {
 		if isText(pp) {
 			haveText = true
@@ -627,8 +628,8 @@ func ReadableParts(p message.Part, maxSize int64) (text string, html string, fou
 	for _, pp := range p.Parts {
 		text, html, found, err = ReadableParts(pp, maxSize)
 		if found {
-			break
+			return text, html, found, err
 		}
 	}
-	return
+	return "", "", false, err
 }

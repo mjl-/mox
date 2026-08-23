@@ -608,7 +608,7 @@ func xrandom(n int) []byte {
 	return buf
 }
 
-func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.SendResult, err error) {
+func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.SendResult, rerr error) {
 	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/api.go:/MessageSubmit\( and ../webapisrv/server.go:/Send\(
 
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
@@ -1200,7 +1200,7 @@ func xmessageGet(ctx context.Context, acc *store.Account, msgID int64) (store.Me
 	return m, mb
 }
 
-func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (resp webapi.MessageGetResult, err error) {
+func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (resp webapi.MessageGetResult, rerr error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	log := reqInfo.Log
 	acc := reqInfo.Account
@@ -1316,7 +1316,7 @@ func (s server) MessageRawGet(ctx context.Context, req webapi.MessageRawGetReque
 	return msgr, nil
 }
 
-func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetRequest) (resp io.ReadCloser, err error) {
+func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetRequest) (resp io.ReadCloser, rerr error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	log := reqInfo.Log
 	acc := reqInfo.Account
@@ -1328,14 +1328,16 @@ func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetReq
 		msgr = acc.MessageReader(m)
 	})
 	defer func() {
-		if err != nil {
+		if rerr != nil {
 			err := msgr.Close()
 			log.Check(err, "cleaning up message reader")
 		}
 	}()
 
 	p, err := m.LoadPart(msgr)
-	xcheckf(err, "load parsed message")
+	if err != nil {
+		return nil, fmt.Errorf("load parsed message: %v", err)
+	}
 
 	for i, index := range req.PartPath {
 		if index < 0 || index >= len(p.Parts) {
