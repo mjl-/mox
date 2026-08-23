@@ -1213,10 +1213,8 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 		msgr = acc.MessageReader(m)
 	})
 	defer func() {
-		if err != nil {
-			err := msgr.Close()
-			log.Check(err, "cleaning up message reader")
-		}
+		err := msgr.Close()
+		log.Check(err, "cleaning up message reader")
 	}()
 
 	p, err := m.LoadPart(msgr)
