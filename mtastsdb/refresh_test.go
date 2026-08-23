@@ -104,8 +104,9 @@ func TestRefresh(t *testing.T) {
 	}()
 
 	mtasts.HTTPClient.Transport = &http.Transport{
-		Dial: func(network, addr string) (net.Conn, error) {
-			return net.Dial("tcp", l.Addr().String())
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, "tcp", l.Addr().String())
 		},
 		TLSClientConfig: &tls.Config{
 			RootCAs: pool,

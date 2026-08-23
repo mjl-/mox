@@ -1,6 +1,7 @@
 package mtastsdb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -144,7 +145,7 @@ func TestDB(t *testing.T) {
 
 	// Force refetch of policy, that will fail.
 	mtasts.HTTPClient.Transport = &http.Transport{
-		Dial: func(network, addr string) (net.Conn, error) {
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return nil, fmt.Errorf("bad")
 		},
 	}
