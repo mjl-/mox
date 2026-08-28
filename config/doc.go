@@ -271,6 +271,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# tickets may work around TLS interoperability issues. (optional)
 				TLSSessionTicketsDisabled: false
 
+				# Require a PROXY protocol v1 or v2 header on the dedicated SMTP port. Only
+				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# (optional)
+				ProxyProtocol:
+
+					# IP addresses or CIDR networks of proxies allowed to send PROXY protocol headers.
+					# At least one is required. (optional)
+					TrustedProxies:
+						-
+
 			# SMTP for submitting email, e.g. by email applications. Starts out in plain text,
 			# can be upgraded to TLS with the STARTTLS command. Prefer using Submissions which
 			# is always a TLS connection. (optional)
@@ -283,6 +293,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Do not require STARTTLS. Since users must login, this means password may be sent
 				# without encryption. Not recommended. (optional)
 				NoRequireSTARTTLS: false
+
+				# Require a PROXY protocol v1 or v2 header on the dedicated Submission port. Only
+				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# (optional)
+				ProxyProtocol:
+
+					# IP addresses or CIDR networks of proxies allowed to send PROXY protocol headers.
+					# At least one is required. (optional)
+					TrustedProxies:
+						-
 
 			# SMTP over TLS for submitting email, by email applications. Requires a TLS
 			# config. (optional)
@@ -300,6 +320,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# technique for Delta Chat. (optional)
 				EnabledOnHTTPS: false
 
+				# Require a PROXY protocol v1 or v2 header on the dedicated Submissions port. Only
+				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# (optional)
+				ProxyProtocol:
+
+					# IP addresses or CIDR networks of proxies allowed to send PROXY protocol headers.
+					# At least one is required. (optional)
+					TrustedProxies:
+						-
+
 			# IMAP for reading email, by email applications. Starts out in plain text, can be
 			# upgraded to TLS with the STARTTLS command. Prefer using IMAPS instead which is
 			# always a TLS connection. (optional)
@@ -312,6 +342,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Enable this only when the connection is otherwise encrypted (e.g. through a
 				# VPN). (optional)
 				NoRequireSTARTTLS: false
+
+				# Require a PROXY protocol v1 or v2 header on the dedicated IMAP port. Only
+				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# (optional)
+				ProxyProtocol:
+
+					# IP addresses or CIDR networks of proxies allowed to send PROXY protocol headers.
+					# At least one is required. (optional)
+					TrustedProxies:
+						-
 
 			# IMAP over TLS for reading email, by email applications. Requires a TLS config.
 			# (optional)
@@ -328,6 +368,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Mox on port 443. This is meant to be useful as a censorship circumvention
 				# technique for Delta Chat. (optional)
 				EnabledOnHTTPS: false
+
+				# Require a PROXY protocol v1 or v2 header on the dedicated IMAPS port. Only
+				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# (optional)
+				ProxyProtocol:
+
+					# IP addresses or CIDR networks of proxies allowed to send PROXY protocol headers.
+					# At least one is required. (optional)
+					TrustedProxies:
+						-
 
 			# Account web interface, for email users wanting to change their accounts, e.g.
 			# set new password, set new delivery rulesets. Default path is /. (optional)
