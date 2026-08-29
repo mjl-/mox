@@ -1243,15 +1243,19 @@ List available config examples, or print a specific example.
 
 # mox admin imapserve
 
-Initiate a preauthenticated IMAP connection on file descriptor 0.
+Initiate a preauthenticated IMAP connection on stdin/stdout.
+
+Data from stdin is copied to the IMAP server, and the responses from the IMAP
+server are copied to stdout.
 
 For use with tools that can do IMAP over tunneled connections, e.g. with SSH
-during migrations. TLS is not possible on the connection, and authentication
-does not require TLS.
+during migrations.
+
+TLS is not possible on the connection, and authentication does not require TLS.
 
 	usage: mox admin imapserve $preauthaddress
 	  -fd0
-	    	write IMAP to file descriptor 0 instead of stdout
+	    	write IMAP to file descriptor 0 (stdin) instead of stdout
 
 # mox checkupdate
 

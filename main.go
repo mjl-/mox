@@ -4096,14 +4096,18 @@ func ctlcmdReassignthreads(ctl *ctl, account string) {
 
 func cmdIMAPServe(c *cmd) {
 	c.params = "$preauthaddress"
-	c.help = `Initiate a preauthenticated IMAP connection on file descriptor 0.
+	c.help = `Initiate a preauthenticated IMAP connection on stdin/stdout.
+
+Data from stdin is copied to the IMAP server, and the responses from the IMAP
+server are copied to stdout.
 
 For use with tools that can do IMAP over tunneled connections, e.g. with SSH
-during migrations. TLS is not possible on the connection, and authentication
-does not require TLS.
+during migrations.
+
+TLS is not possible on the connection, and authentication does not require TLS.
 `
 	var fd0 bool
-	c.flag.BoolVar(&fd0, "fd0", false, "write IMAP to file descriptor 0 instead of stdout")
+	c.flag.BoolVar(&fd0, "fd0", false, "write IMAP to file descriptor 0 (stdin) instead of stdout")
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
@@ -4112,7 +4116,7 @@ does not require TLS.
 	address := args[0]
 	output := os.Stdout
 	if fd0 {
-		output = os.Stdout
+		output = os.Stdin
 	}
 	ctlcmdIMAPServe(xctl(), address, os.Stdin, output)
 }
