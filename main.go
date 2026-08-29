@@ -4127,7 +4127,8 @@ func ctlcmdIMAPServe(ctl *ctl, address string, input io.ReadCloser, output io.Wr
 		defer func() {
 			done <- struct{}{}
 		}()
-		_, err := io.Copy(output, ctl.conn)
+		r := io.MultiReader(io.LimitReader(ctl.r, int64(ctl.r.Buffered())), ctl.conn)
+		_, err := io.Copy(output, r)
 		if err == nil {
 			err = io.EOF
 		}
