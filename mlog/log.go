@@ -32,6 +32,16 @@ import (
 	"slices"
 )
 
+// LogModel allows to control new loggers created by mox packages
+//   - must be set prior to instantiating mox objects
+//   - default is text logging to standard output of all levels
+//   - mox has custom log levels like [LevelInfo]
+//   - value: [golang.org/x/exp/slog.New] creates a logger that may control:
+//   - — what [io.Writer] to send logging to, eg. standard output [os.Stdout] or file
+//   - — log format, eg. text or json
+//   - — log level eg. [github.com/mjl-/mox/mlog.LevelError]
+var LogModel atomic.Pointer[slog.Logger]
+
 var noctx = context.Background()
 
 var (
@@ -136,6 +146,9 @@ type Log struct {
 // New returns a Log that adds a "pkg" attribute. If logger is nil, a new
 // Logger is created with a custom handler.
 func New(pkg string, logger *slog.Logger) Log {
+	if logger == nil {
+		logger = LogModel.Load()
+	}
 	if logger == nil {
 		logger = slog.New(&handler{})
 	}
