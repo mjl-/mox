@@ -109,6 +109,7 @@ func (pr HoldRule) matches(m Msg) bool {
 	return pr.All() || pr.Account == m.SenderAccount || pr.SenderDomainStr == m.SenderDomainStr || pr.RecipientDomainStr == m.RecipientDomainStr
 }
 
+
 // Msg is a message in the queue.
 //
 // Use MakeMsg to make a message with fields that Add needs. Add will further set
@@ -141,7 +142,8 @@ type Msg struct {
 	Results            []MsgResult
 
 	Has8bit       bool   // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
-	SMTPUTF8      bool   // Whether message requires use of SMTPUTF8.
+	SMTPUTF8      bool   // Whether message requires use of SMTPUTF8, e.g. for non-ASCII in headers.
+	SMTPUTF8Addr  bool   // Whether envelope addresses (MAIL FROM/RCPT TO localparts) contain non-ASCII characters. Cannot be downgraded.
 	IsDMARCReport bool   // Delivery failures for DMARC reports are handled differently.
 	IsTLSReport   bool   // Delivery failures for TLS reports are handled differently.
 	Size          int64  // Full size of message, combined MsgPrefix with contents of message file.
@@ -255,6 +257,7 @@ func (m Msg) Retired(success bool, t, keepUntil time.Time) MsgRetired {
 		Results:              m.Results,
 		Has8bit:              m.Has8bit,
 		SMTPUTF8:             m.SMTPUTF8,
+		SMTPUTF8Addr:         m.SMTPUTF8Addr,
 		IsDMARCReport:        m.IsDMARCReport,
 		IsTLSReport:          m.IsTLSReport,
 		Size:                 m.Size,
@@ -295,6 +298,7 @@ type MsgRetired struct {
 
 	Has8bit       bool   // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
 	SMTPUTF8      bool   // Whether message requires use of SMTPUTF8.
+	SMTPUTF8Addr  bool   // Whether envelope addresses contain non-ASCII characters.
 	IsDMARCReport bool   // Delivery failures for DMARC reports are handled differently.
 	IsTLSReport   bool   // Delivery failures for TLS reports are handled differently.
 	Size          int64  // Full size of message, combined MsgPrefix with contents of message file.
@@ -600,7 +604,7 @@ func HoldRuleRemove(ctx context.Context, log mlog.Log, holdRuleID int64) error {
 
 // MakeMsg is a convenience function that sets the commonly used fields for a Msg.
 // messageID should include <>.
-func MakeMsg(sender, recipient smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, prefix []byte, requireTLS *bool, next time.Time, subject string) Msg {
+func MakeMsg(sender, recipient smtp.Path, has8bit, smtputf8, smtputf8Addr bool, size int64, messageID string, prefix []byte, requireTLS *bool, next time.Time, subject string) Msg {
 	return Msg{
 		SenderLocalpart:    sender.Localpart,
 		SenderDomain:       sender.IPDomain,
@@ -608,6 +612,7 @@ func MakeMsg(sender, recipient smtp.Path, has8bit, smtputf8 bool, size int64, me
 		RecipientDomain:    recipient.IPDomain,
 		Has8bit:            has8bit,
 		SMTPUTF8:           smtputf8,
+		SMTPUTF8Addr:       smtputf8Addr,
 		Size:               size,
 		MessageID:          messageID,
 		MsgPrefix:          prefix,
