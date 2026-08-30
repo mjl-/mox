@@ -93,6 +93,7 @@ func previewText(r io.Reader) (string, error) {
 	// We look quite a bit of lines ahead for trailing signatures with trailing empty lines.
 	var lines []string
 	scanner := bufio.NewScanner(r)
+	scanner.Split(scanPreviewLines)
 	ensureLines := func() {
 		for len(lines) < 10 && scanner.Scan() {
 			lines = append(lines, strings.TrimSpace(scanner.Text()))
@@ -185,6 +186,33 @@ func previewText(r io.Reader) (string, error) {
 	}
 
 	return result, scanner.Err()
+}
+
+// scanPreviewLines is bufio.ScanLines, except that a line filling the scanner's
+// buffer is returned as a token instead of failing the scan.
+//
+// A text/plain part can be a single very long logical line: quoted-printable
+// soft line breaks mean a body wrapped at 78 columns on the wire can decode
+// into one line of any length, and format=flowed produces the same. Plain
+// bufio.ScanLines answers that with ErrTooLong, which previewText returned and
+// Part.Preview turned into an error, causing the message to be rejected on
+// delivery and on IMAP APPEND. Refusing a message over a preview is severe: a
+// preview is advisory, and RFC 8970 makes no demand that one exists.
+//
+// Truncating loses nothing. Only the first few lines are examined and at most
+// 256 characters are returned, so the remainder of an over-long line could
+// never have reached the result.
+func scanPreviewLines(data []byte, atEOF bool) (int, []byte, error) {
+	advance, token, err := bufio.ScanLines(data, atEOF)
+	if err != nil || token != nil || atEOF {
+		return advance, token, err
+	}
+	// No newline in a full buffer: the scanner is about to give up, so hand back
+	// what there is and carry on with the rest of the line as the next token.
+	if len(data) >= bufio.MaxScanTokenSize {
+		return len(data), data, nil
+	}
+	return advance, token, err
 }
 
 // Any text inside these html elements (recursively) is ignored.
