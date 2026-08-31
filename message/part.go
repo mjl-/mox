@@ -149,9 +149,20 @@ func EnsurePart(elog *slog.Logger, strict bool, r io.ReaderAt, size int64) (Part
 }
 
 func fallbackPart(p Part, r io.ReaderAt, size int64) (Part, error) {
+	headerOffset, bodyOffset := p.HeaderOffset, p.BodyOffset
+	if bodyOffset <= headerOffset {
+		// Parsing stopped before the end of the header was found, e.g. due to a header
+		// line that is too long. Both offsets are still at the start of the header, which
+		// makes the whole message its body: FETCH BODY[HEADER] then returns nothing while
+		// BODY[TEXT] returns the header too. The header is there, so look for its end
+		// again, now without a limit on the length of a line.
+		if o, err := headerEnd(r, headerOffset); err == nil {
+			bodyOffset = o
+		}
+	}
 	np := Part{
-		HeaderOffset:            p.HeaderOffset,
-		BodyOffset:              p.BodyOffset,
+		HeaderOffset:            headerOffset,
+		BodyOffset:              bodyOffset,
 		EndOffset:               size,
 		MediaType:               "APPLICATION",
 		MediaSubType:            "OCTET-STREAM",
@@ -173,6 +184,32 @@ func fallbackPart(p Part, r io.ReaderAt, size int64) (Part, error) {
 	// By reading body, the number of lines and decoded size will be set.
 	_, err := io.Copy(io.Discard, np.Reader())
 	return np, err
+}
+
+// headerEnd returns the offset just after the empty line that ends the header
+// starting at offset, without a limit on the length of the lines in between. Used
+// to recover the split between header and body of a message we could not parse.
+func headerEnd(r io.ReaderAt, offset int64) (int64, error) {
+	sep := []byte("\r\n\r\n")
+	buf := make([]byte, 8*1024)
+	base := offset // Offset in r of buf[0].
+	have := 0
+	for {
+		n, err := r.ReadAt(buf[have:], base+int64(have))
+		have += n
+		if i := bytes.Index(buf[:have], sep); i >= 0 {
+			return base + int64(i+len(sep)), nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		// Buffer full without a match. Keep the trailing bytes that may hold the start of
+		// the separator and continue after them.
+		keep := len(sep) - 1
+		copy(buf, buf[have-keep:have])
+		base += int64(have - keep)
+		have = keep
+	}
 }
 
 // SetReaderAt sets r as reader for this part and all its sub parts, recursively.
