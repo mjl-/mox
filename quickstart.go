@@ -1105,7 +1105,7 @@ starting up. On Linux or FreeBSD, you may want to enable mox as a service.
 	} else if runtime.GOOS == "freebsd" {
 		xwritefile("mox.freebsd.rc", []byte(moxFreebsdRc), 0555)
 		cleanupPaths = append(cleanupPaths, "mox.freebsd.rc")
-		fmt.Printf(`See mox.freebsd.rc for a FreeBSD rc file. To enable and start as root:
+		fmt.Printf(`See mox.freebsd.rc for a FreeBSD rc file. To enable and start, run as root:
 
 	mkdir -p /usr/local/etc/rc.d/
 	cp -a mox.freebsd.rc /usr/local/etc/rc.d/mox
