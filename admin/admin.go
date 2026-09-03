@@ -124,7 +124,7 @@ func MakeAccountConfig(addr smtp.Address) config.Account {
 	}
 	account.AutomaticJunkFlags.Enabled = true
 	account.AutomaticJunkFlags.JunkMailboxRegexp = "^(junk|spam)"
-	account.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
+	account.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|introbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
 	account.SubjectPass.Period = 12 * time.Hour
 	return account
 }

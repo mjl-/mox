@@ -542,20 +542,16 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 		return false
 	}
 
-	for _, h := range s.SystemHandlers {
-		if handle(h) {
-			return
-		}
+	if slices.ContainsFunc(s.SystemHandlers, handle) {
+		return
 	}
 	if s.Webserver {
 		if WebHandle(nw, r, ipdom) {
 			return
 		}
 	}
-	for _, h := range s.ServiceHandlers {
-		if handle(h) {
-			return
-		}
+	if slices.ContainsFunc(s.ServiceHandlers, handle) {
+		return
 	}
 	nw.Handler = "(nomatch)"
 	http.NotFound(nw, r)
@@ -585,7 +581,13 @@ func Listen() {
 		for _, port := range ports {
 			srv := portServe[port]
 			for _, ip := range l.IPs {
-				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv, srv.NextProto)
+				// Since go1.27, the http.Server.TLSNextProto map is modified during
+				// http.Server.Serve instead of in http2.ConfigureServer. So clone it so it doesn't
+				// get modified concurrently when multiple listeners using the same config start
+				// serving.
+				nextProto := maps.Clone(srv.NextProto)
+
+				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv, nextProto)
 			}
 		}
 	}
@@ -995,6 +997,16 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
 		TLSNextProto:      nextProto,
 	}
+
+	// Set server.Protocols with http2 enabled or http2 won't work with go1.27 with
+	// http2.ConfigureServer and non-nil server.TLSNextProto.
+	if tlsConfig != nil {
+		var p http.Protocols
+		p.SetHTTP1(true)
+		p.SetHTTP2(true)
+		server.Protocols = &p
+	}
+
 	// By default, the Go 1.6 and above http.Server includes support for HTTP2.
 	// However, HTTP2 is negotiated via ALPN. Because we are configuring
 	// TLSNextProto above, we have to explicitly enable HTTP2 by importing http2
@@ -1003,6 +1015,7 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 	if err != nil {
 		pkglog.Fatalx("https: unable to configure http2", err)
 	}
+
 	serve := func() {
 		err := server.Serve(ln)
 		pkglog.Fatalx(protocol+": serve", err)

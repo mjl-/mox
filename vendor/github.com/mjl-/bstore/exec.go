@@ -467,7 +467,7 @@ func (e *exec[T]) nextKey(write, value bool) ([]byte, T, error) {
 // prefixMatch returns whether ik (index key) starts with the bytes from n elements
 // from field keys kl and primary key pk.
 func prefixMatch(ik []byte, n int, kl [][]byte, pk []byte) bool {
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var k []byte
 		if i < len(kl) {
 			k = kl[i]
@@ -561,7 +561,7 @@ func (e *exec[T]) checkFilter(p *pair[T]) (rok bool, rerr error) {
 			frv := rv.FieldByIndex(f.field.structField.Index)
 			n := frv.Len()
 			var have bool
-			for i := 0; i < n; i++ {
+			for i := range n {
 				if f.field.Type.ListElem.equal(frv.Index(i), f.rvalue) {
 					have = true
 					break

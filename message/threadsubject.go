@@ -91,8 +91,8 @@ func ThreadSubject(subject string, allowNull bool) (threadSubject string, isResp
 		for {
 			prevs := s
 			s = strings.TrimRight(s, " \t")
-			if strings.HasSuffix(s, "(fwd)") {
-				s = strings.TrimSuffix(s, "(fwd)")
+			if before, ok := strings.CutSuffix(s, "(fwd)"); ok {
+				s = before
 				isResponse = true
 			}
 			if s == prevs {

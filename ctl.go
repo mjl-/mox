@@ -1075,6 +1075,25 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 		}
 		xw.xclose()
 
+	case "accountaddresses":
+		/* protocol:
+		> "accountaddresses"
+		> account
+		< "ok" or error
+		< stream
+		*/
+		account := xctl.xread()
+		accConf, ok := mox.Conf.Account(account)
+		if !ok {
+			xctl.xerror("no such account")
+		}
+		xctl.xwriteok()
+		xw := xctl.writer()
+		for _, addr := range slices.Sorted(maps.Keys(accConf.Destinations)) {
+			fmt.Fprintf(xw, "%s\n", addr)
+		}
+		xw.xclose()
+
 	case "accountdisabled":
 		/* protocol:
 		> "accountdisabled"
@@ -1226,6 +1245,30 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 		err := admin.AddressRemove(ctx, address)
 		xctl.xcheck(err, "removing address")
 		xctl.xwriteok()
+
+	case "addressaccount":
+		/* protocol:
+		> "addressaccount"
+		> address
+		< "ok" or error
+		< account
+		*/
+		address := xctl.xread()
+		var addr smtp.Address
+		if strings.HasPrefix(address, "@") {
+			// Handle catchall address.
+			dom, err := dns.ParseDomain(address[1:])
+			xctl.xcheck(err, "parsing domain")
+			addr = smtp.Address{Domain: dom}
+		} else {
+			var err error
+			addr, err = smtp.ParseAddress(address)
+			xctl.xcheck(err, "parsing address")
+		}
+		account, _, _, _, err := mox.LookupAddress(addr.Localpart, addr.Domain, true, false, true)
+		xctl.xcheck(err, "looking up address")
+		xctl.xwriteok()
+		xctl.xwrite(account)
 
 	case "aliaslist":
 		/* protocol:
@@ -1399,15 +1442,15 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		s := ""
+		var s strings.Builder
 		for _, k := range keys {
 			ks := k
 			if ks == "" {
 				ks = "(default)"
 			}
-			s += ks + ": " + mlog.LevelStrings[l[k]] + "\n"
+			s.WriteString(ks + ": " + mlog.LevelStrings[l[k]] + "\n")
 		}
-		xctl.xstreamfrom(strings.NewReader(s))
+		xctl.xstreamfrom(strings.NewReader(s.String()))
 
 	case "setloglevels":
 		/* protocol:

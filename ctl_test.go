@@ -286,6 +286,9 @@ func TestCtl(t *testing.T) {
 	testctl(func(xctl *ctl) {
 		ctlcmdConfigAddressAdd(xctl, "mjl3@mox2.example", "mjl2")
 	})
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAddressAdd(xctl, "@mox2.example", "mjl2")
+	})
 
 	// Add a message.
 	testctl(func(xctl *ctl) {
@@ -301,14 +304,31 @@ func TestCtl(t *testing.T) {
 		ctlcmdConfigAddressRemove(xctl, "mjl3@mox2.example")
 	})
 
+	// "addressaccount"
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAddressAccount(xctl, "mjl2@mox2.example")
+	})
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAddressAccount(xctl, "catchall@mox2.example")
+	})
+
 	// "accountdisabled"
 	testctl(func(xctl *ctl) {
 		ctlcmdConfigAccountDisabled(xctl, "mjl2", "testing")
+	})
+	// "addressaccount"
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAddressAccount(xctl, "mjl2@mox2.example")
 	})
 
 	// "accountlist"
 	testctl(func(xctl *ctl) {
 		ctlcmdConfigAccountList(xctl)
+	})
+
+	// "accountaddresses"
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAccountAddresses(xctl, "mjl")
 	})
 
 	testctl(func(xctl *ctl) {
@@ -458,7 +478,7 @@ func TestCtl(t *testing.T) {
 			tcheck(t, err, "write message file")
 
 			acc.WithWLock(func() {
-				err = acc.DeliverMailbox(xctl.log, "Inbox", m, msgf)
+				err = acc.DeliverMailbox(xctl.log, "Inbox", "", m, msgf)
 				tcheck(t, err, "deliver message")
 			})
 		}

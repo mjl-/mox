@@ -407,7 +407,7 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 	}
 	acc.AutomaticJunkFlags.Enabled = true
 	acc.AutomaticJunkFlags.JunkMailboxRegexp = "^(junk|spam)"
-	acc.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
+	acc.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|introbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
 	acc.JunkFilter = &config.JunkFilter{
 		Threshold: 0.95,
 		Params: junk.Params{

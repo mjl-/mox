@@ -20,7 +20,7 @@ install: build0 frontend
 	CGO_ENABLED=0 go install
 
 race: build0
-	go build -race
+	CGO_ENABLED=1 go build -race
 
 test:
 	CGO_ENABLED=0 go test -fullpath -shuffle=on -coverprofile cover.out ./...
@@ -45,13 +45,16 @@ install-staticcheck:
 install-ineffassign:
 	CGO_ENABLED=0 go install github.com/gordonklaus/ineffassign@v0.1.0
 
+install-xshadow:
+	CGO_ENABLED=0 go install xmjl.nl/shadow/cmd/xshadow@latest
+
 check:
 	CGO_ENABLED=0 go vet -tags integration
 	CGO_ENABLED=0 go vet -tags website website/website.go
 	CGO_ENABLED=0 go vet -tags link rfc/link.go
 	CGO_ENABLED=0 go vet -tags errata rfc/errata.go
 	CGO_ENABLED=0 go vet -tags xr rfc/xr.go
-	GOARCH=386 CGO_ENABLED=0 go vet ./...
+	CGO_ENABLED=0 GOARCH=386 go vet ./...
 	CGO_ENABLED=0 ineffassign ./...
 	CGO_ENABLED=0 staticcheck ./...
 	CGO_ENABLED=0 staticcheck -tags integration
@@ -60,48 +63,38 @@ check:
 	CGO_ENABLED=0 staticcheck -tags errata rfc/errata.go
 	CGO_ENABLED=0 staticcheck -tags xr rfc/xr.go
 
-# needed for check-shadow
-install-shadow:
-	CGO_ENABLED=0 go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
-
-# having "err" shadowed is common, best to not have others
-check-shadow:
-	CGO_ENABLED=0 go vet -vettool=$$(which shadow) ./... 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags integration -vettool=$$(which shadow) 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags website -vettool=$$(which shadow) website/website.go 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags link -vettool=$$(which shadow) rfc/link.go 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags errata -vettool=$$(which shadow) rfc/errata.go 2>&1 | grep -v '"err"'
-	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which shadow) rfc/xr.go 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -vettool=$$(which xshadow) ./...
+	CGO_ENABLED=0 go vet -tags integration -vettool=$$(which xshadow)
+	CGO_ENABLED=0 go vet -tags website -vettool=$$(which xshadow) website/website.go
+	CGO_ENABLED=0 go vet -tags link -vettool=$$(which xshadow) rfc/link.go
+	CGO_ENABLED=0 go vet -tags errata -vettool=$$(which xshadow) rfc/errata.go
+	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which xshadow) rfc/xr.go
 
 fuzz:
-	go test -fullpath -fuzz FuzzParseSignature -fuzztime 5m ./dkim
-	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./dkim
-	go test -fullpath -fuzz . -fuzztime 5m ./dmarc
-	go test -fullpath -fuzz . -fuzztime 5m ./dmarcrpt
-	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./imapserver
-	go test -fullpath -fuzz . -fuzztime 5m ./imapclient
-	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./junk
-	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
-	go test -fullpath -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts
-	go test -fullpath -fuzz . -fuzztime 5m ./smtp
-	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./smtpserver
-	go test -fullpath -fuzz . -fuzztime 5m ./spf
-	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
-	go test -fullpath -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseSignature -fuzztime 5m ./dkim
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./dkim
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./dmarc
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./dmarcrpt
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./imapserver
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./imapclient
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./junk
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./smtp
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./smtpserver
+	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./spf
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
 
 govendor:
 	go mod tidy
 	go mod vendor
 	./genlicenses.sh
 
-modernize:
-	# skip slicescontains because it rewrites to unintuitive slices.ContainsFunc
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -category=-slicescontains -fix -test ./...
-
 test-integration:
 	-docker compose -f docker-compose-integration.yml kill
 	-docker compose -f docker-compose-integration.yml down
-	docker image build --pull --no-cache -f Dockerfile -t mox_integration_moxmail .
+	docker image build --pull --no-cache --build-arg EXTRA_PACKAGES="curl unbound" -f Dockerfile -t mox_integration_moxmail .
 	docker image build --pull --no-cache -f testdata/integration/Dockerfile.test -t mox_integration_test testdata/integration
 	-rm -rf testdata/integration/moxacmepebble/data
 	-rm -rf testdata/integration/moxmail2/data
@@ -124,6 +117,12 @@ fmt:
 	go fmt ./...
 	gofmt -w -s *.go */*.go
 
+fix:
+	go fix ./...
+
+modernize:
+	CGO_ENABLED=0 go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
+
 tswatch:
 	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'
 
@@ -131,26 +130,30 @@ node_modules/.bin/tsc:
 	-mkdir -p node_modules/.bin
 	npm ci --ignore-scripts
 
-install-js: node_modules/.bin/tsc
+node_modules/.bin/esbuild:
+	-mkdir -p node_modules/.bin
+	npm ci --ignore-scripts
+
+install-js: node_modules/.bin/tsc node_modules/.bin/esbuild
 
 install-js0:
 	-mkdir -p node_modules/.bin
-	npm install --ignore-scripts --save-dev --save-exact typescript@5.1.6
+	npm install --ignore-scripts --save-dev --save-exact typescript@7.0.2 esbuild@v0.28.1
 
-webmail/webmail.js: lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
-	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
+webmail/webmail.js: webmail/webmail.ts webmail/api.ts webmail/lib.ts lib.ts
+	./tsc.sh $@ webmail/webmail.ts webmail/api.ts webmail/lib.ts lib.ts
 
-webmail/msg.js: lib.ts webmail/api.ts webmail/lib.ts webmail/msg.ts
-	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/msg.ts
+webmail/msg.js: webmail/msg.ts webmail/api.ts webmail/lib.ts lib.ts
+	./tsc.sh $@ webmail/msg.ts webmail/api.ts webmail/lib.ts lib.ts
 
-webmail/text.js: lib.ts webmail/api.ts webmail/lib.ts webmail/text.ts
-	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/text.ts
+webmail/text.js: webmail/text.ts webmail/api.ts webmail/lib.ts lib.ts
+	./tsc.sh $@ webmail/text.ts webmail/api.ts webmail/lib.ts lib.ts
 
-webadmin/admin.js: lib.ts webadmin/api.ts webadmin/admin.ts
-	./tsc.sh $@ lib.ts webadmin/api.ts webadmin/admin.ts
+webadmin/admin.js: webadmin/admin.ts webadmin/api.ts lib.ts
+	./tsc.sh $@ webadmin/admin.ts webadmin/api.ts lib.ts
 
-webaccount/account.js: lib.ts webaccount/api.ts webaccount/account.ts
-	./tsc.sh $@ lib.ts webaccount/api.ts webaccount/account.ts
+webaccount/account.js: webaccount/account.ts webaccount/api.ts lib.ts
+	./tsc.sh $@ webaccount/account.ts webaccount/api.ts lib.ts
 
 frontend: node_modules/.bin/tsc webadmin/admin.js webaccount/account.js webmail/webmail.js webmail/msg.js webmail/text.js
 
@@ -159,6 +162,9 @@ install-apidiff:
 
 genapidiff:
 	./apidiff.sh
+
+fetch-publicsuffixlist:
+	curl https://publicsuffix.org/list/public_suffix_list.dat >publicsuffix/public_suffix_list.txt
 
 docker:
 	docker build -t mox:dev .

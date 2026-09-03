@@ -20,10 +20,11 @@
 package modfile
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -44,6 +45,7 @@ type File struct {
 	Replace   []*Replace
 	Retract   []*Retract
 	Tool      []*Tool
+	Ignore    []*Ignore
 
 	Syntax *FileSyntax
 }
@@ -96,6 +98,12 @@ type Retract struct {
 
 // A Tool is a single tool statement.
 type Tool struct {
+	Path   string
+	Syntax *Line
+}
+
+// An Ignore is a single ignore statement.
+type Ignore struct {
 	Path   string
 	Syntax *Line
 }
@@ -304,7 +312,7 @@ func parseToFile(file string, data []byte, fix VersionFixer, strict bool) (parse
 					})
 				}
 				continue
-			case "module", "godebug", "require", "exclude", "replace", "retract", "tool":
+			case "module", "godebug", "require", "exclude", "replace", "retract", "tool", "ignore":
 				for _, l := range x.Line {
 					f.add(&errs, x, l, x.Token[0], l.Token, fix, strict)
 				}
@@ -319,6 +327,7 @@ func parseToFile(file string, data []byte, fix VersionFixer, strict bool) (parse
 }
 
 var GoVersionRE = lazyregexp.New(`^([1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?([a-z]+[0-9]+)?$`)
+
 var laxGoVersionRE = lazyregexp.New(`^v?(([1-9][0-9]*)\.(0|[1-9][0-9]*))([^0-9].*)$`)
 
 // Toolchains must be named beginning with `go1`,
@@ -337,7 +346,7 @@ func (f *File) add(errs *ErrorList, block *LineBlock, line *Line, verb string, a
 	// and simply ignore those statements.
 	if !strict {
 		switch verb {
-		case "go", "module", "retract", "require":
+		case "go", "module", "retract", "require", "ignore":
 			// want these even for dependency go.mods
 		default:
 			return
@@ -360,7 +369,7 @@ func (f *File) add(errs *ErrorList, block *LineBlock, line *Line, verb string, a
 			Err:      err,
 		})
 	}
-	errorf := func(format string, args ...interface{}) {
+	errorf := func(format string, args ...any) {
 		wrapError(fmt.Errorf(format, args...))
 	}
 
@@ -531,6 +540,21 @@ func (f *File) add(errs *ErrorList, block *LineBlock, line *Line, verb string, a
 			Path:   s,
 			Syntax: line,
 		})
+
+	case "ignore":
+		if len(args) != 1 {
+			errorf("ignore directive expects exactly one argument")
+			return
+		}
+		s, err := parseString(&args[0])
+		if err != nil {
+			errorf("invalid quoted string: %v", err)
+			return
+		}
+		f.Ignore = append(f.Ignore, &Ignore{
+			Path:   s,
+			Syntax: line,
+		})
 	}
 }
 
@@ -551,7 +575,7 @@ func parseReplace(filename string, line *Line, verb string, args []string, fix V
 			Err:      err,
 		}
 	}
-	errorf := func(format string, args ...interface{}) *Error {
+	errorf := func(format string, args ...any) *Error {
 		return wrapError(fmt.Errorf(format, args...))
 	}
 
@@ -662,7 +686,7 @@ func (f *WorkFile) add(errs *ErrorList, line *Line, verb string, args []string, 
 			Err:      err,
 		})
 	}
-	errorf := func(format string, args ...interface{}) {
+	errorf := func(format string, args ...any) {
 		wrapError(fmt.Errorf(format, args...))
 	}
 
@@ -1249,6 +1273,17 @@ func (f *File) SetRequire(req []*Require) {
 // SetRequireSeparateIndirect will split it into a direct-only and indirect-only
 // block. This aids in the transition to separate blocks.
 func (f *File) SetRequireSeparateIndirect(req []*Require) {
+	f.setRequireSeparateIndirect(req, false)
+}
+
+// SetRequireAtMostTwo is like SetRequireSeparateIndirect but it aggressively
+// consolidates all requirements into at most two blocks (one direct, one indirect).
+// It ignores existing blocks and comments when deciding where to place requirements.
+func (f *File) SetRequireAtMostTwo(req []*Require) {
+	f.setRequireSeparateIndirect(req, true)
+}
+
+func (f *File) setRequireSeparateIndirect(req []*Require, simplify bool) {
 	// hasComments returns whether a line or block has comments
 	// other than "indirect".
 	hasComments := func(c Comments) bool {
@@ -1281,6 +1316,17 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 	}
 
 	// Examine existing require lines and blocks.
+	need := make(map[string]*Require)
+	for _, r := range req {
+		need[r.Mod.Path] = r
+	}
+	lineIndirect := make(map[*Line]bool)
+	for _, r := range f.Require {
+		if n := need[r.Mod.Path]; n != nil {
+			lineIndirect[r.Syntax] = n.Indirect
+		}
+	}
+
 	var (
 		// We may insert new requirements into the last uncommented
 		// direct-only and indirect-only blocks. We may also move requirements
@@ -1298,7 +1344,9 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 
 		// Track the block each requirement belongs to (if any) so we can
 		// move them later.
-		lineToBlock = make(map[*Line]*LineBlock)
+		lineToBlock           = make(map[*Line]*LineBlock)
+		directBlockComments   []Comment
+		indirectBlockComments []Comment
 	)
 	for i, stmt := range f.Syntax.Stmt {
 		switch stmt := stmt.(type) {
@@ -1340,6 +1388,24 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 			}
 			if allIndirect {
 				lastIndirectIndex = i
+			}
+			if simplify {
+				anyDirect := false
+				for _, line := range stmt.Line {
+					if ind, ok := lineIndirect[line]; ok && !ind {
+						anyDirect = true
+						break
+					}
+				}
+				target := &directBlockComments
+				if !anyDirect && len(stmt.Line) > 0 {
+					target = &indirectBlockComments
+				}
+				if len(*target) > 0 && len(stmt.Comments.Before) > 0 {
+					*target = append(*target, Comment{Token: "//"})
+				}
+				*target = append(*target, stmt.Comments.Before...)
+				stmt.Comments.Before = nil
 			}
 		}
 	}
@@ -1399,18 +1465,23 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 		lastIndirectBlock = ensureBlock(lastIndirectIndex)
 	}
 
+	if simplify {
+		if len(directBlockComments) > 0 {
+			lastDirectBlock.Comments.Before = append(lastDirectBlock.Comments.Before, directBlockComments...)
+		}
+		if len(indirectBlockComments) > 0 {
+			lastIndirectBlock.Comments.Before = append(lastIndirectBlock.Comments.Before, indirectBlockComments...)
+		}
+	}
+
 	// Delete requirements we don't want anymore.
 	// Update versions and indirect comments on requirements we want to keep.
 	// If a requirement is in last{Direct,Indirect}Block with the wrong
-	// indirect marking after this, or if the requirement is in an single
+	// indirect marking after this, or if the requirement is in a single
 	// uncommented mixed block (oneFlatUncommentedBlock), move it to the
 	// correct block.
 	//
 	// Some blocks may be empty after this. Cleanup will remove them.
-	need := make(map[string]*Require)
-	for _, r := range req {
-		need[r.Mod.Path] = r
-	}
 	have := make(map[string]*Require)
 	for _, r := range f.Require {
 		path := r.Mod.Path
@@ -1423,10 +1494,10 @@ func (f *File) SetRequireSeparateIndirect(req []*Require) {
 		r.setVersion(need[path].Mod.Version)
 		r.setIndirect(need[path].Indirect)
 		if need[path].Indirect &&
-			(oneFlatUncommentedBlock || lineToBlock[r.Syntax] == lastDirectBlock) {
+			(simplify || oneFlatUncommentedBlock || lineToBlock[r.Syntax] == lastDirectBlock) {
 			moveReq(r, lastIndirectBlock)
 		} else if !need[path].Indirect &&
-			(oneFlatUncommentedBlock || lineToBlock[r.Syntax] == lastIndirectBlock) {
+			(simplify || oneFlatUncommentedBlock || lineToBlock[r.Syntax] == lastIndirectBlock) {
 			moveReq(r, lastDirectBlock)
 		}
 	}
@@ -1466,7 +1537,7 @@ func (f *File) DropRequire(path string) error {
 	return nil
 }
 
-// AddExclude adds a exclude statement to the mod file. Errors if the provided
+// AddExclude adds an exclude statement to the mod file. Errors if the provided
 // version is not a canonical version string
 func (f *File) AddExclude(path, vers string) error {
 	if err := checkCanonicalVersion(path, vers); err != nil {
@@ -1571,7 +1642,7 @@ func (f *File) AddRetract(vi VersionInterval, rationale string) error {
 		r.Syntax = f.Syntax.addLine(nil, "retract", "[", AutoQuote(vi.Low), ",", AutoQuote(vi.High), "]")
 	}
 	if rationale != "" {
-		for _, line := range strings.Split(rationale, "\n") {
+		for line := range strings.SplitSeq(rationale, "\n") {
 			com := Comment{Token: "// " + line}
 			r.Syntax.Comment().Before = append(r.Syntax.Comment().Before, com)
 		}
@@ -1619,6 +1690,36 @@ func (f *File) DropTool(path string) error {
 	return nil
 }
 
+// AddIgnore adds a new ignore directive with the given path.
+// It does nothing if the ignore line already exists.
+func (f *File) AddIgnore(path string) error {
+	for _, t := range f.Ignore {
+		if t.Path == path {
+			return nil
+		}
+	}
+
+	f.Ignore = append(f.Ignore, &Ignore{
+		Path:   path,
+		Syntax: f.Syntax.addLine(nil, "ignore", path),
+	})
+
+	f.SortBlocks()
+	return nil
+}
+
+// DropIgnore removes an ignore directive with the given path.
+// It does nothing if no such ignore directive exists.
+func (f *File) DropIgnore(path string) error {
+	for _, t := range f.Ignore {
+		if t.Path == path {
+			t.Syntax.markRemoved()
+			*t = Ignore{}
+		}
+	}
+	return nil
+}
+
 func (f *File) SortBlocks() {
 	f.removeDups() // otherwise sorting is unsafe
 
@@ -1633,15 +1734,13 @@ func (f *File) SortBlocks() {
 		if !ok {
 			continue
 		}
-		less := lineLess
+		less := compareLine
 		if block.Token[0] == "exclude" && useSemanticSortForExclude {
-			less = lineExcludeLess
+			less = compareLineExclude
 		} else if block.Token[0] == "retract" {
-			less = lineRetractLess
+			less = compareLineRetract
 		}
-		sort.SliceStable(block.Line, func(i, j int) bool {
-			return less(block.Line[i], block.Line[j])
-		})
+		slices.SortStableFunc(block.Line, less)
 	}
 }
 
@@ -1657,10 +1756,10 @@ func (f *File) SortBlocks() {
 // retract directives are not de-duplicated since comments are
 // meaningful, and versions may be retracted multiple times.
 func (f *File) removeDups() {
-	removeDups(f.Syntax, &f.Exclude, &f.Replace, &f.Tool)
+	removeDups(f.Syntax, &f.Exclude, &f.Replace, &f.Tool, &f.Ignore)
 }
 
-func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, tool *[]*Tool) {
+func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, tool *[]*Tool, ignore *[]*Ignore) {
 	kill := make(map[*Line]bool)
 
 	// Remove duplicate excludes.
@@ -1685,8 +1784,7 @@ func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, to
 	// Remove duplicate replacements.
 	// Later replacements take priority over earlier ones.
 	haveReplace := make(map[module.Version]bool)
-	for i := len(*replace) - 1; i >= 0; i-- {
-		x := (*replace)[i]
+	for _, x := range slices.Backward(*replace) {
 		if haveReplace[x.Old] {
 			kill[x.Syntax] = true
 			continue
@@ -1719,6 +1817,24 @@ func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, to
 		*tool = newTool
 	}
 
+	if ignore != nil {
+		haveIgnore := make(map[string]bool)
+		for _, i := range *ignore {
+			if haveIgnore[i.Path] {
+				kill[i.Syntax] = true
+				continue
+			}
+			haveIgnore[i.Path] = true
+		}
+		var newIgnore []*Ignore
+		for _, i := range *ignore {
+			if !kill[i.Syntax] {
+				newIgnore = append(newIgnore, i)
+			}
+		}
+		*ignore = newIgnore
+	}
+
 	// Duplicate require and retract directives are not removed.
 
 	// Drop killed statements from the syntax tree.
@@ -1746,39 +1862,38 @@ func removeDups(syntax *FileSyntax, exclude *[]*Exclude, replace *[]*Replace, to
 	syntax.Stmt = stmts
 }
 
-// lineLess returns whether li should be sorted before lj. It sorts
-// lexicographically without assigning any special meaning to tokens.
-func lineLess(li, lj *Line) bool {
+// compareLine compares li and lj. It sorts lexicographically without assigning
+// any special meaning to tokens.
+func compareLine(li, lj *Line) int {
 	for k := 0; k < len(li.Token) && k < len(lj.Token); k++ {
 		if li.Token[k] != lj.Token[k] {
-			return li.Token[k] < lj.Token[k]
+			return cmp.Compare(li.Token[k], lj.Token[k])
 		}
 	}
-	return len(li.Token) < len(lj.Token)
+	return cmp.Compare(len(li.Token), len(lj.Token))
 }
 
-// lineExcludeLess reports whether li should be sorted before lj for lines in
-// an "exclude" block.
-func lineExcludeLess(li, lj *Line) bool {
+// compareLineExclude compares li and lj for lines in an "exclude" block.
+func compareLineExclude(li, lj *Line) int {
 	if len(li.Token) != 2 || len(lj.Token) != 2 {
 		// Not a known exclude specification.
 		// Fall back to sorting lexicographically.
-		return lineLess(li, lj)
+		return compareLine(li, lj)
 	}
 	// An exclude specification has two tokens: ModulePath and Version.
 	// Compare module path by string order and version by semver rules.
 	if pi, pj := li.Token[0], lj.Token[0]; pi != pj {
-		return pi < pj
+		return cmp.Compare(pi, pj)
 	}
-	return semver.Compare(li.Token[1], lj.Token[1]) < 0
+	return semver.Compare(li.Token[1], lj.Token[1])
 }
 
-// lineRetractLess returns whether li should be sorted before lj for lines in
-// a "retract" block. It treats each line as a version interval. Single versions
-// are compared as if they were intervals with the same low and high version.
+// compareLineRetract compares li and lj for lines in a "retract" block.
+// It treats each line as a version interval. Single versions are compared as
+// if they were intervals with the same low and high version.
 // Intervals are sorted in descending order, first by low version, then by
-// high version, using semver.Compare.
-func lineRetractLess(li, lj *Line) bool {
+// high version, using [semver.Compare].
+func compareLineRetract(li, lj *Line) int {
 	interval := func(l *Line) VersionInterval {
 		if len(l.Token) == 1 {
 			return VersionInterval{Low: l.Token[0], High: l.Token[0]}
@@ -1792,9 +1907,9 @@ func lineRetractLess(li, lj *Line) bool {
 	vii := interval(li)
 	vij := interval(lj)
 	if cmp := semver.Compare(vii.Low, vij.Low); cmp != 0 {
-		return cmp > 0
+		return -cmp
 	}
-	return semver.Compare(vii.High, vij.High) > 0
+	return -semver.Compare(vii.High, vij.High)
 }
 
 // checkCanonicalVersion returns a non-nil error if vers is not a canonical

@@ -49,7 +49,7 @@ var moxService string
 var moxFreebsdRc string
 
 func cmdQuickstart(c *cmd) {
-	c.params = "[-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]"
+	c.params = "[-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
 Quickstart writes configuration files, prints initial admin and account
@@ -139,8 +139,8 @@ output of "mox config describe-domains" and see the output of
 	fatalf := func(format string, args ...any) {
 		// We remove in reverse order because dirs would have been created first and must
 		// be removed last, after their files have been removed.
-		for i := len(cleanupPaths) - 1; i >= 0; i-- {
-			p := cleanupPaths[i]
+		for _, p := range slices.Backward(cleanupPaths) {
+
 			if err := os.Remove(p); err != nil {
 				log.Printf("cleaning up %q: %s", p, err)
 			}
@@ -957,11 +957,12 @@ and check the admin page for the needed DNS records.`)
 	if err := sconf.Describe(&destBuf, destsExample); err != nil {
 		fatalf("describing destination example: %v", err)
 	}
-	ndests := odests + "# If you receive email from mailing lists, you may want to configure them like the\n# example below (remove the empty/false SMTPMailRegexp and IsForward).\n# If you are receiving forwarded email, see the IsForwarded option in a Ruleset.\n"
+	var ndests strings.Builder
+	ndests.WriteString(odests + "# If you receive email from mailing lists, you may want to configure them like the\n# example below (remove the empty/false SMTPMailRegexp and IsForward).\n# If you are receiving forwarded email, see the IsForwarded option in a Ruleset.\n")
 	for _, line := range strings.Split(destBuf.String(), "\n")[1:] {
-		ndests += "#\t\t" + line + "\n"
+		ndests.WriteString("#\t\t" + line + "\n")
 	}
-	dconfstr := strings.ReplaceAll(db.String(), odests, ndests)
+	dconfstr := strings.ReplaceAll(db.String(), odests, ndests.String())
 	xwritefile(filepath.FromSlash("config/domains.conf"), []byte(dconfstr), 0660)
 
 	// Verify config.

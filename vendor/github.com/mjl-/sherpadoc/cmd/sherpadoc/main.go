@@ -58,6 +58,7 @@ var (
 	packagePath         = flag.String("package-path", ".", "of source code to parse")
 	replace             = flag.String("replace", "", "comma-separated list of type replacements, e.g. \"somepkg.SomeType string\"")
 	rename              = flag.String("rename", "", "comma-separated list of type renames as used with a package selector, e.g. \"somepkg SomeName OtherName\"")
+	dropfields          = flag.String("dropfields", "", "comma-separated list of paths to struct fields to drop, e.g. \"somepkg.SomeType.SomeField\"")
 	title               = flag.String("title", "", "title of the API, default is the name of the type of the main API")
 	adjustFunctionNames = flag.String("adjust-function-names", "", `by default, the first character of function names is turned into lower case; with "lowerWord" the first string of upper case characters is lower cased, with "none" the name is left as is`)
 	sortfuncs           = flag.Bool("sort-funcs", false, "sort functions within section by name")
@@ -106,17 +107,9 @@ type namedType struct {
 	Kind   typeKind
 	Fields []*field // For kind is typeStruct.
 	// For kind is typeInts
-	IntValues []struct {
-		Name  string
-		Value int64
-		Docs  string
-	}
+	IntValues []sherpadoc.IntValue
 	// For kind is typeStrings
-	StringValues []struct {
-		Name  string
-		Value string
-		Docs  string
-	}
+	StringValues []sherpadoc.StringValue
 }
 
 type function struct {
@@ -150,6 +143,14 @@ type renameSrc struct {
 }
 
 var renames = map[renameSrc]string{}
+
+type dropField struct {
+	Pkg    string
+	Struct string
+	Field  string
+}
+
+var fieldDrops = map[dropField]bool{}
 
 func usage() {
 	log.Println("usage: sherpadoc [flags] section")
@@ -187,6 +188,25 @@ func main() {
 				to[l[2]] = true
 			}
 			renames[src] = l[2]
+		}
+	}
+
+	if *dropfields != "" {
+		for _, s := range strings.Split(*dropfields, ",") {
+			t := strings.Split(s, ".")
+			if len(t) != 3 {
+				log.Printf("field to drop, %s, must have 2 dots", s)
+				usage()
+			}
+			if t[0] == "" || t[1] == "" || t[2] == "" {
+				log.Printf("field to drop, pkg %q, struct %q, field %q, must all be non-empty", t[0], t[1], t[2])
+				usage()
+			}
+			if strings.ToUpper(t[2][:1]) != t[2][:1] {
+				log.Printf("field to drop, %q, must be an exported field", t[2])
+				usage()
+			}
+			fieldDrops[dropField{t[0], t[1], t[2]}] = true
 		}
 	}
 

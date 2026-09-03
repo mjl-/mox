@@ -61,24 +61,28 @@ type Field struct {
 	Typewords []string
 }
 
+type IntValue struct {
+	Name  string
+	Value int64
+	Docs  string
+}
+
 // Ints is a type representing an enum with integers as types.
 type Ints struct {
 	Name   string
 	Docs   string
-	Values []struct {
-		Name  string
-		Value int64
-		Docs  string
-	}
+	Values []IntValue
+}
+
+type StringValue struct {
+	Name  string
+	Value string
+	Docs  string
 }
 
 // Strings is a type representing an enum with strings as values.
 type Strings struct {
 	Name   string
 	Docs   string
-	Values []struct {
-		Name  string
-		Value string
-		Docs  string
-	}
+	Values []StringValue
 }

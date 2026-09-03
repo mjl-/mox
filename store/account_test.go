@@ -38,6 +38,47 @@ func tcompare(t *testing.T, got, expect any) {
 	}
 }
 
+func TestJunkFlagsForMailboxMove(t *testing.T) {
+	conf := config.Account{
+		Introbox: "Introbox",
+		AutomaticJunkFlags: config.AutomaticJunkFlags{
+			Enabled: true,
+		},
+	}
+	conf.JunkMailbox = regexp.MustCompile("^junk$")
+	conf.NotJunkMailbox = regexp.MustCompile("^(inbox|archive)$")
+
+	introbox := Mailbox{ID: 1, Name: "Introbox"}
+	inbox := Mailbox{ID: 2, Name: "Inbox"}
+	junkmb := Mailbox{ID: 3, Name: "Junk"}
+	archive := Mailbox{ID: 4, Name: "Archive"}
+	other := Mailbox{ID: 5, Name: "Other"}
+
+	m := Message{MailboxOrigID: introbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(introbox, inbox, conf)
+	if m.MailboxOrigID != inbox.ID || m.MailboxDestinedID != 0 || m.Junk || !m.Notjunk {
+		t.Fatalf("positive introbox move not recorded: %#v", m)
+	}
+
+	m = Message{MailboxOrigID: introbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(introbox, junkmb, conf)
+	if m.MailboxOrigID != inbox.ID || m.MailboxDestinedID != 0 || !m.Junk || m.Notjunk {
+		t.Fatalf("negative introbox move not recorded: %#v", m)
+	}
+
+	m = Message{MailboxOrigID: introbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(introbox, archive, conf)
+	if m.MailboxOrigID != inbox.ID || m.MailboxDestinedID != 0 || m.Junk || !m.Notjunk {
+		t.Fatalf("positive introbox move not recorded: %#v", m)
+	}
+
+	m = Message{MailboxOrigID: introbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(introbox, other, conf)
+	if m.MailboxOrigID != introbox.ID || m.MailboxDestinedID != inbox.ID || m.Junk || m.Notjunk {
+		t.Fatalf("unrelated introbox move changed reputation destination: %#v", m)
+	}
+}
+
 func TestMailbox(t *testing.T) {
 	log := mlog.New("store", nil)
 	os.RemoveAll("../testdata/store/data")
@@ -368,7 +409,7 @@ func TestNextMessageID(t *testing.T) {
 	m := Message{
 		Size: int64(len(msgData)),
 	}
-	err = acc.DeliverMailbox(log, "Inbox", &m, mf)
+	err = acc.DeliverMailbox(log, "Inbox", "", &m, mf)
 	tcheck(t, err, "deliver mailbox")
 	if m.ID != 2 {
 		t.Fatalf("got message id %d, expected 2", m.ID)
@@ -403,7 +444,7 @@ func TestNextMessageID(t *testing.T) {
 	m = Message{
 		Size: int64(len(msgData)),
 	}
-	err = acc.DeliverMailbox(log, "Inbox", &m, mf)
+	err = acc.DeliverMailbox(log, "Inbox", "", &m, mf)
 	tcheck(t, err, "deliver mailbox")
 	if m.ID != msgFilesPerDir+1 {
 		t.Fatalf("got message id %d, expected $msgFilesPerDir+1", m.ID)

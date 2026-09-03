@@ -149,7 +149,6 @@ support:
 - Recognize common deliverability issues and help postmasters solve them
 - JMAP, IMAP OBJECTID extension, IMAP JMAPACCESS extension
 - Calendaring with CalDAV/iCal
-- Introbox, to which first-time senders are delivered
 - Add special IMAP mailbox ("Queue?") that contains queued but
   undelivered messages, updated with IMAP flags/keywords/tags and message headers.
 - External addresses in aliases/lists.

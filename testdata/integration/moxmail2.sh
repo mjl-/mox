@@ -2,8 +2,6 @@
 set -x # print commands
 set -e # exit on failed command
 
-apk add unbound
-
 (rm -r /tmp/mox 2>/dev/null || exit 0) # clean slate
 mkdir /tmp/mox
 cd /tmp/mox

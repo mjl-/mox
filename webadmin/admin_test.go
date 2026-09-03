@@ -436,12 +436,11 @@ func TestCheckDomain(t *testing.T) {
 		"mox.example": domain,
 	}
 
-	// Make a dialer that fails immediately before actually connecting.
-	done := make(chan struct{})
-	close(done)
-	dialer := &net.Dialer{Deadline: time.Now().Add(-time.Second), Cancel: done}
-
-	checkDomain(ctxbg, resolver, dialer, "mox.example")
+	// Make sure we don't actually try to connect to anything by using a canceled
+	// context.
+	ctxdone, cancel := context.WithCancel(t.Context())
+	cancel()
+	checkDomain(ctxdone, resolver, &net.Dialer{}, "mox.example")
 	// todo: check returned data
 
 	Admin{}.Domains(ctxbg)             // todo: check results

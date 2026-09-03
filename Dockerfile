@@ -8,7 +8,8 @@ FROM alpine:latest
 WORKDIR /mox
 COPY --from=build /build/mox /bin/mox
 
-RUN apk add --no-cache tzdata
+ARG EXTRA_PACKAGES=""
+RUN apk add --no-cache tzdata ${EXTRA_PACKAGES}
 
 # SMTP for incoming message delivery.
 EXPOSE 25/tcp

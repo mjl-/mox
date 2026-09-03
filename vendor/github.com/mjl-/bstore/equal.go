@@ -62,7 +62,7 @@ func (ft fieldType) equal(ov, v reflect.Value) (r bool) {
 		if on != n {
 			return false
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if !ft.ListElem.equal(ov.Index(i), v.Index(i)) {
 				return false
 			}
@@ -70,7 +70,7 @@ func (ft fieldType) equal(ov, v reflect.Value) (r bool) {
 		return true
 	case kindArray:
 		n := ft.ArrayLength
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if !ft.ListElem.equal(ov.Index(i), v.Index(i)) {
 				return false
 			}

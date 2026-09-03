@@ -325,7 +325,7 @@ func parseAddress(s string, utf8 bool) (smtp.Path, error) {
 	if err != nil {
 		return smtp.Path{}, fmt.Errorf("parsing domain: %v", err)
 	}
-	var lp string
+	var lp strings.Builder
 	var esc string
 	lead := strings.Join(t[:len(t)-1], "@")
 	for _, c := range lead {
@@ -340,19 +340,19 @@ func parseAddress(s string, utf8 bool) (smtp.Path, error) {
 				if err != nil {
 					return smtp.Path{}, fmt.Errorf("parsing localpart with hexpoint: %v", err)
 				}
-				lp += string(rune(c))
+				lp.WriteString(string(rune(c)))
 				esc = ""
 			} else {
 				esc += string(c)
 			}
 		} else {
-			lp += string(c)
+			lp.WriteString(string(c))
 		}
 	}
 	if esc != "" {
 		return smtp.Path{}, fmt.Errorf("parsing localpart: unfinished embedded unicode char")
 	}
-	localpart, err := smtp.ParseLocalpart(lp)
+	localpart, err := smtp.ParseLocalpart(lp.String())
 	if err != nil {
 		return smtp.Path{}, fmt.Errorf("parsing localpart: %v", err)
 	}
@@ -362,15 +362,15 @@ func parseAddress(s string, utf8 bool) (smtp.Path, error) {
 
 func removeComments(s string) string {
 	n := 0
-	r := ""
+	var r strings.Builder
 	for _, c := range s {
 		if c == '(' {
 			n++
 		} else if c == ')' && n > 0 {
 			n--
 		} else if n == 0 {
-			r += string(c)
+			r.WriteString(string(c))
 		}
 	}
-	return r
+	return r.String()
 }

@@ -1,4 +1,4 @@
-// Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
+/* Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten. */
 
 /*
 Webmail is a self-contained webmail client.
@@ -83,6 +83,19 @@ Enable consistency checking in UI updates:
 - todo: mobile-friendly version. should perhaps be a completely different app, because it is so different.
 */
 
+import {dom, style, attr, prop, ElemArg} from '../lib'
+import {css, ensureCSS, styles, styleClasses, equalAddress, formatAddress, formatAddressShort, formatEmail, loadMsgheaderView, isImage, renderText, formatDomain, join} from './lib'
+import * as api from './api'
+
+// If we had to reload with a cache buster after a server update, the URL will
+// start with ?v=.... Remove it and load again.
+const reloadURL = URL.parse(window.location.href)
+if (reloadURL?.search.startsWith('?v=')) {
+	const l = reloadURL.search.split('&', 2)
+	reloadURL.search = l.length === 2 ? '?'+l[1] : ''
+	window.location.href = reloadURL.toString()
+}
+
 class ConsistencyError extends Error {
 }
 
@@ -104,6 +117,7 @@ ensureCSS('button, .button, select', {backgroundColor: styles.buttonBackground, 
 ensureCSS('button, .button, select, a.button:visited', {color: styles.color})
 ensureCSS('button.active, .button.active, button.active:hover, .button.active:hover', {backgroundColor: styles.highlightBackground})
 ensureCSS('button:hover:not(:disabled), .button:hover:not(:disabled), select:hover:not(:disabled)', {backgroundColor: styles.buttonHoverBackground})
+ensureCSS('button.active:hover:not(:disabled), .button.active:hover:not(:disabled)', {backgroundColor: styles.highlightBackgroundHover})
 ensureCSS('button:disabled, .button:disabled, select:disabled', {opacity: .5})
 ensureCSS('input, textarea', {backgroundColor: styles.backgroundColor, color: styles.color, border: '1px solid', borderColor: '#888', borderRadius: '.15em', padding: '0 .15em'})
 ensureCSS('input:hover:not(:disabled), textarea:hover:not(:disabled)', {borderColor: styles.colorMilder})
@@ -120,7 +134,7 @@ const yscrollStyle = css('yscroll', {overflowY: 'scroll', position: 'absolute', 
 const yscrollAutoStyle = css('yscrollAuto', {overflowY: 'auto', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0})
 
 // Input elements that automatically grow based on input, with additional JS.
-const autosizeStyle = css('autosize', {display: 'inline-grid', maxWidth: '90vw'})
+css('autosize', {display: 'inline-grid', maxWidth: '90vw'})
 ensureCSS('.autosize.input', {gridArea: '1 / 2'})
 ensureCSS('.autosize::after', {content: 'attr(data-value)', marginRight: '1em', lineHeight: 0, visibility: 'hidden', whiteSpace: 'pre-wrap', overflowX: 'hidden'})
 
@@ -143,6 +157,7 @@ try {
 } catch (err) {}
 
 let accountSettings: api.Settings
+let introboxMailbox: string = ''
 
 const defaultSettings = {
 	mailboxesWidth: 240,
@@ -152,7 +167,7 @@ const defaultSettings = {
 	msglistflagsWidth: 40, // Width in pixels of flags column in message list.
 	msglistageWidth: 70, // Width in pixels of age column.
 	msglistfromPct: 30, // Percentage of remaining width in message list to use for "from" column. The remainder is for the subject.
-	refine: '', // Refine filters, e.g. '', 'attachments', 'read', 'unread', 'label:...'.
+	refine: '', // Refine filters, e.g. '', 'attachments', 'read', 'unread', 'flagged', 'label:...'.
 	orderAsc: false, // Order from most recent to least recent by default.
 	ignoreErrorsUntil: 0, // For unhandled javascript errors/rejected promises, we normally show a popup for details, but users can ignore them for a week at a time.
 	mailboxCollapsed: {} as {[mailboxID: number]: boolean}, // Mailboxes that are collapsed.
@@ -247,6 +262,11 @@ let rejectsMailbox: string = ''
 
 // Last known server version. For asking to reload.
 let lastServerVersion: string = ''
+
+// Timers for marking messages as read or non-junk. Maps Message.ID to list of
+// setTimeout timer id's. These timer id's are canceled when messages are
+// permanently deleted.
+let scheduledTimers = new Map<number, number[]>()
 
 const login = async (reason: string) => {
 	popupOpen = true // Prevent global key event handler from consuming keys.
@@ -383,7 +403,7 @@ const showShortcut = (c: string) => {
 	shortcutElem.remove()
 	dom._kids(shortcutElem, c)
 	document.body.appendChild(shortcutElem)
-	shortcutTimer = setTimeout(() => {
+	shortcutTimer = window.setTimeout(() => {
 		shortcutElem.remove()
 		shortcutTimer = 0
 	}, 1500)
@@ -802,6 +822,9 @@ const refineFilters = (f: api.Filter, notf: api.NotFilter): [api.Filter, api.Not
 			f.Labels = (f.Labels || []).concat(['\\Seen'])
 		} else if (refine === 'attachments') {
 			f.Attachments = 'any' as api.AttachmentType
+		} else if (refine === 'flagged') {
+			f.Labels = [...(f.Labels || [])]
+			f.Labels = (f.Labels || []).concat(['\\Flagged'])
 		} else if (refine.startsWith('label:')) {
 			f.Labels = [...(f.Labels || [])]
 			f.Labels = (f.Labels || []).concat([refine.substring('label:'.length)])
@@ -856,22 +879,35 @@ const focusPlaceholder = (s: string): any[] => {
 }
 
 // Parse a location hash, with either mailbox or search terms, and optional
-// selected message id. The special "#compose " hash, used for handling
-// "mailto:"-links, must be handled before calling this function.
+// selected message id, and/or draft message to compose. The special "#compose "
+// hash, used for handling "mailto:"-links, must be handled before calling this
+// function.
 //
 // Examples:
 // #Inbox
 // #Inbox,1
+// #Inbox,1,compose:123
 // #search mb:Inbox
 // #search mb:Inbox,1
-const parseLocationHash = (mailboxlistView: MailboxlistView): [string | undefined, number, api.Filter, api.NotFilter] => {
+const parseLocationHash = (mailboxlistView: MailboxlistView): [string | undefined, number, number, api.Filter, api.NotFilter] => {
 	let hash = decodeURIComponent((window.location.hash || '#').substring(1))
+
+	// Pick off ",compose:<number>" at the end.
+	let editMsgid = 0
+	const em = hash.match(/,compose:([0-9]+)$/)
+	if (em) {
+		editMsgid = parseInt(em[1])
+		hash = hash.substring(0, hash.length-em[0].length)
+	}
+
+	// Pick off ",<number>" at the end, for selected message.
 	const m = hash.match(/,([0-9]+)$/)
 	let msgid = 0
 	if (m) {
 		msgid = parseInt(m[1])
-		hash = hash.substring(0, hash.length-(','.length+m[1].length))
+		hash = hash.substring(0, hash.length-m[0].length)
 	}
+
 	let initmailbox, initsearch
 	if (hash.startsWith('search ')) {
 		initsearch = hash.substring('search '.length).trim()
@@ -893,7 +929,7 @@ const parseLocationHash = (mailboxlistView: MailboxlistView): [string | undefine
 		}
 		notf = newNotFilter()
 	}
-	return [initsearch, msgid, f, notf]
+	return [initsearch, msgid, editMsgid, f, notf]
 }
 
 // For HTMLElements like fieldset, input, buttons. We make it easy to disable
@@ -960,7 +996,7 @@ const withDisabled = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promis
 		elem.disabled = true
 		return await p
 	} catch (err) {
-		console.log({err})
+		log({err})
 		window.alert('Error: ' + errmsg(err))
 		throw err
 	} finally {
@@ -1423,13 +1459,15 @@ type ComposeOptions = {
 
 interface ComposeView {
 	root: HTMLElement
+	MsgID: number // Of saved draft. Used in URL hash.
 	key: (k: string, e: KeyboardEvent) => Promise<void>
 	unsavedChanges: () => boolean
+	save: () => Promise<void>
 }
 
 let composeView: ComposeView | null = null
 
-const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
+const compose = (opts: ComposeOptions, listMailboxes: listMailboxes, setLocationHash: setLocationHash) => {
 	log('compose', opts)
 
 	if (composeView) {
@@ -1517,6 +1555,8 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID)
 		try {
 			draftMessageID = await draftSavePromise
+			cv.MsgID = draftMessageID
+			setLocationHash() // For ',compose:<number>' suffix.
 		} finally {
 			draftSavePromise = Promise.resolve(0)
 		}
@@ -1572,6 +1612,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		}
 		composeElem.remove()
 		composeView = null
+		setLocationHash()
 	}
 
 	const cmdSave = async () => {
@@ -1634,6 +1675,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		await client.MessageSubmit(message)
 		composeElem.remove()
 		composeView = null
+		setLocationHash()
 	}
 
 	const cmdSend = async () => {
@@ -1931,7 +1973,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	const localdatetime = (d: Date) => localdate(d) + 'T' + pad0(d.getHours()) + ':' + pad0(d.getMinutes()) + ':00'
 	const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 	const scheduleTimeChanged = () => {
-		console.log('datetime change', scheduleTime.value)
+		log('datetime change', scheduleTime.value)
 		dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()])
 	}
 
@@ -2211,12 +2253,48 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		body.focus()
 	}
 
-	composeView = {
+	const cv = {
 		root: composeElem,
+		MsgID: draftMessageID,
 		key: keyHandler(shortcuts),
 		unsavedChanges: unsavedChanges,
+		save: cmdSave,
 	}
-	return composeView
+	composeView = cv
+	setLocationHash()
+}
+
+const composeDraft = async (mi: api.MessageItem, pm: api.ParsedMessage, listMailboxes: listMailboxes, setLocationHash: setLocationHash) => {
+	const m = mi.Message
+	const draftMailboxID = listMailboxes().find(mb => mb.Draft)?.ID
+
+	if (m.MailboxID !== draftMailboxID) {
+		throw new Error('only messages in draft mailbox can be edited')
+	}
+
+	// Compose based on message. Most information is available, we just need to find
+	// the ID of the stored message this is a reply/forward to, based in In-Reply-To
+	// header.
+	const env = mi.Envelope
+	let refMsgID = 0
+	if (env.InReplyTo) {
+		refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo))
+	}
+
+	const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i)
+	const opts: ComposeOptions = {
+		from: (env.From || []),
+		to: (env.To || []).map(a => formatAddress(a)),
+		cc: (env.CC || []).map(a => formatAddress(a)),
+		bcc: (env.BCC || []).map(a => formatAddress(a)),
+		replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
+		subject: env.Subject,
+		isForward: isForward,
+		body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+		responseMessageID: refMsgID,
+		draftMessageID: m.ID,
+	}
+	compose(opts, listMailboxes, setLocationHash)
 }
 
 // Show popover to edit labels for msgs.
@@ -2293,7 +2371,7 @@ const movePopover = (e: MouseEvent, mailboxes: api.Mailbox[], msgs: api.Message[
 						async function click() {
 							const moveMsgs = msgs.filter(m => m.MailboxID !== mb.ID)
 							const msgIDs = moveMsgs.map(m => m.ID)
-							await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID))
+							await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID, false))
 							if (moveMsgs.length === 1) {
 								await moveAskRuleset(moveMsgs[0].ID, moveMsgs[0].MailboxID, mb, mailboxes)
 							}
@@ -2422,7 +2500,7 @@ interface MsgitemView {
 	// the threadRoot or otherwise if its threadRoot isn't collapsed.
 	threadRoot: () => MsgitemView
 	isCollapsedThreadRoot: () => boolean
-	descendants: () => MsgitemView[] // Flattened list of all descendents.
+	descendants: () => MsgitemView[] // Flattened list of all descendants.
 	findDescendant: (match: (dmiv: MsgitemView) => boolean) => MsgitemView | null
 	lastDescendant: () => MsgitemView | null
 
@@ -2457,7 +2535,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 		if (envelopeIdentity(mi.Envelope.BCC || [])) {
 			identityHeader.push(identityTag('bcc', 'You are in the BCC header'))
 		}
-		// todo: don't include this if this is a message to a mailling list, based on list-* headers.
+		// todo: don't include this if this is a message to a mailing list, based on list-* headers.
 		if (identityHeader.length === 0) {
 			identityHeader.push(identityTag('-', 'You are not in any To, From, CC, BCC header. Could message to a mailing list or Bcc without Bcc message header.'))
 		}
@@ -2557,7 +2635,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 		}
 
 		// For threaded messages, we draw the subject/first-line indented, and with a
-		// charactering indicating the relationship.
+		// character indicating the relationship.
 		// todo: show different arrow is message is a forward? we can tell by the message flag, it will likely be a message the user sent.
 		let threadChar = ''
 		let threadCharTitle = ''
@@ -2910,7 +2988,7 @@ let attachmentView: {key: (k: string, e: KeyboardEvent) => Promise<void>} | null
 
 // MsgView is the display of a single message.
 // refineKeyword is called when a user clicks a label, to filter on those.
-const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: listMailboxes, possibleLabels: possibleLabels, messageLoaded: () => void, refineKeyword: (kw: string) => Promise<void>, parsedMessageOpt?: api.ParsedMessage): MsgView => {
+const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: listMailboxes, setLocationHash: setLocationHash, possibleLabels: possibleLabels, messageLoaded: () => void, refineKeyword: (kw: string) => Promise<void>, parsedMessageOpt?: api.ParsedMessage): MsgView => {
 	const mi = miv.messageitem
 	const m = mi.Message
 
@@ -2989,7 +3067,9 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				if (mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
 					const from = mi.Envelope.From[0]
 					const name = from.Name || formatEmail(from)
-					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, {weekday: "short", year: "numeric", month: "short", day: "numeric"}) + ' at ' + mi.Envelope.Date.toLocaleTimeString()
+					// If message did not have Date header, we'll get the Go zero value, with year 1. Use time received instead in that case.
+					const dt = mi.Envelope.Date.getFullYear() === 1 ?  m.Received : mi.Envelope.Date
+					const datetime = dt.toLocaleDateString(undefined, {weekday: "short", year: "numeric", month: "short", day: "numeric"}) + ' at ' + dt.toLocaleTimeString()
 					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n'
 				}
 				body = '\n\n' + sig + '\n' + onWroteLine + body
@@ -3016,7 +3096,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			// for cross-posted messages in other mailboxes.
 			archiveReferenceMailboxID: msglistView.activeMailbox()?.ID || m.MailboxID,
 		}
-		compose(opts, listMailboxes)
+		compose(opts, listMailboxes, setLocationHash)
 	}
 
 	const reply = async (all: boolean) => {
@@ -3091,34 +3171,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 	}
 	const cmdComposeDraft = async () => {
-		if (m.MailboxID !== draftMailboxID) {
-			return
-		}
-
-		// Compose based on message. Most information is available, we just need to find
-		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
-		// header.
-		const env = mi.Envelope
-		let refMsgID = 0
-		if (env.InReplyTo) {
-			refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo))
-		}
-
 		const pm = await parsedMessagePromise
-		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i)
-		const opts: ComposeOptions = {
-			from: (env.From || []),
-			to: (env.To || []).map(a => formatAddress(a)),
-			cc: (env.CC || []).map(a => formatAddress(a)),
-			bcc: (env.BCC || []).map(a => formatAddress(a)),
-			replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
-			subject: env.Subject,
-			isForward: isForward,
-			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
-			responseMessageID: refMsgID,
-			draftMessageID: m.ID,
-		}
-		compose(opts, listMailboxes)
+		composeDraft(mi, pm, listMailboxes, setLocationHash)
 	}
 
 	const cmdToggleHeaders = async () => {
@@ -3539,7 +3593,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		dom._kids(msgcontentElem)
 		dom._kids(msgscrollElem, elem)
 		dom._kids(msgcontentElem, msgscrollElem)
-		renderAttachments() // Rerender opaciy on inline images.
+		renderAttachments() // Rerender opacity on inline images.
 	}
 	const loadHTML = (): void => {
 		urlType = 'html'
@@ -3551,7 +3605,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				css('msgIframeHTML', {position: 'absolute', width: '100%', height: '100%'}),
 			)
 		)
-		renderAttachments() // Rerender opaciy on inline images.
+		renderAttachments() // Rerender opacity on inline images.
 	}
 	const loadHTMLexternal = (): void => {
 		urlType = 'htmlexternal'
@@ -3563,7 +3617,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				css('msgIframeHTML', {position: 'absolute', width: '100%', height: '100%'}),
 			)
 		)
-		renderAttachments() // Rerender opaciy on inline images.
+		renderAttachments() // Rerender opacity on inline images.
 	}
 
 	const mv: MsgView = {
@@ -3645,20 +3699,43 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 
 		messageLoaded()
 
+		// Add and remove timer id's for marking message as read or non-junk. These id's
+		// are canceled when the corresponding messages are permanently removed, to prevent
+		// error messages about operations on no longer existing messages.
+		const tidAdd = (tid: number) => {
+			const l = scheduledTimers.get(miv.messageitem.Message.ID) || []
+			l.push(tid)
+			scheduledTimers.set(miv.messageitem.Message.ID, l)
+		}
+		const tidRemove = (tid: number) => {
+			const l = scheduledTimers.get(miv.messageitem.Message.ID) || []
+			const i = l.indexOf(tid)
+			if (i >= 0) {
+				l.splice(i, 1)
+			}
+			if (l.length === 0) {
+				scheduledTimers.delete(miv.messageitem.Message.ID)
+			}
+		}
+
 		if (!miv.messageitem.Message.Seen) {
-			window.setTimeout(async () => {
+			const tid = window.setTimeout(async () => {
 				if (!miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID()) {
 					await withStatus('Marking current message as read', client.FlagsAdd([miv.messageitem.Message.ID], ['\\seen']))
 				}
+				tidRemove(tid)
 			}, 500)
+			tidAdd(tid)
 		}
 		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
-			window.setTimeout(async () => {
-				const mailboxIsReject = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && mb.Name === rejectsMailbox)
-				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
+			const tid = window.setTimeout(async () => {
+				const mailboxSpecial = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && (mb.Name === rejectsMailbox || mb.Name == introboxMailbox))
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxSpecial()) {
 					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']))
 				}
+				tidRemove(tid)
 			}, 5*1000)
+			tidAdd(tid)
 		}
 	})()
 
@@ -3776,7 +3853,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	const cmdArchive = async () => {
 		const mb = listMailboxes().find(mb => mb.Archive)
 		if (mb) {
-			await withStatus('Moving to archive mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID))
+			await withStatus('Moving to archive mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true))
 		} else {
 			window.alert('No mailbox configured for archiving yet.')
 		}
@@ -3785,12 +3862,21 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 		if (!window.confirm('Are you sure you want to permanently delete?')) {
 			return
 		}
-		await withStatus('Permanently deleting messages', client.MessageDelete(mlv.selected().map(miv => miv.messageitem.Message.ID)))
+		const ids = mlv.selected().map(miv => miv.messageitem.Message.ID)
+		// Cancel pending timers that may mark these messages as read or non-junk, to
+		// prevent error messages about non-existent (removed) messages.
+		for (const id of ids) {
+			for (const tid of (scheduledTimers.get(id) || [])) {
+				window.clearTimeout(tid)
+			}
+			scheduledTimers.delete(id)
+		}
+		await withStatus('Permanently deleting messages', client.MessageDelete(ids))
 	}
 	const cmdTrash = async () => {
 		const mb = listMailboxes().find(mb => mb.Trash)
 		if (mb) {
-			await withStatus('Moving to trash mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID))
+			await withStatus('Moving to trash mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true))
 		} else {
 			window.alert('No mailbox configured for trash yet.')
 		}
@@ -3798,7 +3884,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	const cmdJunk = async () => {
 		const mb = listMailboxes().find(mb => mb.Junk)
 		if (mb) {
-			await withStatus('Moving to junk mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID))
+			await withStatus('Moving to junk mailbox', client.MessageMove(moveActionMsgIDs(mb.ID), mb.ID, true))
 		} else {
 			window.alert('No mailbox configured for junk yet.')
 		}
@@ -3820,7 +3906,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	}
 	const cmdUnmute = async () => { await withStatus('Unmuting thread', client.ThreadMute(mlv.selected().map(miv => miv.messageitem.Message.ID), false)) }
 
-	const seletedRoots = () => {
+	const selectedRoots = () => {
 		const mivs: MsgitemView[] = []
 		mlv.selected().forEach(miv => {
 			const mivroot = miv.threadRoot()
@@ -3836,7 +3922,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			alert('Toggle muting threads is only available when threading is enabled.')
 			return
 		}
-		const rootmivs = seletedRoots()
+		const rootmivs = selectedRoots()
 		const unmuted = !!rootmivs.find(miv => !miv.messageitem.Message.ThreadMuted)
 		await withStatus(unmuted ? 'Muting' : 'Unmuting', client.ThreadMute(rootmivs.map(miv => miv.messageitem.Message.ID), unmuted ? true : false))
 		if (unmuted) {
@@ -3857,7 +3943,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			return
 		}
 
-		const rootmivs = seletedRoots()
+		const rootmivs = selectedRoots()
 		const collapse = !!rootmivs.find(miv => !miv.collapsed)
 
 		const oldstate = state()
@@ -3903,7 +3989,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			return
 		}
 		const oldstate = state()
-		const rootmivs = seletedRoots()
+		const rootmivs = selectedRoots()
 		rootmivs.forEach(miv => {
 			if (miv.collapsed !== collapse) {
 				if (collapse) {
@@ -4108,7 +4194,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 		} else if (effselected.length === 1) {
 			msgElem.classList.toggle('loading', true)
 			const loaded = () => { msgElem.classList.toggle('loading', false) }
-			msgView = newMsgView(effselected[0], mlv, listMailboxes, possibleLabels, loaded, refineKeyword, parsedMessageOpt)
+			msgView = newMsgView(effselected[0], mlv, listMailboxes, setLocationHash, possibleLabels, loaded, refineKeyword, parsedMessageOpt)
 			dom._kids(msgElem, msgView)
 		} else {
 			const trashMailboxID = listMailboxes().find(mb => mb.Trash)?.ID
@@ -4405,7 +4491,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 		if (ndmivs.length !== odmivs.length-1) {
 			throw new ConsistencyError('unexpected new descendants counts during remove')
 		}
-		msgitemViews.splice(pi+1, 0, ...ndmivs) // Add all new/current descedants. There is one less than in odmivs.
+		msgitemViews.splice(pi+1, 0, ...ndmivs) // Add all new/current descendants. There is one less than in odmivs.
 		odmivs.forEach(ndimv => ndimv.remove())
 		const next = pmiv.root.nextSibling
 		for (const ndmiv of ndmivs) {
@@ -4890,6 +4976,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 			focus = null
 			selected = []
 			dom._kids(msgElem)
+			msgView = null
 			setLocationHash()
 		},
 
@@ -4991,7 +5078,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 				'p', 'P',
 				'u', 'U',
 			]
-			if (!e.altKey && moveKeys.includes(e.key)) {
+			if (!e.altKey && !e.metaKey && moveKeys.includes(e.key)) {
 				const moveclick = (index: number, clip: boolean) => {
 					if (clip && index < 0) {
 						index = 0
@@ -5416,7 +5503,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 				.filter(mbMsgID => mbMsgID[0] !== xmb.ID)
 				.filter(mbMsgID => mailboxMsgIDs.length === 1 || !sentMailboxID || mbMsgID[0] !== sentMailboxID || !otherMailbox(sentMailboxID))
 				.map(mbMsgID => mbMsgID[1])
-			await withStatus('Moving to '+xmb.Name, client.MessageMove(msgIDs, xmb.ID))
+			await withStatus('Moving to '+xmb.Name, client.MessageMove(msgIDs, xmb.ID, false))
 			if (msgIDs.length === 1) {
 				const msgID = msgIDs[0]
 				const mbSrcID = mailboxMsgIDs.find(mbMsgID => mbMsgID[1] === msgID)![0]
@@ -5539,8 +5626,9 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 		const trashmb = mailboxViews.find(mbv => mbv.mailbox.Trash)?.mailbox
 		const junkmb = mailboxViews.find(mbv => mbv.mailbox.Junk)?.mailbox
 		const stem = (s: string) => s.split('/')[0]
-		const specialUse = [
+		const special = [
 			(mb: api.Mailbox) => stem(mb.Name) === 'Inbox',
+			(mb: api.Mailbox) => introboxMailbox !== '' && stem(mb.Name) === stem(introboxMailbox), // not "specialuse"
 			(mb: api.Mailbox) => draftmb && stem(mb.Name) === stem(draftmb.Name),
 			(mb: api.Mailbox) => sentmb && stem(mb.Name) === stem(sentmb.Name),
 			(mb: api.Mailbox) => archivemb && stem(mb.Name) === stem(archivemb.Name),
@@ -5548,8 +5636,8 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 			(mb: api.Mailbox) => junkmb && stem(mb.Name) === stem(junkmb.Name),
 		]
 		mailboxViews.sort((mbva, mbvb) => {
-			const ai = specialUse.findIndex(fn => fn(mbva.mailbox))
-			const bi = specialUse.findIndex(fn => fn(mbvb.mailbox))
+			const ai = special.findIndex(fn => fn(mbva.mailbox))
+			const bi = special.findIndex(fn => fn(mbvb.mailbox))
 			if (ai < 0 && bi >= 0) {
 				return 1
 			} else if (ai >= 0 && bi < 0) {
@@ -6318,7 +6406,7 @@ const parseComposeMailto = (mailto: string): ComposeOptions => {
 		} else if (k === 'bcc') {
 			opts.bcc = [...(opts.bcc || []), ...addresses(v)]
 		} else if (k === 'subject') {
-			// q/b-word encoding is allowed, we let the server decode when we start composoing,
+			// q/b-word encoding is allowed, we let the server decode when we start composing,
 			// only if needed. ../rfc/6068:267
 			opts.subject = v
 		} else if (k === 'body') {
@@ -6381,13 +6469,16 @@ const init = async () => {
 
 	const setLocationHash = () => {
 		const msgid = requestMsgID || msglistView.activeMessageID()
-		const msgidstr = msgid ? ','+msgid : ''
+		let trail = msgid ? ','+msgid : ''
+		if (composeView && composeView.MsgID) {
+			trail += ',compose:'+composeView.MsgID
+		}
 		let hash
 		const mb = mailboxlistView && mailboxlistView.activeMailbox()
 		if (mb) {
-			hash = '#'+mb.Name + msgidstr
+			hash = '#'+mb.Name + trail
 		} else if (search.active) {
-			hash = '#search ' + search.query + msgidstr
+			hash = '#search ' + search.query + trail
 		} else {
 			hash = '#'
 		}
@@ -6522,14 +6613,26 @@ const init = async () => {
 	const msglistView = newMsglistView(msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, () => msglistscrollElem ? msglistscrollElem.getBoundingClientRect().height : 0, refineKeyword, viewportEnsureMessages)
 	const mailboxlistView = newMailboxlistView(msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox)
 
-	let refineUnreadBtn: HTMLButtonElement, refineReadBtn: HTMLButtonElement, refineAttachmentsBtn: HTMLButtonElement, refineLabelBtn: HTMLButtonElement
+	let refineUnreadBtn: HTMLButtonElement, refineReadBtn: HTMLButtonElement, refineAttachmentsBtn: HTMLButtonElement, refineFlaggedBtn: HTMLButtonElement, refineLabelBtn: HTMLButtonElement
 	const refineToggleActive = (btn: HTMLButtonElement | null): void => {
-		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineLabelBtn]) {
+		for (const e of [refineUnreadBtn, refineReadBtn, refineAttachmentsBtn, refineFlaggedBtn, refineLabelBtn]) {
 			e.classList.toggle('active', e === btn)
 		}
 		if (btn !== null && btn !== refineLabelBtn) {
 			dom._kids(refineLabelBtn, 'Label')
 		}
+	}
+
+	const refineToggle = async (refine: string, btn: HTMLButtonElement) => {
+		if (settings.refine === refine) {
+			settingsPut({...settings, refine: ''})
+			refineToggleActive(null)
+		} else {
+			settingsPut({...settings, refine: refine})
+			refineToggleActive(btn)
+		}
+		dom._kids(refineLabelBtn, settings.refine.startsWith('label:') ? 'Label: '+settings.refine.substring('label:'.length) : 'Label')
+		await withStatus('Requesting messages', requestNewView(false))
 	}
 
 	let threadMode: HTMLSelectElement
@@ -6548,27 +6651,28 @@ const init = async () => {
 						'Unread',
 						attr.title('Only show messages marked as unread.'),
 						async function click(e: MouseEvent) {
-							settingsPut({...settings, refine: 'unread'})
-							refineToggleActive(e.target! as HTMLButtonElement)
-							await withStatus('Requesting messages', requestNewView(false))
+							await refineToggle('unread', e.target! as HTMLButtonElement)
 						},
 					),
 					refineReadBtn=dom.clickbutton(settings.refine === 'read' ? dom._class('active') : [],
 						'Read',
 						attr.title('Only show messages marked as read.'),
 						async function click(e: MouseEvent) {
-							settingsPut({...settings, refine: 'read'})
-							refineToggleActive(e.target! as HTMLButtonElement)
-							await withStatus('Requesting messages', requestNewView(false))
+							await refineToggle('read', e.target! as HTMLButtonElement)
 						},
 					),
 					refineAttachmentsBtn=dom.clickbutton(settings.refine === 'attachments' ? dom._class('active') : [],
 						'Attachments',
 						attr.title('Only show messages with attachments.'),
 						async function click(e: MouseEvent) {
-							settingsPut({...settings, refine: 'attachments'})
-							refineToggleActive(e.target! as HTMLButtonElement)
-							await withStatus('Requesting messages', requestNewView(false))
+							await refineToggle('attachments', e.target! as HTMLButtonElement)
+						},
+					),
+					refineFlaggedBtn=dom.clickbutton(settings.refine === 'flagged' ? dom._class('active') : [],
+						'Flagged',
+						attr.title('Only show flagged/starred messages.'),
+						async function click(e: MouseEvent) {
+							await refineToggle('flagged', e.target! as HTMLButtonElement)
 						},
 					),
 					refineLabelBtn=dom.clickbutton(settings.refine.startsWith('label:') ? [dom._class('active'), 'Label: '+settings.refine.substring('label:'.length)] : 'Label',
@@ -6580,10 +6684,7 @@ const init = async () => {
 									style({display: 'flex', flexDirection: 'column', gap: '1ex'}),
 									labels.map(l => {
 										const selectLabel = async () => {
-											settingsPut({...settings, refine: 'label:'+l})
-											refineToggleActive(e.target! as HTMLButtonElement)
-											dom._kids(refineLabelBtn, 'Label: '+l)
-											await withStatus('Requesting messages', requestNewView(false))
+											await refineToggle('label:'+l, e.target! as HTMLButtonElement)
 											remove()
 										}
 										return dom.div(
@@ -6786,7 +6887,7 @@ const init = async () => {
 		if (sig) {
 			body += '\n\n' + sig
 		}
-		compose({body: body, editOffset: 0}, listMailboxes)
+		compose({body: body, editOffset: 0}, listMailboxes, setLocationHash)
 	}
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox')
@@ -7210,7 +7311,7 @@ const init = async () => {
 					if (opts.subject && opts.subject.includes('=?')) {
 						opts.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(opts.subject))
 					}
-					compose(opts, listMailboxes)
+					compose(opts, listMailboxes, setLocationHash)
 				})()
 			} catch (err) {
 				window.alert('Error parsing compose mailto URL: '+errmsg(err))
@@ -7219,7 +7320,7 @@ const init = async () => {
 			return
 		}
 
-		const [search, msgid, f, notf] = parseLocationHash(mailboxlistView)
+		const [search, msgid, editMsgid, f, notf] = parseLocationHash(mailboxlistView)
 
 		requestMsgID = msgid
 		if (search) {
@@ -7229,6 +7330,17 @@ const init = async () => {
 			unloadSearch()
 			await mailboxlistView.openMailboxID(f.MailboxID, false)
 		}
+		if (editMsgid) {
+			// Open compose window for draft message in parallel, not failing on error.
+			(async () => {
+				try {
+					const [mi, pm] = await withStatus('Loading compose message', Promise.all([client.MessageItem(editMsgid), client.ParsedMessage(editMsgid)]))
+					await composeDraft(mi, pm, listMailboxes, setLocationHash)
+				} catch (err) {
+					window.alert('Error opening draft message: '+errmsg(err))
+				}
+			})()
+		}
 		await withStatus('Requesting messages', requestNewView(false, f, notf))
 	})
 
@@ -7237,6 +7349,9 @@ const init = async () => {
 	let connecting = false // Check before reconnecting.
 	let noreconnect = false // Set after one reconnect attempt fails.
 	let noreconnectTimer = 0 // Timer ID for resetting noreconnect.
+	// Set to timer when we plan to reconnect after a server shutdown. Cleared when we
+	// try to connect.
+	let shutdownReconnectTimer = 0
 
 	// Don't show disconnection just before user navigates away.
 	let leaving = false
@@ -7289,8 +7404,15 @@ const init = async () => {
 	// Set to compose options when we were opened with a mailto URL. We open the
 	// compose window after we received the "start" message with our addresses.
 	let openComposeOptions: ComposeOptions | undefined
+	// Set during connect when we need to open a message for composing after getting
+	// connected.
+	let connectOpenComposeMessageID = 0
 
 	const connect = async (isreconnect: boolean) => {
+		if (shutdownReconnectTimer) {
+			window.clearTimeout(shutdownReconnectTimer)
+			shutdownReconnectTimer = 0
+		}
 		connectionElem.classList.toggle('loading', true)
 		dom._kids(connectionElem)
 		connectionElem.classList.toggle('loading', false)
@@ -7321,7 +7443,10 @@ const init = async () => {
 			window.location.hash = ''
 		}
 
-		let [searchQuery, msgid, f, notf] = parseLocationHash(mailboxlistView)
+		let [searchQuery, msgid, editMsgid, f, notf] = parseLocationHash(mailboxlistView)
+		if (editMsgid && !composeView) {
+			connectOpenComposeMessageID = editMsgid
+		}
 		requestMsgID = msgid
 		requestFilter = f
 		requestNotFilter = notf
@@ -7380,7 +7505,7 @@ const init = async () => {
 			dom._kids(connectionElem)
 		})
 
-		const sseError = (errmsg: string) => {
+		const sseError = (errmsg: string, addNotRetrying: boolean) => {
 			sseID = 0
 			eventSource!.close()
 			eventSource = null
@@ -7399,7 +7524,11 @@ const init = async () => {
 			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+formatDomain(loginAddress.Domain)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
 			dom._kids(connectionElem)
 			if (noreconnect) {
-				dom._kids(statusElem, capitalizeFirst(errmsg)+', not automatically retrying. ')
+				let msg = capitalizeFirst(errmsg)
+				if (addNotRetrying) {
+					msg += ', not automatically retrying. '
+				}
+				dom._kids(statusElem, msg)
 				showNotConnected()
 				listloadingElem.remove()
 				listendElem.remove()
@@ -7410,12 +7539,21 @@ const init = async () => {
 		// EventSource-connection error. No details.
 		eventSource.addEventListener('error', (e: Event) => {
 			log('eventsource error', {e}, JSON.stringify(e))
-			sseError('Connection failed')
+			sseError('Connection failed', true)
 		})
 		// Fatal error on the server side, error message propagated, but connection needs to be closed.
 		eventSource.addEventListener('fatalErr', (e: MessageEvent) => {
 			const errmsg = JSON.parse(e.data) as string || '(no error message)'
-			sseError('Server error: "' + errmsg + '"')
+			sseError('Server error: "' + errmsg + '"', true)
+		})
+		// Server is stopping, we'll assume for a restart, and will try to reconnect with some jitter.
+		eventSource.addEventListener('serverShutdown', (_: MessageEvent) => {
+			noreconnect = true
+			sseError('Server shutting down, will try to reconnect in a few seconds', false)
+
+			shutdownReconnectTimer = window.setTimeout(() => {
+				connect(true)
+			}, 3000 + Math.floor(Math.random()*5000))
 		})
 
 		const checkParse = <T>(fn: () => T): T => {
@@ -7430,8 +7568,22 @@ const init = async () => {
 		eventSource.addEventListener('start', (e: MessageEvent) => {
 			const data = JSON.parse(e.data)
 			if (lastServerVersion && data.Version !== lastServerVersion) {
-				if (window.confirm('Server has been updated to a new version. Reload?')) {
-					window.location.reload()
+				let reload = true
+				// Save changes to draft before reload.
+				if (composeView && composeView.unsavedChanges()) {
+					try {
+						withStatus('Saving before reloading due to server update', composeView.save())
+					} catch (err) {
+						window.alert('Server was updated, and webmail wants to reload to get the latest changes, but encountered an error while saving changes your open draft message. Please reload at your earliest convenience.')
+						reload = false
+					}
+				}
+				if (reload) {
+					// Cannot use location.reload, must use a cache buster, otherwise browser may use
+					// the same HTML/JS. We remove the '?v=...' again on page load.
+					const u = URL.parse(window.location.href)!
+					u.search = '?v='+data.Version + (u.search ? '&'+u.search.substring(1) : '')
+					window.location.href = u.toString()
 					return
 				}
 			}
@@ -7441,6 +7593,7 @@ const init = async () => {
 			log('event start', start)
 
 			accountSettings = start.Settings
+			introboxMailbox = start.Introbox
 			connecting = false
 			sseID = start.SSEID
 			loginAddress = start.LoginAddress
@@ -7472,8 +7625,21 @@ const init = async () => {
 					if (openComposeOptions.subject && openComposeOptions.subject.includes('=?')) {
 						openComposeOptions.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(openComposeOptions.subject))
 					}
-					compose(openComposeOptions, listMailboxes)
+					compose(openComposeOptions, listMailboxes, setLocationHash)
 					openComposeOptions = undefined
+				})()
+			}
+			if (connectOpenComposeMessageID) {
+				// Open compose window for draft message in parallel, not failing on error.
+				(async () => {
+					const editMsgid = connectOpenComposeMessageID
+					connectOpenComposeMessageID = 0
+					try {
+						const [mi, pm] = await withStatus('Loading compose message', Promise.all([client.MessageItem(editMsgid), client.ParsedMessage(editMsgid)]))
+						await composeDraft(mi, pm, listMailboxes, setLocationHash)
+					} catch (err) {
+						window.alert('Error opening draft message: '+errmsg(err))
+					}
 				})()
 			}
 
@@ -7499,7 +7665,7 @@ const init = async () => {
 			// We'll clear noreconnect when we've held a connection for 5 seconds. Firefox
 			// disconnects often, on any network change including with docker container starts,
 			// such as for integration tests.
-			noreconnectTimer = setTimeout(() => {
+			noreconnectTimer = window.setTimeout(() => {
 				noreconnect = false
 				noreconnectTimer = 0
 			}, 5*1000)
@@ -7673,7 +7839,7 @@ const showUnhandledError = (err: Error, lineno: number, colno: number) => {
 		dom.div(style({marginBottom: '.5ex'}), ''+xerrmsg),
 		dom.clickbutton('Details', function click() {
 			box.remove()
-			let msg = `Mox version: ${moxversion}
+			let msg = `Mox version: ${moxversion} (${moxgoos}/${moxgoarch})
 Browser: ${window.navigator.userAgent}
 File: webmail.html
 Lineno: ${lineno || '-'}

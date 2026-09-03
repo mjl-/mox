@@ -26,7 +26,7 @@ import (
 )
 
 func cmdVerifydata(c *cmd) {
-	c.params = "data-dir"
+	c.params = "$datadir"
 	c.help = `Verify the contents of a data directory, typically of a backup.
 
 Verifydata checks all database files to see if they are valid BoltDB/bstore

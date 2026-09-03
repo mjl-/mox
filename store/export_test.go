@@ -44,11 +44,11 @@ func TestExport(t *testing.T) {
 	var m Message
 	acc.WithWLock(func() {
 		m = Message{Received: time.Now(), Size: int64(len(msg))}
-		err = acc.DeliverMailbox(pkglog, "Inbox", &m, msgFile)
+		err = acc.DeliverMailbox(pkglog, "Inbox", "", &m, msgFile)
 		tcheck(t, err, "deliver")
 
 		m = Message{Received: time.Now(), Size: int64(len(msg))}
-		err = acc.DeliverMailbox(pkglog, "Trash", &m, msgFile)
+		err = acc.DeliverMailbox(pkglog, "Trash", "", &m, msgFile)
 		tcheck(t, err, "deliver")
 	})
 

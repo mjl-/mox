@@ -163,6 +163,24 @@ func (Webmail) Request(ctx context.Context, req Request) {
 	sse.Request <- req
 }
 
+// MessageItem returns a MessageItem for a message.
+func (Webmail) MessageItem(ctx context.Context, msgID int64) (mi MessageItem) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := reqInfo.Log
+	acc := reqInfo.Account
+
+	xdbread(ctx, acc, func(tx *bstore.Tx) {
+		m := xmessageID(ctx, tx, msgID)
+
+		state := msgState{acc: acc}
+		defer state.clear()
+		var err error
+		mi, err = messageItem(log, m, &state, nil)
+		xcheckf(ctx, err, "parsing message")
+	})
+	return
+}
+
 // ParsedMessage returns enough to render the textual body of a message. It is
 // assumed the client already has other fields through MessageItem.
 func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage) {
@@ -1088,7 +1106,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					err = q.IDs(&msgIDs)
 					xcheckf(ctx, err, "listing messages in thread to archive")
 					if len(msgIDs) > 0 {
-						ids, nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq)
+						ids, nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq, true)
 						newIDs = append(newIDs, ids...)
 						changes = append(changes, nchanges...)
 					}
@@ -1151,12 +1169,12 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 // MessageMove moves messages to another mailbox. If the message is already in
 // the mailbox an error is returned.
-func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID int64) {
+func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID int64, markSeen bool) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	acc := reqInfo.Account
 	log := reqInfo.Log
 
-	xops.MessageMove(ctx, log, acc, messageIDs, "", mailboxID)
+	xops.MessageMove(ctx, log, acc, messageIDs, "", mailboxID, markSeen)
 }
 
 var xops = webops.XOps{
@@ -1213,7 +1231,7 @@ func (Webmail) MailboxCreate(ctx context.Context, name string) {
 	acc := reqInfo.Account
 
 	var err error
-	name, _, err = store.CheckMailboxName(name, false)
+	name, _, err = config.CheckMailboxName(name, false)
 	xcheckuserf(ctx, err, "checking mailbox name")
 
 	acc.WithWLock(func() {
@@ -1309,7 +1327,7 @@ func (Webmail) MailboxRename(ctx context.Context, mailboxID int64, newName strin
 	// Renaming Inbox is special for IMAP. For IMAP we have to implement it per the
 	// standard. We can just say no.
 	var err error
-	newName, _, err = store.CheckMailboxName(newName, false)
+	newName, _, err = config.CheckMailboxName(newName, false)
 	xcheckuserf(ctx, err, "checking new mailbox name")
 
 	acc.WithWLock(func() {
@@ -1433,15 +1451,16 @@ func addressString(a message.Address, smtputf8 bool) string {
 			continue
 		}
 		// We need to quote.
-		q := `"`
+		var q strings.Builder
+		q.WriteString(`"`)
 		for _, c := range a.Name {
 			if c == '\\' || c == '"' {
-				q += `\`
+				q.WriteString(`\`)
 			}
-			q += string(c)
+			q.WriteString(string(c))
 		}
-		q += `"`
-		name = q
+		q.WriteString(`"`)
+		name = q.String()
 	}
 	return name + " <" + a.User + "@" + host + ">"
 }

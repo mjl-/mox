@@ -63,14 +63,14 @@ func (ft fieldType) applyDefault(rv reflect.Value) error {
 	switch ft.Kind {
 	case kindSlice:
 		n := rv.Len()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if err := ft.ListElem.applyDefault(rv.Index(i)); err != nil {
 				return err
 			}
 		}
 	case kindArray:
 		n := ft.ArrayLength
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if err := ft.ListElem.applyDefault(rv.Index(i)); err != nil {
 				return err
 			}

@@ -144,7 +144,7 @@ func dtoi(s string) (n int, i int, ok bool) {
 
 // hasUpperCase tells whether the given string contains at least one upper-case.
 func hasUpperCase(s string) bool {
-	for i := range s {
+	for i := range len(s) {
 		if 'A' <= s[i] && s[i] <= 'Z' {
 			return true
 		}

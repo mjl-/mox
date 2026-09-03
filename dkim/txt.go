@@ -102,15 +102,15 @@ func qpSection(s string) string {
 	const hex = "0123456789ABCDEF"
 
 	// ../rfc/2045:1260
-	var r string
+	var r strings.Builder
 	for i, b := range []byte(s) {
 		if i > 0 && (b == ' ' || b == '\t') || b > ' ' && b < 0x7f && b != '=' {
-			r += string(rune(b))
+			r.WriteString(string(rune(b)))
 		} else {
-			r += "=" + string(hex[b>>4]) + string(hex[(b>>0)&0xf])
+			r.WriteString("=" + string(hex[b>>4]) + string(hex[(b>>0)&0xf]))
 		}
 	}
-	return r
+	return r.String()
 }
 
 var (

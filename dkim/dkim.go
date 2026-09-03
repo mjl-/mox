@@ -720,7 +720,7 @@ func bodyHash(h hash.Hash, canonSimple bool, body *bufio.Reader) ([]byte, error)
 }
 
 func dataHash(h hash.Hash, canonSimple bool, sig *Sig, hdrs []header, verifySig []byte) ([]byte, error) {
-	headers := ""
+	var headers strings.Builder
 	revHdrs := map[string][]header{}
 	for _, h := range hdrs {
 		revHdrs[h.lkey] = append([]header{h}, revHdrs[h.lkey]...)
@@ -737,17 +737,17 @@ func dataHash(h hash.Hash, canonSimple bool, sig *Sig, hdrs []header, verifySig 
 		if canonSimple {
 			// ../rfc/6376:823
 			// Add unmodified.
-			headers += s
+			headers.WriteString(s)
 		} else {
 			ch, err := relaxedCanonicalHeaderWithoutCRLF(s)
 			if err != nil {
 				return nil, fmt.Errorf("canonicalizing header: %w", err)
 			}
-			headers += ch + "\r\n"
+			headers.WriteString(ch + "\r\n")
 		}
 	}
 	// ../rfc/6376:2377, canonicalization does not apply to the dkim-signature header.
-	h.Write([]byte(headers))
+	h.Write([]byte(headers.String()))
 	dkimSig := verifySig
 	if !canonSimple {
 		ch, err := relaxedCanonicalHeaderWithoutCRLF(string(verifySig))

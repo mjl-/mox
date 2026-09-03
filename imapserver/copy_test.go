@@ -3,7 +3,11 @@ package imapserver
 import (
 	"testing"
 
+	"github.com/mjl-/bstore"
+
 	"github.com/mjl-/mox/imapclient"
+	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/store"
 )
 
 func TestCopy(t *testing.T) {
@@ -12,6 +16,62 @@ func TestCopy(t *testing.T) {
 
 func TestCopyUIDOnly(t *testing.T) {
 	testCopy(t, true)
+}
+
+func TestCopyFromIntrobox(t *testing.T) {
+	defer mockUIDValidity()()
+	tc := start(t, false)
+	defer tc.close()
+
+	conf := mox.Conf.Dynamic.Accounts["mjl"]
+	origConf := conf
+	conf.Introbox = "Introbox"
+	mox.Conf.Dynamic.Accounts["mjl"] = conf
+	defer func() {
+		mox.Conf.Dynamic.Accounts["mjl"] = origConf
+	}()
+
+	tc.login("mjl@mox.example", password0)
+	tc.client.Create("Introbox", nil)
+	tc.client.Create("Intended", nil)
+	tc.client.Append("Introbox", makeAppend(exampleMsg))
+	tc.client.Select("Introbox")
+
+	err := tc.account.DB.Write(ctxbg, func(tx *bstore.Tx) error {
+		introbox, err := tc.account.MailboxFind(tx, "Introbox")
+		if err != nil {
+			return err
+		}
+		intended, err := tc.account.MailboxFind(tx, "Intended")
+		if err != nil {
+			return err
+		}
+		m, err := bstore.QueryTx[store.Message](tx).FilterNonzero(store.Message{MailboxID: introbox.ID}).Get()
+		if err != nil {
+			return err
+		}
+		m.MailboxDestinedID = intended.ID
+		return tx.Update(&m)
+	})
+	tcheck(t, err, "set intended mailbox")
+
+	tc.transactf("ok", "uid copy 1 Intended")
+
+	err = tc.account.DB.Read(ctxbg, func(tx *bstore.Tx) error {
+		intended, err := tc.account.MailboxFind(tx, "Intended")
+		if err != nil {
+			return err
+		}
+		m, err := bstore.QueryTx[store.Message](tx).FilterNonzero(store.Message{MailboxID: intended.ID}).Get()
+		if err != nil {
+			return err
+		}
+		if m.MailboxOrigID != intended.ID || m.MailboxDestinedID != 0 || m.Junk || !m.Notjunk {
+			t.Fatalf("copied introbox message not promoted: %#v", m)
+		}
+		return nil
+	})
+	tcheck(t, err, "check copied message")
 }
 
 func testCopy(t *testing.T, uidonly bool) {

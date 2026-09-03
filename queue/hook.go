@@ -491,8 +491,8 @@ func HookRetiredList(ctx context.Context, filter HookRetiredFilter, sort HookRet
 
 // HookNextAttemptAdd adds a duration to the NextAttempt for all matching messages, and
 // kicks the queue.
-func HookNextAttemptAdd(ctx context.Context, filter HookFilter, d time.Duration) (affected int, err error) {
-	err = DB.Write(ctx, func(tx *bstore.Tx) error {
+func HookNextAttemptAdd(ctx context.Context, filter HookFilter, d time.Duration) (affected int, rerr error) {
+	err := DB.Write(ctx, func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[Hook](tx)
 		if err := filter.apply(q); err != nil {
 			return err
@@ -519,7 +519,7 @@ func HookNextAttemptAdd(ctx context.Context, filter HookFilter, d time.Duration)
 
 // HookNextAttemptSet sets NextAttempt for all matching messages to a new absolute
 // time and kicks the queue.
-func HookNextAttemptSet(ctx context.Context, filter HookFilter, t time.Time) (affected int, err error) {
+func HookNextAttemptSet(ctx context.Context, filter HookFilter, t time.Time) (affected int, rerr error) {
 	q := bstore.QueryDB[Hook](ctx, DB)
 	if err := filter.apply(q); err != nil {
 		return 0, err
@@ -534,9 +534,9 @@ func HookNextAttemptSet(ctx context.Context, filter HookFilter, t time.Time) (af
 
 // HookCancel prevents more delivery attempts of the hook, moving it to the
 // retired list if configured.
-func HookCancel(ctx context.Context, log mlog.Log, filter HookFilter) (affected int, err error) {
+func HookCancel(ctx context.Context, log mlog.Log, filter HookFilter) (affected int, rerr error) {
 	var hooks []Hook
-	err = DB.Write(ctx, func(tx *bstore.Tx) error {
+	err := DB.Write(ctx, func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[Hook](tx)
 		if err := filter.apply(q); err != nil {
 			return err
@@ -1246,7 +1246,7 @@ func hookTransport() *http.Transport {
 	return t
 }
 
-func HookPost(ctx context.Context, log mlog.Log, hookID int64, attempt int, url, authz string, payload string) (code int, response string, err error) {
+func HookPost(ctx context.Context, log mlog.Log, hookID int64, attempt int, url, authz string, payload string) (code int, response string, rerr error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(payload))
 	if err != nil {
 		return 0, "", fmt.Errorf("new request: %v", err)

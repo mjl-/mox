@@ -49,7 +49,7 @@ result in duplicate messages.
 `
 
 func cmdImportMaildir(c *cmd) {
-	c.params = "accountname mailboxname maildir"
+	c.params = "$accountname $mailboxname $maildir"
 	c.help = `Import a maildir into an account.
 
 ` + importCommonHelp + `
@@ -65,7 +65,7 @@ dovecot-keywords file can specify additional flags, like Forwarded/Junk/NotJunk.
 }
 
 func cmdImportMbox(c *cmd) {
-	c.params = "accountname mailboxname mbox"
+	c.params = "$accountname $mailboxname $mbox"
 	c.help = `Import an mbox into an account.
 
 Using mbox is not recommended, maildir is a better defined format.
@@ -81,7 +81,7 @@ Using mbox is not recommended, maildir is a better defined format.
 
 func cmdXImportMaildir(c *cmd) {
 	c.unlisted = true
-	c.params = "accountdir mailboxname maildir"
+	c.params = "$accountdir $mailboxname $maildir"
 	c.help = `Import a maildir into an account by directly accessing the data directory.
 
 
@@ -92,7 +92,7 @@ See "mox help import maildir" for details.
 
 func cmdXImportMbox(c *cmd) {
 	c.unlisted = true
-	c.params = "accountdir mailboxname mbox"
+	c.params = "$accountdir $mailboxname $mbox"
 	c.help = `Import an mbox into an account by directly accessing the data directory.
 
 See "mox help import mbox" for details.
@@ -193,7 +193,7 @@ func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 
 	// Ensure normalized form.
 	mailbox = norm.NFC.String(mailbox)
-	mailbox, _, err = store.CheckMailboxName(mailbox, true)
+	mailbox, _, err = config.CheckMailboxName(mailbox, true)
 	xctl.xcheck(err, "checking mailbox name")
 
 	// Open account, creating a database file if it doesn't exist yet. It must be known

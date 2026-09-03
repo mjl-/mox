@@ -148,12 +148,14 @@ var commands = []struct {
 	{"config describe-domains", cmdConfigDescribeDomains},
 	{"config describe-static", cmdConfigDescribeStatic},
 	{"config account list", cmdConfigAccountList},
+	{"config account addresses", cmdConfigAccountAddresses},
 	{"config account add", cmdConfigAccountAdd},
 	{"config account rm", cmdConfigAccountRemove},
 	{"config account disable", cmdConfigAccountDisable},
 	{"config account enable", cmdConfigAccountEnable},
 	{"config address add", cmdConfigAddressAdd},
 	{"config address rm", cmdConfigAddressRemove},
+	{"config address account", cmdConfigAddressAccount},
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
 	{"config domain disable", cmdConfigDomainDisable},
@@ -330,7 +332,7 @@ func (c *cmd) Usage() {
 }
 
 func cmdHelp(c *cmd) {
-	c.params = "[command ...]"
+	c.params = "[$command ...]"
 	c.help = `Prints help about matching commands.
 
 If multiple commands match, they are listed along with the first line of their help text.
@@ -482,6 +484,13 @@ func main() {
 		cmdSendmail(c)
 		return
 	}
+	// Instructions explain to install mox as /usr/sbin/sendmail as setgid "moxsubmit".
+	// Users can invoke that binary as regular "mox" command too. We don't want to run
+	// our regular code, users could use one of the commands to read
+	// /etc/moxsubmit.conf, or enable traceauth logging and read a password.
+	if os.Getgid() != os.Getegid() {
+		log.Fatalf("can only execute as sendmail when effective gid is different from gid")
+	}
 
 	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", filepath.FromSlash("config/mox.conf")), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
@@ -568,7 +577,7 @@ func xparseDomain(s, what string) dns.Domain {
 }
 
 func cmdClientConfig(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Print the configuration for email clients for a domain.
 
 Sending email is typically not done on the SMTP port 25, but on submission
@@ -693,7 +702,7 @@ date version.
 }
 
 func cmdConfigDomainAdd(c *cmd) {
-	c.params = "[-disabled] domain account [localpart]"
+	c.params = "[-disabled] $domain $account [$localpart]"
 	c.help = `Adds a new domain to the configuration and reloads the configuration.
 
 The account is used for the postmaster mailboxes the domain, including as DMARC and
@@ -737,7 +746,7 @@ func ctlcmdConfigDomainAdd(ctl *ctl, disabled bool, domain dns.Domain, account s
 }
 
 func cmdConfigDomainRemove(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Remove a domain from the configuration and reload the configuration.
 
 This is a dangerous operation. Incoming email delivery for this domain will be
@@ -761,7 +770,7 @@ func ctlcmdConfigDomainRemove(ctl *ctl, d dns.Domain) {
 }
 
 func cmdConfigDomainDisable(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Disable a domain and reload the configuration.
 
 This is a dangerous operation. Incoming/outgoing messages involving this domain
@@ -779,7 +788,7 @@ will be rejected.
 }
 
 func cmdConfigDomainEnable(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Enable a domain and reload the configuration.
 
 Incoming/outgoing messages involving this domain will be accepted again.
@@ -806,7 +815,7 @@ func ctlcmdConfigDomainDisabled(ctl *ctl, d dns.Domain, disabled bool) {
 }
 
 func cmdConfigAliasList(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Show aliases (lists) for domain.`
 	args := c.Parse()
 	if len(args) != 1 {
@@ -825,7 +834,7 @@ func ctlcmdConfigAliasList(ctl *ctl, address string) {
 }
 
 func cmdConfigAliasPrint(c *cmd) {
-	c.params = "alias"
+	c.params = "$alias"
 	c.help = `Print settings and members of alias (list).`
 	args := c.Parse()
 	if len(args) != 1 {
@@ -844,7 +853,7 @@ func ctlcmdConfigAliasPrint(ctl *ctl, address string) {
 }
 
 func cmdConfigAliasAdd(c *cmd) {
-	c.params = "alias@domain rcpt1@domain ..."
+	c.params = "$alias@domain $rcpt1@domain ..."
 	c.help = `Add new alias (list) with one or more addresses and public posting enabled.
 
 An alias is used for delivering incoming email to multiple recipients. If you
@@ -870,7 +879,7 @@ func ctlcmdConfigAliasAdd(ctl *ctl, address string, alias config.Alias) {
 }
 
 func cmdConfigAliasUpdate(c *cmd) {
-	c.params = "alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]"
+	c.params = "$alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]"
 	c.help = `Update alias (list) configuration.`
 	var postpublic, listmembers, allowmsgfrom string
 	c.flag.StringVar(&postpublic, "postpublic", "", "whether anyone or only list members can post")
@@ -896,7 +905,7 @@ func ctlcmdConfigAliasUpdate(ctl *ctl, alias, postpublic, listmembers, allowmsgf
 }
 
 func cmdConfigAliasRemove(c *cmd) {
-	c.params = "alias@domain"
+	c.params = "$alias@domain"
 	c.help = "Remove alias (list)."
 	args := c.Parse()
 	if len(args) != 1 {
@@ -914,7 +923,7 @@ func ctlcmdConfigAliasRemove(ctl *ctl, alias string) {
 }
 
 func cmdConfigAliasAddaddr(c *cmd) {
-	c.params = "alias@domain rcpt1@domain ..."
+	c.params = "$alias@domain $rcpt1@domain ..."
 	c.help = `Add addresses to alias (list).`
 	args := c.Parse()
 	if len(args) < 2 {
@@ -933,7 +942,7 @@ func ctlcmdConfigAliasAddaddr(ctl *ctl, alias string, addresses []string) {
 }
 
 func cmdConfigAliasRemoveaddr(c *cmd) {
-	c.params = "alias@domain rcpt1@domain ..."
+	c.params = "$alias@domain $rcpt1@domain ..."
 	c.help = `Remove addresses from alias (list).`
 	args := c.Parse()
 	if len(args) < 2 {
@@ -952,7 +961,7 @@ func ctlcmdConfigAliasRmaddr(ctl *ctl, alias string, addresses []string) {
 }
 
 func cmdConfigAccountAdd(c *cmd) {
-	c.params = "account address"
+	c.params = "$account $address"
 	c.help = `Add an account with an email address and reload the configuration.
 
 Email can be delivered to this address/account. A password has to be configured
@@ -976,7 +985,7 @@ func ctlcmdConfigAccountAdd(ctl *ctl, account, address string) {
 }
 
 func cmdConfigAccountRemove(c *cmd) {
-	c.params = "account"
+	c.params = "$account"
 	c.help = `Remove an account and reload the configuration.
 
 Email addresses for this account will also be removed, and incoming email for
@@ -1021,8 +1030,33 @@ func ctlcmdConfigAccountList(ctl *ctl) {
 	ctl.xstreamto(os.Stdout)
 }
 
+func cmdConfigAccountAddresses(c *cmd) {
+	c.params = "$account"
+	c.help = `List all addresses for an account.
+
+Each address is printed on a line.
+An address starting with an "@" indicate it is a catchall address for the domain.
+
+Does not check whether account is disabled.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAccountAddresses(xctl(), args[0])
+}
+
+func ctlcmdConfigAccountAddresses(ctl *ctl, account string) {
+	ctl.xwrite("accountaddresses")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
 func cmdConfigAccountDisable(c *cmd) {
-	c.params = "account message"
+	c.params = "$account $message"
 	c.help = `Disable login for an account, showing message to users when they try to login.
 
 Incoming email will still be accepted for the account, and queued email from the
@@ -1045,7 +1079,7 @@ newline, and maximum 256 characters because it is used in SMTP/IMAP.
 }
 
 func cmdConfigAccountEnable(c *cmd) {
-	c.params = "account"
+	c.params = "$account"
 	c.help = `Enable login again for an account.
 
 Login attempts by the user no long result in an error message.
@@ -1068,7 +1102,7 @@ func ctlcmdConfigAccountDisabled(ctl *ctl, account, loginDisabled string) {
 }
 
 func cmdConfigTlspubkeyList(c *cmd) {
-	c.params = "[account]"
+	c.params = "[$account]"
 	c.help = `List TLS public keys for TLS client certificate authentication.
 
 If account is absent, the TLS public keys for all accounts are listed.
@@ -1093,7 +1127,7 @@ func ctlcmdConfigTlspubkeyList(ctl *ctl, accountOpt string) {
 }
 
 func cmdConfigTlspubkeyGet(c *cmd) {
-	c.params = "fingerprint"
+	c.params = "$fingerprint"
 	c.help = `Get a TLS public key for a fingerprint.
 
 Prints the type, name, account and address for the key, and the certificate in
@@ -1138,7 +1172,7 @@ func ctlcmdConfigTlspubkeyGet(ctl *ctl, fingerprint string) {
 }
 
 func cmdConfigTlspubkeyAdd(c *cmd) {
-	c.params = "address [name] < cert.pem"
+	c.params = "$address [$name] < cert.pem"
 	c.help = `Add a TLS public key to the account of the given address.
 
 The public key is read from the certificate.
@@ -1182,7 +1216,7 @@ func ctlcmdConfigTlspubkeyAdd(ctl *ctl, address, name string, noimappreauth bool
 }
 
 func cmdConfigTlspubkeyRemove(c *cmd) {
-	c.params = "fingerprint"
+	c.params = "$fingerprint"
 	c.help = `Remove TLS public key for fingerprint.`
 	args := c.Parse()
 	if len(args) != 1 {
@@ -1200,7 +1234,7 @@ func ctlcmdConfigTlspubkeyRemove(ctl *ctl, fingerprint string) {
 }
 
 func cmdConfigTlspubkeyGen(c *cmd) {
-	c.params = "stem"
+	c.params = "$stem"
 	c.help = `Generate an ed25519 private key and minimal certificate for use a TLS public key and write to files starting with stem.
 
 The private key is written to $stem.$timestamp.ed25519privatekey.pkcs8.pem.
@@ -1262,7 +1296,7 @@ error too, for reference.
 }
 
 func cmdConfigAddressAdd(c *cmd) {
-	c.params = "address account"
+	c.params = "$address $account"
 	c.help = `Adds an address to an account and reloads the configuration.
 
 If address starts with a @ (i.e. a missing localpart), this is a catchall
@@ -1286,7 +1320,7 @@ func ctlcmdConfigAddressAdd(ctl *ctl, address, account string) {
 }
 
 func cmdConfigAddressRemove(c *cmd) {
-	c.params = "address"
+	c.params = "$address"
 	c.help = `Remove an address and reload the configuration.
 
 Incoming email for this address will be rejected after removing an address.
@@ -1307,8 +1341,34 @@ func ctlcmdConfigAddressRemove(ctl *ctl, address string) {
 	fmt.Println("address removed")
 }
 
+func cmdConfigAddressAccount(c *cmd) {
+	c.params = "$address"
+	c.help = `Print the account an address belongs to.
+
+Catchall addresses and the account catch all separator are considered when
+looking up the account.
+
+Does not check whether account is disabled.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAddressAccount(xctl(), args[0])
+}
+
+func ctlcmdConfigAddressAccount(ctl *ctl, address string) {
+	ctl.xwrite("addressaccount")
+	ctl.xwrite(address)
+	ctl.xreadok()
+	account := ctl.xread()
+	fmt.Println(account)
+}
+
 func cmdConfigDNSRecords(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Prints annotated DNS records as zone file that should be created for the domain.
 
 The zone file can be imported into existing DNS software. You should review the
@@ -1353,7 +1413,7 @@ configured.
 }
 
 func cmdConfigDNSCheck(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = "Check the DNS records with the configuration for the domain, and print any errors/warnings."
 	args := c.Parse()
 	if len(args) != 1 {
@@ -1628,7 +1688,7 @@ domain and create the TLSA DNS records it suggests to enable DANE.
 }
 
 func cmdLoglevels(c *cmd) {
-	c.params = "[level [pkg]]"
+	c.params = "[$level [$pkg]]"
 	c.help = `Print the log levels, or set a new default log level, or a level for the given package.
 
 By default, a single log level applies to all logging in mox. But for each
@@ -1698,7 +1758,7 @@ new mail deliveries.
 }
 
 func cmdBackup(c *cmd) {
-	c.params = "destdir"
+	c.params = "$destdir"
 	c.help = `Creates a backup of the config and data directory.
 
 Backup copies the config directory to <destdir>/config, and creates
@@ -1826,7 +1886,7 @@ at least 12 characters.
 }
 
 func cmdSetaccountpassword(c *cmd) {
-	c.params = "account"
+	c.params = "$account"
 	c.help = `Set new password an account.
 
 The password is read from stdin. Secrets derived from the password, but not the
@@ -1858,7 +1918,7 @@ func ctlcmdSetaccountpassword(ctl *ctl, account, password string) {
 
 func cmdDeliver(c *cmd) {
 	c.unlisted = true
-	c.params = "address < message"
+	c.params = "$address < message"
 	c.help = "Deliver message to address."
 	args := c.Parse()
 	if len(args) != 1 {
@@ -1900,7 +1960,7 @@ with DKIM, by mox.
 
 // todo: options for specifying the domain this is the mx host of, and enabling dane and/or mta-sts verification
 func cmdSMTPDial(c *cmd) {
-	c.params = "host[:port]"
+	c.params = "$host[:$port]"
 
 	var tlsCerts, tlsCiphersuites, tlsCurves, tlsVersionMin, tlsVersionMax, tlsRenegotiation string
 	var tlsVerify, noTLS, forceTLS, tlsNoSessionTickets, tlsNoDynamicRecordSizing bool
@@ -2113,7 +2173,7 @@ exchanged during connection set up.
 }
 
 func cmdDANEDial(c *cmd) {
-	c.params = "host:port"
+	c.params = "$host:$port"
 	var usages string
 	c.flag.StringVar(&usages, "usages", "pkix-ta,pkix-ee,dane-ta,dane-ee", "allowed usages for dane, comma-separated list")
 	c.help = `Dial the address using TLS with certificate verification using DANE.
@@ -2165,7 +2225,7 @@ connection.
 }
 
 func cmdDANEDialmx(c *cmd) {
-	c.params = "domain [destination-host]"
+	c.params = "$domain [$desthost]"
 	var ehloHostname string
 	c.flag.StringVar(&ehloHostname, "ehlohostname", "localhost", "hostname to send in smtp ehlo command")
 	c.help = `Connect to MX server for domain using STARTTLS verified with DANE.
@@ -2347,7 +2407,7 @@ sharing most of its code.
 }
 
 func cmdDANEMakeRecord(c *cmd) {
-	c.params = "usage selector matchtype [certificate.pem | publickey.pem | privatekey.pem]"
+	c.params = "$usage $selector $matchtype [certificate.pem | publickey.pem | privatekey.pem]"
 	c.help = `Print TLSA record for given certificate/key and parameters.
 
 Valid values:
@@ -2502,7 +2562,7 @@ key (pkcs#8, pkcs#1 or ec private key) is used.
 }
 
 func cmdDNSLookup(c *cmd) {
-	c.params = "[ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] name"
+	c.params = "[ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] $name"
 	c.help = `Lookup DNS name of given type.
 
 Lookup always prints whether the response was DNSSEC-protected.
@@ -2711,7 +2771,7 @@ func parseDKIMKey(r io.Reader) (any, error) {
 }
 
 func cmdDKIMVerify(c *cmd) {
-	c.params = "message"
+	c.params = "$messagefile"
 	c.help = `Verify the DKIM signatures in a message and print the results.
 
 The message is parsed, and the DKIM-Signature headers are validated. Validation
@@ -2754,7 +2814,7 @@ that was passed.
 }
 
 func cmdDKIMSign(c *cmd) {
-	c.params = "message"
+	c.params = "$messagefile"
 	c.help = `Sign a message, adding DKIM-Signature headers based on the domain in the From header.
 
 The message is parsed, the domain looked up in the configuration files, and
@@ -2804,7 +2864,7 @@ headers prepended.
 }
 
 func cmdDKIMLookup(c *cmd) {
-	c.params = "selector domain"
+	c.params = "$selector $domain"
 	c.help = "Lookup and print the DKIM record for the selector at the domain."
 	args := c.Parse()
 	if len(args) != 2 {
@@ -2846,7 +2906,7 @@ func cmdDKIMLookup(c *cmd) {
 }
 
 func cmdDMARCLookup(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = "Lookup dmarc policy for domain, a DNS TXT record at _dmarc.<domain>, validate and print it."
 	args := c.Parse()
 	if len(args) != 1 {
@@ -2868,7 +2928,7 @@ func dnssecStatus(v bool) string {
 }
 
 func cmdDMARCVerify(c *cmd) {
-	c.params = "remoteip mailfromaddress helodomain < message"
+	c.params = "$remoteip $mailfromaddress $helodomain < messagefile"
 	c.help = `Parse an email message and evaluate it against the DMARC policy of the domain in the From-header.
 
 mailfromaddress and helodomain are used for SPF validation. If both are empty,
@@ -2948,7 +3008,7 @@ can be found in message headers.
 }
 
 func cmdDMARCCheckreportaddrs(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `For each reporting address in the domain's DMARC record, check if it has opted into receiving reports (if needed).
 
 A DMARC record can request reports about DMARC evaluations to be sent to an
@@ -3027,7 +3087,7 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 }
 
 func cmdDMARCParsereportmsg(c *cmd) {
-	c.params = "message ..."
+	c.params = "$messagefile ..."
 	c.help = `Parse a DMARC report from an email message, and print its extracted details.
 
 DMARC reports are periodically mailed, if requested in the DMARC DNS record of
@@ -3060,14 +3120,14 @@ understand email deliverability problems.
 			idents := record.Identifiers
 			fmt.Printf("\theaderfrom %q, envelopes from %q, to %q\n", idents.HeaderFrom, idents.EnvelopeFrom, idents.EnvelopeTo)
 			eval := record.Row.PolicyEvaluated
-			var reasons string
+			var reasons strings.Builder
 			for _, reason := range eval.Reasons {
-				reasons += "; " + string(reason.Type)
+				reasons.WriteString("; " + string(reason.Type))
 				if reason.Comment != "" {
-					reasons += fmt.Sprintf(": %q", reason.Comment)
+					reasons.WriteString(fmt.Sprintf(": %q", reason.Comment))
 				}
 			}
-			fmt.Printf("\tresult %s: dkim %s, spf %s; sourceIP %s, count %d%s\n", eval.Disposition, eval.DKIM, eval.SPF, record.Row.SourceIP, record.Row.Count, reasons)
+			fmt.Printf("\tresult %s: dkim %s, spf %s; sourceIP %s, count %d%s\n", eval.Disposition, eval.DKIM, eval.SPF, record.Row.SourceIP, record.Row.Count, reasons.String())
 			for _, dkim := range record.AuthResults.DKIM {
 				var result string
 				if dkim.HumanResult != "" {
@@ -3084,7 +3144,7 @@ understand email deliverability problems.
 
 func cmdDMARCDBAddReport(c *cmd) {
 	c.unlisted = true
-	c.params = "fromdomain < message"
+	c.params = "$fromdomain < messagefile"
 	c.help = "Add a DMARC report to the database."
 	args := c.Parse()
 	if len(args) != 1 {
@@ -3102,7 +3162,7 @@ func cmdDMARCDBAddReport(c *cmd) {
 }
 
 func cmdTLSRPTLookup(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Lookup the TLSRPT record for the domain.
 
 A TLSRPT record typically contains an email address where reports about TLS
@@ -3122,7 +3182,7 @@ successfully used TLS, and how what kind of errors occurred otherwise.
 }
 
 func cmdTLSRPTParsereportmsg(c *cmd) {
-	c.params = "message ..."
+	c.params = "$messagefile ..."
 	c.help = `Parse and print the TLSRPT in the message.
 
 The report is printed in formatted JSON.
@@ -3147,7 +3207,7 @@ The report is printed in formatted JSON.
 }
 
 func cmdSPFCheck(c *cmd) {
-	c.params = "domain ip"
+	c.params = "$domain $ip"
 	c.help = `Check the status of IP for the policy published in DNS for the domain.
 
 IPs may be allowed to send for a domain, or disallowed, and several shades in
@@ -3186,7 +3246,7 @@ printed.
 }
 
 func cmdSPFParse(c *cmd) {
-	c.params = "txtrecord"
+	c.params = "$txtrecord"
 	c.help = "Parse the record as SPF record. If valid, nothing is printed."
 	args := c.Parse()
 	if len(args) != 1 {
@@ -3198,7 +3258,7 @@ func cmdSPFParse(c *cmd) {
 }
 
 func cmdSPFLookup(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = "Lookup the SPF record for the domain and print it."
 	args := c.Parse()
 	if len(args) != 1 {
@@ -3213,7 +3273,7 @@ func cmdSPFLookup(c *cmd) {
 }
 
 func cmdMTASTSLookup(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Lookup the MTASTS record and policy for the domain.
 
 MTA-STS is a mechanism for a domain to specify if it requires TLS connections
@@ -3245,7 +3305,7 @@ should be used, and how long the policy can be cached.
 }
 
 func cmdRDAPDomainage(c *cmd) {
-	c.params = "domain"
+	c.params = "$domain"
 	c.help = `Lookup the age of domain in RDAP based on latest registration.
 
 RDAP is the registration data access protocol. Registries run RDAP services for
@@ -3290,7 +3350,7 @@ automation.
 }
 
 func cmdRetrain(c *cmd) {
-	c.params = "[accountname]"
+	c.params = "[$accountname]"
 	c.help = `Recreate and retrain the junk filter for the account or all accounts.
 
 Useful after having made changes to the junk filter configuration, or if the
@@ -3317,7 +3377,7 @@ func ctlcmdRetrain(ctl *ctl, account string) {
 
 func cmdTLSRPTDBAddReport(c *cmd) {
 	c.unlisted = true
-	c.params = "< message"
+	c.params = "< messagefile"
 	c.help = "Parse a TLS report from the message and add it to the database."
 	var hostReport bool
 	c.flag.BoolVar(&hostReport, "hostreport", false, "report for a host instead of domain")
@@ -3350,7 +3410,7 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 }
 
 func cmdDNSBLCheck(c *cmd) {
-	c.params = "zone ip"
+	c.params = "$zone $ip"
 	c.help = `Test if IP is in the DNS blocklist of the zone, e.g. bl.spamcop.net.
 
 If the IP is in the blocklist, an explanation is printed. This is typically a
@@ -3375,7 +3435,7 @@ URL with more information.
 }
 
 func cmdDNSBLCheckhealth(c *cmd) {
-	c.params = "zone"
+	c.params = "$zone"
 	c.help = `Check the health of the DNS blocklist represented by zone, e.g. bl.spamcop.net.
 
 The health of a DNS blocklist can be checked by querying for 127.0.0.1 and
@@ -3431,7 +3491,7 @@ printed.
 }
 
 func cmdCid(c *cmd) {
-	c.params = "cid"
+	c.params = "$cid"
 	c.help = `Turn an ID from a Received header into a cid, for looking up in logs.
 
 A cid is essentially a connection counter initialized when mox starts. Each log
@@ -3468,7 +3528,7 @@ func cmdVersion(c *cmd) {
 }
 
 func cmdWebapi(c *cmd) {
-	c.params = "[method [baseurl-with-credentials]"
+	c.params = "[$method [$baseurl-with-credentials]"
 	c.help = "Lists available methods, prints request/response parameters for method, or calls a method with a request read from standard input."
 	args := c.Parse()
 	if len(args) > 2 {
@@ -3564,7 +3624,7 @@ func printJSON(indent string, v any) {
 
 // todo: should make it possible to run this command against a running mox. it should disconnect existing clients for accounts with a bumped uidvalidity, so they will reconnect and refetch the data.
 func cmdBumpUIDValidity(c *cmd) {
-	c.params = "account [mailbox]"
+	c.params = "$account [$mailbox]"
 	c.help = `Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch messages.
 
 This can be useful after manually repairing metadata about the account/mailbox.
@@ -3618,7 +3678,7 @@ open, or is not running.
 }
 
 func cmdReassignUIDs(c *cmd) {
-	c.params = "account [mailboxid]"
+	c.params = "$account [$mailboxid]"
 	c.help = `Reassign UIDs in one mailbox or all mailboxes in an account and bump UID validity, causing IMAP clients to refetch messages.
 
 Opens account database file directly. Ensure mox does not have the account
@@ -3713,7 +3773,7 @@ open, or is not running.
 }
 
 func cmdFixUIDMeta(c *cmd) {
-	c.params = "account"
+	c.params = "$account"
 	c.help = `Fix inconsistent UIDVALIDITY and UIDNEXT in messages/mailboxes/account.
 
 The next UID to use for a message in a mailbox should always be higher than any
@@ -3786,7 +3846,7 @@ open, or is not running.
 }
 
 func cmdFixmsgsize(c *cmd) {
-	c.params = "[account]"
+	c.params = "[$account]"
 	c.help = `Ensure message sizes in the database matching the sum of the message prefix length and on-disk file size.
 
 Messages with an inconsistent size are also parsed again.
@@ -3816,7 +3876,7 @@ func ctlcmdFixmsgsize(ctl *ctl, account string) {
 }
 
 func cmdReparse(c *cmd) {
-	c.params = "[account]"
+	c.params = "[$account]"
 	c.help = `Parse all messages in the account or all accounts again.
 
 Can be useful after upgrading mox with improved message parsing. Messages are
@@ -3844,7 +3904,7 @@ func ctlcmdReparse(ctl *ctl, account string) {
 }
 
 func cmdEnsureParsed(c *cmd) {
-	c.params = "account"
+	c.params = "$account"
 	c.help = "Ensure messages in the database have a pre-parsed MIME form in the database."
 	var all bool
 	c.flag.BoolVar(&all, "all", false, "store new parsed message for all messages")
@@ -3895,7 +3955,7 @@ func cmdEnsureParsed(c *cmd) {
 }
 
 func cmdRecalculateMailboxCounts(c *cmd) {
-	c.params = "account"
+	c.params = "$account"
 	c.help = `Recalculate message counts for all mailboxes in the account, and total message size for quota.
 
 When a message is added to/removed from a mailbox, or when message flags change,
@@ -3921,7 +3981,7 @@ func ctlcmdRecalculateMailboxCounts(ctl *ctl, account string) {
 }
 
 func cmdMessageParse(c *cmd) {
-	c.params = "message.eml"
+	c.params = "$messagefile"
 	c.help = "Parse message, print JSON representation."
 
 	var smtputf8 bool
@@ -3958,7 +4018,7 @@ func cmdMessageParse(c *cmd) {
 
 func cmdOpenaccounts(c *cmd) {
 	c.unlisted = true
-	c.params = "datadir account ..."
+	c.params = "$datadir $account ..."
 	c.help = `Open and close accounts, for triggering data upgrades, for tests.
 
 Opens database files directly, not going through a running mox instance.
@@ -3983,7 +4043,7 @@ Opens database files directly, not going through a running mox instance.
 }
 
 func cmdReassignthreads(c *cmd) {
-	c.params = "[account]"
+	c.params = "[$account]"
 	c.help = `Reassign message threads.
 
 For all accounts, or optionally only the specified account.
@@ -4035,15 +4095,19 @@ func ctlcmdReassignthreads(ctl *ctl, account string) {
 }
 
 func cmdIMAPServe(c *cmd) {
-	c.params = "preauth-address"
-	c.help = `Initiate a preauthenticated IMAP connection on file descriptor 0.
+	c.params = "$preauthaddress"
+	c.help = `Initiate a preauthenticated IMAP connection on stdin/stdout.
+
+Data from stdin is copied to the IMAP server, and the responses from the IMAP
+server are copied to stdout.
 
 For use with tools that can do IMAP over tunneled connections, e.g. with SSH
-during migrations. TLS is not possible on the connection, and authentication
-does not require TLS.
+during migrations.
+
+TLS is not possible on the connection, and authentication does not require TLS.
 `
 	var fd0 bool
-	c.flag.BoolVar(&fd0, "fd0", false, "write IMAP to file descriptor 0 instead of stdout")
+	c.flag.BoolVar(&fd0, "fd0", false, "write IMAP to file descriptor 0 (stdin) instead of stdout")
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
@@ -4052,7 +4116,7 @@ does not require TLS.
 	address := args[0]
 	output := os.Stdout
 	if fd0 {
-		output = os.Stdout
+		output = os.Stdin
 	}
 	ctlcmdIMAPServe(xctl(), address, os.Stdin, output)
 }
@@ -4067,7 +4131,8 @@ func ctlcmdIMAPServe(ctl *ctl, address string, input io.ReadCloser, output io.Wr
 		defer func() {
 			done <- struct{}{}
 		}()
-		_, err := io.Copy(output, ctl.conn)
+		r := io.MultiReader(io.LimitReader(ctl.r, int64(ctl.r.Buffered())), ctl.conn)
+		_, err := io.Copy(output, r)
 		if err == nil {
 			err = io.EOF
 		}
@@ -4088,7 +4153,7 @@ func ctlcmdIMAPServe(ctl *ctl, address string, input io.ReadCloser, output io.Wr
 
 func cmdReadmessages(c *cmd) {
 	c.unlisted = true
-	c.params = "datadir account ..."
+	c.params = "$datadir $account ..."
 	c.help = `Open account, parse several headers for all messages.
 
 For performance testing.

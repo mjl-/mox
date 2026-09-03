@@ -293,7 +293,7 @@ var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
 	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress", "esearch", "notify")
-	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace", "esearch")
+	commandsStateSelected         = stateCommands("check", "close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace", "esearch")
 )
 
 // Commands that use sequence numbers. Cannot be used when UIDONLY is enabled.
@@ -1361,7 +1361,7 @@ func (c *conn) command() {
 	// Check if command is allowed in this state.
 	if _, ok1 := commandsStateAny[cmdlow]; ok1 {
 	} else if _, ok2 := commandsStateNotAuthenticated[cmdlow]; ok2 && c.state == stateNotAuthenticated {
-	} else if _, ok3 := commandsStateAuthenticated[cmdlow]; ok3 && c.state == stateAuthenticated || c.state == stateSelected {
+	} else if _, ok3 := commandsStateAuthenticated[cmdlow]; ok3 && (c.state == stateAuthenticated || c.state == stateSelected) {
 	} else if _, ok4 := commandsStateSelected[cmdlow]; ok4 && c.state == stateSelected {
 	} else if ok1 || ok2 || ok3 || ok4 {
 		xuserErrorf("not allowed in this connection state")
@@ -1416,23 +1416,23 @@ func xmailboxPatternMatcher(ref string, patterns []string) matchStringer {
 		}
 
 		// Fix casing for all Inbox paths.
-		first := strings.SplitN(s, "/", 2)[0]
+		first, _, _ := strings.Cut(s, "/")
 		if strings.EqualFold(first, "Inbox") {
 			s = "Inbox" + s[len("Inbox"):]
 		}
 
 		// ../rfc/9051:2361
-		var rs string
+		var rs strings.Builder
 		for _, c := range s {
 			if c == '%' {
-				rs += "[^/]*"
+				rs.WriteString("[^/]*")
 			} else if c == '*' {
-				rs += ".*"
+				rs.WriteString(".*")
 			} else {
-				rs += regexp.QuoteMeta(string(c))
+				rs.WriteString(regexp.QuoteMeta(string(c)))
 			}
 		}
-		subs = append(subs, rs)
+		subs = append(subs, rs.String())
 	}
 
 	if len(subs) == 0 {
@@ -1748,7 +1748,7 @@ func (c *conn) ok(tag, cmd string) {
 // Name is invalid if it contains leading/trailing/double slashes, or when it isn't
 // unicode-normalized, or when empty or has special characters.
 func xcheckmailboxname(name string, allowInbox bool) string {
-	name, isinbox, err := store.CheckMailboxName(name, allowInbox)
+	name, isinbox, err := config.CheckMailboxName(name, allowInbox)
 	if isinbox {
 		xuserErrorf("special mailboxname Inbox not allowed")
 	} else if err != nil {
@@ -3089,7 +3089,7 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 
 	// Clients should only send capabilities that need enabling.
 	// We should only echo that we recognize as needing enabling.
-	var enabled string
+	var enabled strings.Builder
 	var qresync bool
 
 	// Accounts can suppress capabilities, we ignore them when the client tries to
@@ -3112,17 +3112,17 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 			capUTF8Accept,
 			capCondstore: // ../rfc/7162:384
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 		case capQresync:
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 			qresync = true
 		case capMetadata:
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 		case capUIDOnly:
 			c.enabled[cap] = true
-			enabled += " " + s
+			enabled.WriteString(" " + s)
 			c.uidonly = true
 			c.uids = nil
 		}
@@ -3130,11 +3130,11 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 	// QRESYNC enabled CONDSTORE too ../rfc/7162:1391
 	if qresync && !c.enabled[capCondstore] {
 		c.xensureCondstore(nil)
-		enabled += " CONDSTORE"
+		enabled.WriteString(" CONDSTORE")
 	}
 
 	// Response syntax: ../rfc/9051:6520 ../rfc/5161:211
-	c.xbwritelinef("* ENABLED%s", enabled)
+	c.xbwritelinef("* ENABLED%s", enabled.String())
 	c.ok(tag, cmd)
 }
 
@@ -3259,6 +3259,14 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 
 	var mb store.Mailbox
 	c.account.WithRLock(func() {
+		// Flush pending changes. We are about to fetch the current state from the
+		// database. We don't want appends that were pending since the beginning of the
+		// connection to be processed after we've read the latest state from the database,
+		// e.g. by a status commands after select. It would mean we would try to apply
+		// changes that we already have in our connection state.
+		overflow, pendingChanges := c.comm.Get()
+		c.xapplyChanges(overflow, pendingChanges, false)
+
 		c.xdbread(func(tx *bstore.Tx) {
 			mb = c.xmailbox(tx, name, "")
 
@@ -4793,7 +4801,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 					m.IsReject = false
 				}
 				m.TrainedJunk = nil
-				m.JunkFlagsForMailbox(mbDst, conf)
+				m.JunkFlagsForMailboxMove(mbSrc, mbDst, conf)
 				m.SaveDate = &now
 				err := tx.Insert(&m)
 				xcheckf(err, "inserting message")
@@ -5056,7 +5064,7 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 			nm.Seen = false
 		}
 
-		nm.JunkFlagsForMailbox(*mbDst, accConf)
+		nm.JunkFlagsForMailboxMove(*mbSrc, *mbDst, accConf)
 
 		err = tx.Update(&nm)
 		xcheckf(err, "updating message with new mailbox")

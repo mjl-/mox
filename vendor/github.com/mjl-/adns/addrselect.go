@@ -43,7 +43,7 @@ func sortByRFC6724withSrcs(addrs []net.IPAddr, srcs []netip.Addr) {
 // number is irrelevant.
 func srcAddrs(addrs []net.IPAddr) []netip.Addr {
 	srcs := make([]netip.Addr, len(addrs))
-	dst := net.UDPAddr{Port: 9}
+	dst := net.UDPAddr{Port: 53}
 	for i := range addrs {
 		dst.IP = addrs[i].IP
 		dst.Zone = addrs[i].Zone

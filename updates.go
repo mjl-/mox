@@ -20,7 +20,7 @@ import (
 
 func cmdUpdatesAddSigned(c *cmd) {
 	c.unlisted = true
-	c.params = "privkey-file changes-file < message"
+	c.params = "$privkeyfile $changesfile < messagefile"
 	c.help = "Add a signed change to the changes file."
 	args := c.Parse()
 	if len(args) != 2 {
@@ -76,7 +76,7 @@ func cmdUpdatesAddSigned(c *cmd) {
 
 func cmdUpdatesVerify(c *cmd) {
 	c.unlisted = true
-	c.params = "pubkey-base64 < changelog-file"
+	c.params = "$pubkeybase64 < changelogfile"
 	c.help = "Verify the changelog file against the public key."
 	args := c.Parse()
 	if len(args) != 1 {

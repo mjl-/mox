@@ -608,7 +608,7 @@ func xrandom(n int) []byte {
 	return buf
 }
 
-func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.SendResult, err error) {
+func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.SendResult, rerr error) {
 	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/api.go:/MessageSubmit\( and ../webapisrv/server.go:/Send\(
 
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
@@ -854,9 +854,11 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 		cd := mime.FormatMediaType(disp, map[string]string{"filename": filename})
 
+		xcheckcontrol(ct)
 		h.Set("Content-Type", ct)
 		h.Set("Content-Disposition", cd)
 		if cid != "" {
+			xcheckcontrol(cid)
 			h.Set("Content-ID", cid)
 		}
 		h.Set("Content-Transfer-Encoding", "base64")
@@ -1198,7 +1200,7 @@ func xmessageGet(ctx context.Context, acc *store.Account, msgID int64) (store.Me
 	return m, mb
 }
 
-func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (resp webapi.MessageGetResult, err error) {
+func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (resp webapi.MessageGetResult, rerr error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	log := reqInfo.Log
 	acc := reqInfo.Account
@@ -1211,10 +1213,8 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 		msgr = acc.MessageReader(m)
 	})
 	defer func() {
-		if err != nil {
-			err := msgr.Close()
-			log.Check(err, "cleaning up message reader")
-		}
+		err := msgr.Close()
+		log.Check(err, "cleaning up message reader")
 	}()
 
 	p, err := m.LoadPart(msgr)
@@ -1316,7 +1316,7 @@ func (s server) MessageRawGet(ctx context.Context, req webapi.MessageRawGetReque
 	return msgr, nil
 }
 
-func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetRequest) (resp io.ReadCloser, err error) {
+func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetRequest) (resp io.ReadCloser, rerr error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	log := reqInfo.Log
 	acc := reqInfo.Account
@@ -1328,14 +1328,16 @@ func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetReq
 		msgr = acc.MessageReader(m)
 	})
 	defer func() {
-		if err != nil {
+		if rerr != nil {
 			err := msgr.Close()
 			log.Check(err, "cleaning up message reader")
 		}
 	}()
 
 	p, err := m.LoadPart(msgr)
-	xcheckf(err, "load parsed message")
+	if err != nil {
+		return nil, fmt.Errorf("load parsed message: %v", err)
+	}
 
 	for i, index := range req.PartPath {
 		if index < 0 || index >= len(p.Parts) {
@@ -1383,6 +1385,6 @@ func (s server) MessageFlagsRemove(ctx context.Context, req webapi.MessageFlagsR
 
 func (s server) MessageMove(ctx context.Context, req webapi.MessageMoveRequest) (resp webapi.MessageMoveResult, err error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	xops.MessageMove(ctx, reqInfo.Log, reqInfo.Account, []int64{req.MsgID}, req.DestMailboxName, 0)
+	xops.MessageMove(ctx, reqInfo.Log, reqInfo.Account, []int64{req.MsgID}, req.DestMailboxName, 0, false)
 	return
 }

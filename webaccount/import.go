@@ -26,6 +26,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -432,7 +433,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	xensureMailbox := func(name string) *store.Mailbox {
 		// Ensure name is normalized.
 		name = norm.NFC.String(name)
-		name, _, err := store.CheckMailboxName(name, true)
+		name, _, err := config.CheckMailboxName(name, true)
 		ximportcheckf(err, "checking mailbox name")
 
 		if mb, ok := mailboxNames[name]; ok {
@@ -631,7 +632,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		}
 
 		// Parse flags. See https://cr.yp.to/proto/maildir.html.
-		var keepFlags string
+		var keepFlags strings.Builder
 		var flags store.Flags
 		keywords := map[string]bool{}
 		t = strings.SplitN(path.Base(filename), ":2,", 2)
@@ -655,7 +656,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 						dovecotKeywords, ok := mailboxKeywords[mailbox]
 						if !ok {
 							// No keywords file seen yet, we'll try later if it comes in.
-							keepFlags += string(c)
+							keepFlags.WriteString(string(c))
 						} else if kw, ok := dovecotKeywords[c]; ok {
 							flagSet(&flags, keywords, kw)
 						}
@@ -672,11 +673,11 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		}
 		xdeliver(mb, &m, f, filename)
 		f = nil
-		if keepFlags != "" {
+		if keepFlags.String() != "" {
 			if _, ok := mailboxMissingKeywordMessages[mailbox]; !ok {
 				mailboxMissingKeywordMessages[mailbox] = map[int64]string{}
 			}
-			mailboxMissingKeywordMessages[mailbox][m.ID] = keepFlags
+			mailboxMissingKeywordMessages[mailbox][m.ID] = keepFlags.String()
 		}
 	}
 
@@ -687,8 +688,8 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 			name = strings.TrimPrefix(name[len(skipMailboxPrefix):], "/")
 		}
 
-		if strings.HasSuffix(name, "/") {
-			name = strings.TrimSuffix(name, "/")
+		if before, ok := strings.CutSuffix(name, "/"); ok {
+			name = before
 			dir := path.Dir(name)
 			switch path.Base(dir) {
 			case "new", "cur", "tmp":

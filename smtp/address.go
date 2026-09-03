@@ -48,16 +48,17 @@ func (lp Localpart) String() string {
 	}
 
 	// Make quoted-string.
-	r := `"`
+	var r strings.Builder
+	r.WriteString(`"`)
 	for _, b := range lp {
 		if b == '"' || b == '\\' {
-			r += "\\" + string(b)
+			r.WriteString("\\" + string(b))
 		} else {
-			r += string(b)
+			r.WriteString(string(b))
 		}
 	}
-	r += `"`
-	return r
+	r.WriteString(`"`)
+	return r.String()
 }
 
 // LogString returns the localpart as string for use in smtp, and an escaped
@@ -79,15 +80,15 @@ func (lp Localpart) DSNString(utf8 bool) string {
 		return lp.String()
 	}
 	// ../rfc/6533:259
-	r := ""
+	var r strings.Builder
 	for _, c := range lp {
 		if c > 0x20 && c < 0x7f && c != '\\' && c != '+' && c != '=' {
-			r += string(c)
+			r.WriteString(string(c))
 		} else {
-			r += fmt.Sprintf(`\x{%x}`, c)
+			r.WriteString(fmt.Sprintf(`\x{%x}`, c))
 		}
 	}
-	return r
+	return r.String()
 }
 
 // IsInternational returns if this is an internationalized local part, i.e. has

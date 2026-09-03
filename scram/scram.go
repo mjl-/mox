@@ -307,7 +307,7 @@ func (s *Server) Finish(clientFinal []byte, saltedPassword []byte) (serverFinal 
 
 	clientSig := hmac0(s.h, storedKey, authMsg)
 	xor(clientSig, clientKey) // Now clientProof.
-	if !bytes.Equal(clientSig, proof) {
+	if !hmac.Equal(clientSig, proof) {
 		return "e=" + string(ErrInvalidProof), ErrInvalidProof
 	}
 
@@ -490,7 +490,7 @@ func (c *Client) ServerFinal(serverFinal []byte) (rerr error) {
 
 	serverKey := hmac0(c.h, c.saltedPassword, "Server Key")
 	serverSig := hmac0(c.h, serverKey, c.authMessage)
-	if !bytes.Equal(verifier, serverSig) {
+	if !hmac.Equal(verifier, serverSig) {
 		return fmt.Errorf("incorrect server signature")
 	}
 	return nil
@@ -498,15 +498,15 @@ func (c *Client) ServerFinal(serverFinal []byte) (rerr error) {
 
 // Convert "," to =2C and "=" to =3D.
 func saslname(s string) string {
-	var r string
+	var r strings.Builder
 	for _, c := range s {
 		if c == ',' {
-			r += "=2C"
+			r.WriteString("=2C")
 		} else if c == '=' {
-			r += "=3D"
+			r.WriteString("=3D")
 		} else {
-			r += string(c)
+			r.WriteString(string(c))
 		}
 	}
-	return r
+	return r.String()
 }

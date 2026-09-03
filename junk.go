@@ -84,7 +84,7 @@ func must(f *junk.Filter, err error) *junk.Filter {
 
 func cmdJunkTrain(c *cmd) {
 	c.unlisted = true
-	c.params = "hamdir spamdir"
+	c.params = "$hamdir $spamdir"
 	c.help = "Train a junk filter with messages from hamdir and spamdir."
 	a := junkFlags(c.flag)
 	args := c.Parse()
@@ -113,7 +113,7 @@ func cmdJunkTrain(c *cmd) {
 
 func cmdJunkCheck(c *cmd) {
 	c.unlisted = true
-	c.params = "mailfile"
+	c.params = "$messagefile"
 	c.help = "Check an email message against a junk filter, printing the probability of spam on a scale from 0 to 1."
 	a := junkFlags(c.flag)
 	args := c.Parse()
@@ -141,7 +141,7 @@ func cmdJunkCheck(c *cmd) {
 
 func cmdJunkTest(c *cmd) {
 	c.unlisted = true
-	c.params = "hamdir spamdir"
+	c.params = "$hamdir $spamdir"
 	c.help = "Check a directory with hams and one with spams against the junk filter, and report the success ratio."
 	a := junkFlags(c.flag)
 	args := c.Parse()

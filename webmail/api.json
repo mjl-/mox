@@ -105,6 +105,26 @@
 			"Returns": []
 		},
 		{
+			"Name": "MessageItem",
+			"Docs": "MessageItem returns a MessageItem for a message.",
+			"Params": [
+				{
+					"Name": "msgID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "mi",
+					"Typewords": [
+						"MessageItem"
+					]
+				}
+			]
+		},
+		{
 			"Name": "ParsedMessage",
 			"Docs": "ParsedMessage returns enough to render the textual body of a message. It is\nassumed the client already has other fields through MessageItem.",
 			"Params": [
@@ -211,6 +231,12 @@
 					"Name": "mailboxID",
 					"Typewords": [
 						"int64"
+					]
+				},
+				{
+					"Name": "markSeen",
+					"Typewords": [
+						"bool"
 					]
 				}
 			],
@@ -1004,14 +1030,666 @@
 			]
 		},
 		{
-			"Name": "ParsedMessage",
-			"Docs": "ParsedMessage has more parsed/derived information about a message, intended\nfor rendering the (contents of the) message. Information from MessageItem is\nnot duplicated.",
+			"Name": "MessageItem",
+			"Docs": "MessageItem is sent by queries, it has derived information analyzed from\nmessage.Part, made for the needs of the message items in the message list.\nmessages.",
+			"Fields": [
+				{
+					"Name": "Message",
+					"Docs": "Without ParsedBuf and MsgPrefix, for size. With Preview, even if it isn't stored yet in the database.",
+					"Typewords": [
+						"Message"
+					]
+				},
+				{
+					"Name": "Envelope",
+					"Docs": "",
+					"Typewords": [
+						"MessageEnvelope"
+					]
+				},
+				{
+					"Name": "Attachments",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Attachment"
+					]
+				},
+				{
+					"Name": "IsSigned",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsEncrypted",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MatchQuery",
+					"Docs": "If message does not match query, it can still be included because of threading.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MoreHeaders",
+					"Docs": "All headers from store.Settings.ShowHeaders that are present.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Message",
+			"Docs": "Message stored in database and per-message file on disk.\n\nContents are always the combined data from MsgPrefix and the on-disk file named\nbased on ID.\n\nMessages always have a header section, even if empty. Incoming messages without\nheader section must get an empty header section added before inserting.",
 			"Fields": [
 				{
 					"Name": "ID",
+					"Docs": "ID of the message, determines path to on-disk message file. Set when adding to a mailbox. When a message is moved to another mailbox, the mailbox ID is changed, but for synchronization purposes, a new Message record is inserted (which gets a new ID) with the Expunged field set and the MailboxID and UID copied.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "UID",
+					"Docs": "UID, for IMAP. Set when adding to mailbox. Strictly increasing values, per mailbox. The UID of a message can never change (though messages can be copied), and the contents of a message/UID also never changes.",
+					"Typewords": [
+						"UID"
+					]
+				},
+				{
+					"Name": "MailboxID",
 					"Docs": "",
 					"Typewords": [
 						"int64"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "Modification sequence, for faster syncing with IMAP QRESYNC and JMAP. ModSeq is the last modification. CreateSeq is the Seq the message was inserted, always \u003c= ModSeq. If Expunged is set, the message has been removed and should not be returned to the user. In this case, ModSeq is the Seq where the message is removed, and will never be changed again. We have an index on both ModSeq (for JMAP that synchronizes per account) and MailboxID+ModSeq (for IMAP that synchronizes per mailbox). The index on CreateSeq helps efficiently finding created messages for JMAP. The value of ModSeq is special for IMAP. Messages that existed before ModSeq was added have 0 as value. But modseq 0 in IMAP is special, so we return it as 1. If we get modseq 1 from a client, the IMAP server will translate it to 0. When we return modseq to clients, we turn 0 into 1.",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "CreateSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "Expunged",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsReject",
+					"Docs": "If set, this message was delivered to a Rejects mailbox. When it is moved to a different mailbox, its MailboxOrigID is set to the destination mailbox and this flag cleared.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsForward",
+					"Docs": "If set, this is a forwarded message (through a ruleset with IsForward). This causes fields used during junk analysis to be moved to their Orig variants, and masked IP fields cleared, so they aren't used in junk classifications for incoming messages. This ensures the forwarded messages don't cause negative reputation for the forwarding mail server, which may also be sending regular messages.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MailboxOrigID",
+					"Docs": "MailboxOrigID is the mailbox the message was originally delivered to. Typically Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the message is moved to another mailbox, e.g. Archive/Trash/Junk. Used for per-mailbox reputation.  MailboxDestinedID is normally 0, but when a message is delivered to the Rejects mailbox or diverted to the Introbox, it is set to the intended mailbox according to delivery rules, typically that of Inbox. When such a message is moved to its intended mailbox, MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the message is used for reputation calculation for future deliveries to that mailbox.  These are not bstore references to prevent having to update all messages in a mailbox when the original mailbox is removed. Use of these fields requires checking if the mailbox still exists.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MailboxDestinedID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Received",
+					"Docs": "Received indicates time of receival over SMTP, or of IMAP APPEND.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "SaveDate",
+					"Docs": "SaveDate is the time of copy/move/save to a mailbox, used with IMAP SAVEDATE extension. Must be updated each time a message is copied/moved to another mailbox. Can be nil for messages from before this functionality was introduced.",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				},
+				{
+					"Name": "RemoteIP",
+					"Docs": "Full IP address of remote SMTP server. Empty if not delivered over SMTP. The masked IPs are used to classify incoming messages. They are left empty for messages matching a ruleset for forwarded messages.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIPMasked1",
+					"Docs": "For IPv4 /32, for IPv6 /64, for reputation.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIPMasked2",
+					"Docs": "For IPv4 /26, for IPv6 /48.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIPMasked3",
+					"Docs": "For IPv4 /21, for IPv6 /32.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "EHLODomain",
+					"Docs": "Only set if present and not an IP address. Unicode string. Empty for forwarded messages.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MailFrom",
+					"Docs": "With localpart and domain. Can be empty.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MailFromLocalpart",
+					"Docs": "SMTP \"MAIL FROM\", can be empty.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "MailFromDomain",
+					"Docs": "Only set if it is a domain, not an IP. Unicode string. Empty for forwarded messages, but see OrigMailFromDomain.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RcptToLocalpart",
+					"Docs": "SMTP \"RCPT TO\", can be empty.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "RcptToDomain",
+					"Docs": "Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgFromLocalpart",
+					"Docs": "Parsed \"From\" message header, used for reputation along with domain validation.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "MsgFromDomain",
+					"Docs": "Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgFromOrgDomain",
+					"Docs": "Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "EHLOValidated",
+					"Docs": "Simplified statements of the Validation fields below, used for incoming messages to check reputation.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MailFromValidated",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MsgFromValidated",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "EHLOValidation",
+					"Docs": "Validation can also take reverse IP lookup into account, not only SPF.",
+					"Typewords": [
+						"Validation"
+					]
+				},
+				{
+					"Name": "MailFromValidation",
+					"Docs": "Can have SPF-specific validations like ValidationSoftfail.",
+					"Typewords": [
+						"Validation"
+					]
+				},
+				{
+					"Name": "MsgFromValidation",
+					"Docs": "Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.",
+					"Typewords": [
+						"Validation"
+					]
+				},
+				{
+					"Name": "DKIMDomains",
+					"Docs": "Domains with verified DKIM signatures. Unicode string. For forwarded messages, a DKIM domain that matched a ruleset's verified domain is left out, but included in OrigDKIMDomains.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "OrigEHLODomain",
+					"Docs": "For forwarded messages,",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "OrigDKIMDomains",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "Canonicalized Message-Id, always lower-case and normalized quoting, without \u003c\u003e's. Empty if missing. Used for matching message threads, and to prevent duplicate reject delivery.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "SubjectBase",
+					"Docs": "For matching threads in case there is no References/In-Reply-To header. It is lower-cased, white-space collapsed, mailing list tags and re/fwd tags removed.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageHash",
+					"Docs": "Hash of message. For rejects delivery in case there is no Message-ID, only set when delivered as reject.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "ThreadID",
+					"Docs": "ID of message starting this thread.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "ThreadParentIDs",
+					"Docs": "IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors. Moving a message to another mailbox keeps the message ID and changes the MailboxID (and UID) of the message, leaving threading parent ids intact.",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "ThreadMissingLink",
+					"Docs": "ThreadMissingLink is true if there is no match with a direct parent. E.g. first ID in ThreadParentIDs is not the direct ancestor (an intermediate message may have been deleted), or subject-based matching was done.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ThreadMuted",
+					"Docs": "If set, newly delivered child messages are automatically marked as read. This field is copied to new child messages. Changes are propagated to the webmail client.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ThreadCollapsed",
+					"Docs": "If set, this (sub)thread is collapsed in the webmail client, for threading mode \"on\" (mode \"unread\" ignores it). This field is copied to new child message. Changes are propagated to the webmail client.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsMailingList",
+					"Docs": "If received message was known to match a mailing list rule (with modified junk filtering).",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "DSN",
+					"Docs": "If this message is a DSN, generated by us or received. For DSNs, we don't look at the subject when matching threads.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ReceivedTLSVersion",
+					"Docs": "0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.",
+					"Typewords": [
+						"uint16"
+					]
+				},
+				{
+					"Name": "ReceivedTLSCipherSuite",
+					"Docs": "",
+					"Typewords": [
+						"uint16"
+					]
+				},
+				{
+					"Name": "ReceivedRequireTLS",
+					"Docs": "Whether RequireTLS was known to be used for incoming delivery.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Seen",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Answered",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Flagged",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Forwarded",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Junk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Notjunk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Deleted",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Draft",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Phishing",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MDNSent",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Keywords",
+					"Docs": "For keywords other than system flags or the basic well-known $-flags. Only in \"atom\" syntax (IMAP), they are case-insensitive, always stored in lower-case (for JMAP), sorted.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Size",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "TrainedJunk",
+					"Docs": "If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.",
+					"Typewords": [
+						"nullable",
+						"bool"
+					]
+				},
+				{
+					"Name": "MsgPrefix",
+					"Docs": "Typically holds received headers and/or header separator.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "Preview",
+					"Docs": "If non-nil, a preview of the message based on text and/or html parts of the message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty if no preview could be created, or the message has not textual content or couldn't be parsed. Previews are typically created when delivering a message, but not when importing messages, for speed. Previews are generated on first request (in the webmail, or through the IMAP fetch attribute \"PREVIEW\" (without \"LAZY\")), and stored with the message at that time. The preview is at most 256 characters (can be more bytes), with detected quoted text replaced with \"[...]\". Previews typically end with a newline, callers may want to strip whitespace.",
+					"Typewords": [
+						"nullable",
+						"string"
+					]
+				},
+				{
+					"Name": "ParsedBuf",
+					"Docs": "ParsedBuf message structure. Currently saved as JSON of message.Part because bstore wasn't able to store recursive types when this was implemented. Created when first needed, and saved in the database. todo: once replaced with non-json storage, remove date fixup in ../message/part.go.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageEnvelope",
+			"Docs": "MessageEnvelope is like message.Envelope, as used in message.Part, but including\nunicode host names for IDNA names.",
+			"Fields": [
+				{
+					"Name": "Date",
+					"Docs": "todo: should get sherpadoc to understand type embeds and embed the non-MessageAddress fields from message.Envelope.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "Sender",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "CC",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "BCC",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "InReplyTo",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageAddress",
+			"Docs": "MessageAddress is like message.Address, but with a dns.Domain, with unicode name\nincluded.",
+			"Fields": [
+				{
+					"Name": "Name",
+					"Docs": "Free-form name for display in mail applications.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "User",
+					"Docs": "Localpart, encoded.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Domain",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups. The strings do not have a\ntrailing dot. When using with StrictResolver, add the trailing dot.",
+			"Fields": [
+				{
+					"Name": "ASCII",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Unicode",
+					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Attachment",
+			"Docs": "Attachment is a MIME part is an existing message that is not intended as\nviewable text or HTML part.",
+			"Fields": [
+				{
+					"Name": "Path",
+					"Docs": "Indices into top-level message.Part.Parts.",
+					"Typewords": [
+						"[]",
+						"int32"
+					]
+				},
+				{
+					"Name": "Filename",
+					"Docs": "File name based on \"name\" attribute of \"Content-Type\", or the \"filename\" attribute of \"Content-Disposition\".",
+					"Typewords": [
+						"string"
 					]
 				},
 				{
@@ -1019,62 +1697,6 @@
 					"Docs": "",
 					"Typewords": [
 						"Part"
-					]
-				},
-				{
-					"Name": "Headers",
-					"Docs": "",
-					"Typewords": [
-						"{}",
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "ViewMode",
-					"Docs": "",
-					"Typewords": [
-						"ViewMode"
-					]
-				},
-				{
-					"Name": "Texts",
-					"Docs": "Contents of text parts, can be empty.",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "HasHTML",
-					"Docs": "Whether there is an HTML part. The webclient renders HTML message parts through an iframe and a separate request with strict CSP headers to prevent script execution and loading of external resources, which isn't possible when loading in iframe with inline HTML because not all browsers support the iframe csp attribute.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "ListReplyAddress",
-					"Docs": "From List-Post.",
-					"Typewords": [
-						"nullable",
-						"MessageAddress"
-					]
-				},
-				{
-					"Name": "TextPaths",
-					"Docs": "Paths to text parts.",
-					"Typewords": [
-						"[]",
-						"[]",
-						"int32"
-					]
-				},
-				{
-					"Name": "HTMLPath",
-					"Docs": "Path to HTML part.",
-					"Typewords": [
-						"[]",
-						"int32"
 					]
 				}
 			]
@@ -1339,48 +1961,77 @@
 			]
 		},
 		{
-			"Name": "MessageAddress",
-			"Docs": "MessageAddress is like message.Address, but with a dns.Domain, with unicode name\nincluded.",
+			"Name": "ParsedMessage",
+			"Docs": "ParsedMessage has more parsed/derived information about a message, intended\nfor rendering the (contents of the) message. Information from MessageItem is\nnot duplicated.",
 			"Fields": [
 				{
-					"Name": "Name",
-					"Docs": "Free-form name for display in mail applications.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "User",
-					"Docs": "Localpart, encoded.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "Domain",
+					"Name": "ID",
 					"Docs": "",
 					"Typewords": [
-						"Domain"
+						"int64"
 					]
-				}
-			]
-		},
-		{
-			"Name": "Domain",
-			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups. The strings do not have a\ntrailing dot. When using with StrictResolver, add the trailing dot.",
-			"Fields": [
+				},
 				{
-					"Name": "ASCII",
-					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.",
+					"Name": "Part",
+					"Docs": "",
 					"Typewords": [
+						"Part"
+					]
+				},
+				{
+					"Name": "Headers",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"[]",
 						"string"
 					]
 				},
 				{
-					"Name": "Unicode",
-					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
+					"Name": "ViewMode",
+					"Docs": "",
 					"Typewords": [
+						"ViewMode"
+					]
+				},
+				{
+					"Name": "Texts",
+					"Docs": "Contents of text parts, can be empty.",
+					"Typewords": [
+						"[]",
 						"string"
+					]
+				},
+				{
+					"Name": "HasHTML",
+					"Docs": "Whether there is an HTML part. The webclient renders HTML message parts through an iframe and a separate request with strict CSP headers to prevent script execution and loading of external resources, which isn't possible when loading in iframe with inline HTML because not all browsers support the iframe csp attribute.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ListReplyAddress",
+					"Docs": "From List-Post.",
+					"Typewords": [
+						"nullable",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "TextPaths",
+					"Docs": "Paths to text parts.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"int32"
+					]
+				},
+				{
+					"Name": "HTMLPath",
+					"Docs": "Path to HTML part.",
+					"Typewords": [
+						"[]",
+						"int32"
 					]
 				}
 			]
@@ -2028,6 +2679,13 @@
 					]
 				},
 				{
+					"Name": "Introbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "RejectsMailbox",
 					"Docs": "",
 					"Typewords": [
@@ -2165,631 +2823,6 @@
 					"Docs": "If set, there are no more messages in this view at this moment. Messages can be added, typically via Change messages, e.g. for new deliveries.",
 					"Typewords": [
 						"bool"
-					]
-				}
-			]
-		},
-		{
-			"Name": "MessageItem",
-			"Docs": "MessageItem is sent by queries, it has derived information analyzed from\nmessage.Part, made for the needs of the message items in the message list.\nmessages.",
-			"Fields": [
-				{
-					"Name": "Message",
-					"Docs": "Without ParsedBuf and MsgPrefix, for size. With Preview, even if it isn't stored yet in the database.",
-					"Typewords": [
-						"Message"
-					]
-				},
-				{
-					"Name": "Envelope",
-					"Docs": "",
-					"Typewords": [
-						"MessageEnvelope"
-					]
-				},
-				{
-					"Name": "Attachments",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"Attachment"
-					]
-				},
-				{
-					"Name": "IsSigned",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "IsEncrypted",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "MatchQuery",
-					"Docs": "If message does not match query, it can still be included because of threading.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "MoreHeaders",
-					"Docs": "All headers from store.Settings.ShowHeaders that are present.",
-					"Typewords": [
-						"[]",
-						"[]",
-						"string"
-					]
-				}
-			]
-		},
-		{
-			"Name": "Message",
-			"Docs": "Message stored in database and per-message file on disk.\n\nContents are always the combined data from MsgPrefix and the on-disk file named\nbased on ID.\n\nMessages always have a header section, even if empty. Incoming messages without\nheader section must get an empty header section added before inserting.",
-			"Fields": [
-				{
-					"Name": "ID",
-					"Docs": "ID of the message, determines path to on-disk message file. Set when adding to a mailbox. When a message is moved to another mailbox, the mailbox ID is changed, but for synchronization purposes, a new Message record is inserted (which gets a new ID) with the Expunged field set and the MailboxID and UID copied.",
-					"Typewords": [
-						"int64"
-					]
-				},
-				{
-					"Name": "UID",
-					"Docs": "UID, for IMAP. Set when adding to mailbox. Strictly increasing values, per mailbox. The UID of a message can never change (though messages can be copied), and the contents of a message/UID also never changes.",
-					"Typewords": [
-						"UID"
-					]
-				},
-				{
-					"Name": "MailboxID",
-					"Docs": "",
-					"Typewords": [
-						"int64"
-					]
-				},
-				{
-					"Name": "ModSeq",
-					"Docs": "Modification sequence, for faster syncing with IMAP QRESYNC and JMAP. ModSeq is the last modification. CreateSeq is the Seq the message was inserted, always \u003c= ModSeq. If Expunged is set, the message has been removed and should not be returned to the user. In this case, ModSeq is the Seq where the message is removed, and will never be changed again. We have an index on both ModSeq (for JMAP that synchronizes per account) and MailboxID+ModSeq (for IMAP that synchronizes per mailbox). The index on CreateSeq helps efficiently finding created messages for JMAP. The value of ModSeq is special for IMAP. Messages that existed before ModSeq was added have 0 as value. But modseq 0 in IMAP is special, so we return it as 1. If we get modseq 1 from a client, the IMAP server will translate it to 0. When we return modseq to clients, we turn 0 into 1.",
-					"Typewords": [
-						"ModSeq"
-					]
-				},
-				{
-					"Name": "CreateSeq",
-					"Docs": "",
-					"Typewords": [
-						"ModSeq"
-					]
-				},
-				{
-					"Name": "Expunged",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "IsReject",
-					"Docs": "If set, this message was delivered to a Rejects mailbox. When it is moved to a different mailbox, its MailboxOrigID is set to the destination mailbox and this flag cleared.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "IsForward",
-					"Docs": "If set, this is a forwarded message (through a ruleset with IsForward). This causes fields used during junk analysis to be moved to their Orig variants, and masked IP fields cleared, so they aren't used in junk classifications for incoming messages. This ensures the forwarded messages don't cause negative reputation for the forwarding mail server, which may also be sending regular messages.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "MailboxOrigID",
-					"Docs": "MailboxOrigID is the mailbox the message was originally delivered to. Typically Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the message is moved to another mailbox, e.g. Archive/Trash/Junk. Used for per-mailbox reputation.  MailboxDestinedID is normally 0, but when a message is delivered to the Rejects mailbox, it is set to the intended mailbox according to delivery rules, typically that of Inbox. When such a message is moved out of Rejects, the MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the message is used for reputation calculation for future deliveries to that mailbox.  These are not bstore references to prevent having to update all messages in a mailbox when the original mailbox is removed. Use of these fields requires checking if the mailbox still exists.",
-					"Typewords": [
-						"int64"
-					]
-				},
-				{
-					"Name": "MailboxDestinedID",
-					"Docs": "",
-					"Typewords": [
-						"int64"
-					]
-				},
-				{
-					"Name": "Received",
-					"Docs": "Received indicates time of receival over SMTP, or of IMAP APPEND.",
-					"Typewords": [
-						"timestamp"
-					]
-				},
-				{
-					"Name": "SaveDate",
-					"Docs": "SaveDate is the time of copy/move/save to a mailbox, used with IMAP SAVEDATE extension. Must be updated each time a message is copied/moved to another mailbox. Can be nil for messages from before this functionality was introduced.",
-					"Typewords": [
-						"nullable",
-						"timestamp"
-					]
-				},
-				{
-					"Name": "RemoteIP",
-					"Docs": "Full IP address of remote SMTP server. Empty if not delivered over SMTP. The masked IPs are used to classify incoming messages. They are left empty for messages matching a ruleset for forwarded messages.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "RemoteIPMasked1",
-					"Docs": "For IPv4 /32, for IPv6 /64, for reputation.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "RemoteIPMasked2",
-					"Docs": "For IPv4 /26, for IPv6 /48.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "RemoteIPMasked3",
-					"Docs": "For IPv4 /21, for IPv6 /32.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "EHLODomain",
-					"Docs": "Only set if present and not an IP address. Unicode string. Empty for forwarded messages.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "MailFrom",
-					"Docs": "With localpart and domain. Can be empty.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "MailFromLocalpart",
-					"Docs": "SMTP \"MAIL FROM\", can be empty.",
-					"Typewords": [
-						"Localpart"
-					]
-				},
-				{
-					"Name": "MailFromDomain",
-					"Docs": "Only set if it is a domain, not an IP. Unicode string. Empty for forwarded messages, but see OrigMailFromDomain.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "RcptToLocalpart",
-					"Docs": "SMTP \"RCPT TO\", can be empty.",
-					"Typewords": [
-						"Localpart"
-					]
-				},
-				{
-					"Name": "RcptToDomain",
-					"Docs": "Unicode string.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "MsgFromLocalpart",
-					"Docs": "Parsed \"From\" message header, used for reputation along with domain validation.",
-					"Typewords": [
-						"Localpart"
-					]
-				},
-				{
-					"Name": "MsgFromDomain",
-					"Docs": "Unicode string.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "MsgFromOrgDomain",
-					"Docs": "Unicode string.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "EHLOValidated",
-					"Docs": "Simplified statements of the Validation fields below, used for incoming messages to check reputation.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "MailFromValidated",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "MsgFromValidated",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "EHLOValidation",
-					"Docs": "Validation can also take reverse IP lookup into account, not only SPF.",
-					"Typewords": [
-						"Validation"
-					]
-				},
-				{
-					"Name": "MailFromValidation",
-					"Docs": "Can have SPF-specific validations like ValidationSoftfail.",
-					"Typewords": [
-						"Validation"
-					]
-				},
-				{
-					"Name": "MsgFromValidation",
-					"Docs": "Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.",
-					"Typewords": [
-						"Validation"
-					]
-				},
-				{
-					"Name": "DKIMDomains",
-					"Docs": "Domains with verified DKIM signatures. Unicode string. For forwarded messages, a DKIM domain that matched a ruleset's verified domain is left out, but included in OrigDKIMDomains.",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "OrigEHLODomain",
-					"Docs": "For forwarded messages,",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "OrigDKIMDomains",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "MessageID",
-					"Docs": "Canonicalized Message-Id, always lower-case and normalized quoting, without \u003c\u003e's. Empty if missing. Used for matching message threads, and to prevent duplicate reject delivery.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "SubjectBase",
-					"Docs": "For matching threads in case there is no References/In-Reply-To header. It is lower-cased, white-space collapsed, mailing list tags and re/fwd tags removed.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "MessageHash",
-					"Docs": "Hash of message. For rejects delivery in case there is no Message-ID, only set when delivered as reject.",
-					"Typewords": [
-						"[]",
-						"uint8"
-					]
-				},
-				{
-					"Name": "ThreadID",
-					"Docs": "ID of message starting this thread.",
-					"Typewords": [
-						"int64"
-					]
-				},
-				{
-					"Name": "ThreadParentIDs",
-					"Docs": "IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors. Moving a message to another mailbox keeps the message ID and changes the MailboxID (and UID) of the message, leaving threading parent ids intact.",
-					"Typewords": [
-						"[]",
-						"int64"
-					]
-				},
-				{
-					"Name": "ThreadMissingLink",
-					"Docs": "ThreadMissingLink is true if there is no match with a direct parent. E.g. first ID in ThreadParentIDs is not the direct ancestor (an intermediate message may have been deleted), or subject-based matching was done.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "ThreadMuted",
-					"Docs": "If set, newly delivered child messages are automatically marked as read. This field is copied to new child messages. Changes are propagated to the webmail client.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "ThreadCollapsed",
-					"Docs": "If set, this (sub)thread is collapsed in the webmail client, for threading mode \"on\" (mode \"unread\" ignores it). This field is copied to new child message. Changes are propagated to the webmail client.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "IsMailingList",
-					"Docs": "If received message was known to match a mailing list rule (with modified junk filtering).",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "DSN",
-					"Docs": "If this message is a DSN, generated by us or received. For DSNs, we don't look at the subject when matching threads.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "ReceivedTLSVersion",
-					"Docs": "0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.",
-					"Typewords": [
-						"uint16"
-					]
-				},
-				{
-					"Name": "ReceivedTLSCipherSuite",
-					"Docs": "",
-					"Typewords": [
-						"uint16"
-					]
-				},
-				{
-					"Name": "ReceivedRequireTLS",
-					"Docs": "Whether RequireTLS was known to be used for incoming delivery.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Seen",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Answered",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Flagged",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Forwarded",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Junk",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Notjunk",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Deleted",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Draft",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Phishing",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "MDNSent",
-					"Docs": "",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "Keywords",
-					"Docs": "For keywords other than system flags or the basic well-known $-flags. Only in \"atom\" syntax (IMAP), they are case-insensitive, always stored in lower-case (for JMAP), sorted.",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "Size",
-					"Docs": "",
-					"Typewords": [
-						"int64"
-					]
-				},
-				{
-					"Name": "TrainedJunk",
-					"Docs": "If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.",
-					"Typewords": [
-						"nullable",
-						"bool"
-					]
-				},
-				{
-					"Name": "MsgPrefix",
-					"Docs": "Typically holds received headers and/or header separator.",
-					"Typewords": [
-						"[]",
-						"uint8"
-					]
-				},
-				{
-					"Name": "Preview",
-					"Docs": "If non-nil, a preview of the message based on text and/or html parts of the message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty if no preview could be created, or the message has not textual content or couldn't be parsed. Previews are typically created when delivering a message, but not when importing messages, for speed. Previews are generated on first request (in the webmail, or through the IMAP fetch attribute \"PREVIEW\" (without \"LAZY\")), and stored with the message at that time. The preview is at most 256 characters (can be more bytes), with detected quoted text replaced with \"[...]\". Previews typically end with a newline, callers may want to strip whitespace.",
-					"Typewords": [
-						"nullable",
-						"string"
-					]
-				},
-				{
-					"Name": "ParsedBuf",
-					"Docs": "ParsedBuf message structure. Currently saved as JSON of message.Part because bstore wasn't able to store recursive types when this was implemented. Created when first needed, and saved in the database. todo: once replaced with non-json storage, remove date fixup in ../message/part.go.",
-					"Typewords": [
-						"[]",
-						"uint8"
-					]
-				}
-			]
-		},
-		{
-			"Name": "MessageEnvelope",
-			"Docs": "MessageEnvelope is like message.Envelope, as used in message.Part, but including\nunicode host names for IDNA names.",
-			"Fields": [
-				{
-					"Name": "Date",
-					"Docs": "todo: should get sherpadoc to understand type embeds and embed the non-MessageAddress fields from message.Envelope.",
-					"Typewords": [
-						"timestamp"
-					]
-				},
-				{
-					"Name": "Subject",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "From",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"MessageAddress"
-					]
-				},
-				{
-					"Name": "Sender",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"MessageAddress"
-					]
-				},
-				{
-					"Name": "ReplyTo",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"MessageAddress"
-					]
-				},
-				{
-					"Name": "To",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"MessageAddress"
-					]
-				},
-				{
-					"Name": "CC",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"MessageAddress"
-					]
-				},
-				{
-					"Name": "BCC",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"MessageAddress"
-					]
-				},
-				{
-					"Name": "InReplyTo",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "MessageID",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				}
-			]
-		},
-		{
-			"Name": "Attachment",
-			"Docs": "Attachment is a MIME part is an existing message that is not intended as\nviewable text or HTML part.",
-			"Fields": [
-				{
-					"Name": "Path",
-					"Docs": "Indices into top-level message.Part.Parts.",
-					"Typewords": [
-						"[]",
-						"int32"
-					]
-				},
-				{
-					"Name": "Filename",
-					"Docs": "File name based on \"name\" attribute of \"Content-Type\", or the \"filename\" attribute of \"Content-Disposition\".",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "Part",
-					"Docs": "",
-					"Typewords": [
-						"Part"
 					]
 				}
 			]
@@ -3347,13 +3380,13 @@
 	],
 	"Ints": [
 		{
-			"Name": "ModSeq",
-			"Docs": "ModSeq represents a modseq as stored in the database. ModSeq 0 in the\ndatabase is sent to the client as 1, because modseq 0 is special in IMAP.\nModSeq coming from the client are of type int64.",
+			"Name": "UID",
+			"Docs": "IMAP UID.",
 			"Values": null
 		},
 		{
-			"Name": "UID",
-			"Docs": "IMAP UID.",
+			"Name": "ModSeq",
+			"Docs": "ModSeq represents a modseq as stored in the database. ModSeq 0 in the\ndatabase is sent to the client as 1, because modseq 0 is special in IMAP.\nModSeq coming from the client are of type int64.",
 			"Values": null
 		},
 		{
@@ -3497,6 +3530,11 @@
 			]
 		},
 		{
+			"Name": "Localpart",
+			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
+			"Values": null
+		},
+		{
 			"Name": "ViewMode",
 			"Docs": "ViewMode how a message should be viewed: its text parts, html parts, or html\nwith loading external resources.",
 			"Values": [
@@ -3563,11 +3601,6 @@
 					"Docs": ""
 				}
 			]
-		},
-		{
-			"Name": "Localpart",
-			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
-			"Values": null
 		}
 	],
 	"SherpaVersion": 0,

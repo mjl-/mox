@@ -110,7 +110,7 @@ func (xc *Composer) HeaderAddrs(k string, l []NameAddress) {
 
 // Subject writes a subject message header.
 func (xc *Composer) Subject(subject string) {
-	var subjectValue string
+	var subjectValue strings.Builder
 	subjectLineLen := len("Subject: ")
 	subjectWord := false
 	for i, word := range strings.Split(subject, " ") {
@@ -118,18 +118,18 @@ func (xc *Composer) Subject(subject string) {
 			word = mime.QEncoding.Encode("utf-8", word)
 		}
 		if i > 0 {
-			subjectValue += " "
+			subjectValue.WriteString(" ")
 			subjectLineLen++
 		}
 		if subjectWord && subjectLineLen+len(word) > 77 {
-			subjectValue += "\r\n\t"
+			subjectValue.WriteString("\r\n\t")
 			subjectLineLen = 1
 		}
-		subjectValue += word
+		subjectValue.WriteString(word)
 		subjectLineLen += len(word)
 		subjectWord = true
 	}
-	xc.Header("Subject", subjectValue)
+	xc.Header("Subject", subjectValue.String())
 }
 
 // Line writes an empty line.

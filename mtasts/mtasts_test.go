@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -109,48 +108,6 @@ func TestMatches(t *testing.T) {
 	not("other")
 }
 
-type pipeListener struct {
-	sync.Mutex
-	closed bool
-	C      chan net.Conn
-}
-
-var _ net.Listener = &pipeListener{}
-
-func newPipeListener() *pipeListener { return &pipeListener{C: make(chan net.Conn)} }
-func (l *pipeListener) Dial() (net.Conn, error) {
-	l.Lock()
-	defer l.Unlock()
-	if l.closed {
-		return nil, errors.New("closed")
-	}
-	c, s := net.Pipe()
-	l.C <- s
-	return c, nil
-}
-func (l *pipeListener) Accept() (net.Conn, error) {
-	conn := <-l.C
-	if conn == nil {
-		return nil, io.EOF
-	}
-	return conn, nil
-}
-func (l *pipeListener) Close() error {
-	l.Lock()
-	defer l.Unlock()
-	if !l.closed {
-		l.closed = true
-		close(l.C)
-	}
-	return nil
-}
-func (l *pipeListener) Addr() net.Addr { return pipeAddr{} }
-
-type pipeAddr struct{}
-
-func (a pipeAddr) Network() string { return "pipe" }
-func (a pipeAddr) String() string  { return "pipe" }
-
 func fakeCert(t *testing.T, expired bool) tls.Certificate {
 	notAfter := time.Now()
 	if expired {
@@ -189,10 +146,6 @@ func TestFetch(t *testing.T) {
 	certok := fakeCert(t, false)
 	certbad := fakeCert(t, true)
 
-	defer func() {
-		HTTPClient.Transport = nil
-	}()
-
 	resolver := dns.MockResolver{
 		TXT: map[string][]string{
 			"_mta-sts.mox.example.":   {"v=STSv1; id=1"},
@@ -206,7 +159,10 @@ func TestFetch(t *testing.T) {
 		pool := x509.NewCertPool()
 		pool.AddCert(cert.Leaf)
 
-		l := newPipeListener()
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
 		defer l.Close()
 		go func() {
 			mux := &http.ServeMux{}
@@ -226,16 +182,21 @@ func TestFetch(t *testing.T) {
 		}()
 
 		HTTPClient.Transport = &http.Transport{
-			Dial: func(network, addr string) (net.Conn, error) {
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				if strings.HasPrefix(addr, "mta-sts.doesnotexist.example") {
 					return nil, &adns.DNSError{IsNotFound: true}
 				}
-				return l.Dial()
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "tcp", l.Addr().String())
 			},
 			TLSClientConfig: &tls.Config{
 				RootCAs: pool,
 			},
 		}
+		defer func() {
+			HTTPClient.CloseIdleConnections()
+			HTTPClient.Transport = nil
+		}()
 
 		p, _, err := FetchPolicy(context.Background(), log.Logger, dns.Domain{ASCII: domain})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {

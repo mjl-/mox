@@ -2,11 +2,12 @@ package mox
 
 import (
 	cryptorand "crypto/rand"
+	"strings"
 )
 
 func GeneratePassword() string {
 	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/"
-	s := ""
+	var s strings.Builder
 	buf := make([]byte, 1)
 	for range 12 {
 		for {
@@ -15,9 +16,9 @@ func GeneratePassword() string {
 			if i+len(chars) > 255 {
 				continue // Prevent bias.
 			}
-			s += string(chars[i%len(chars)])
+			s.WriteString(string(chars[i%len(chars)]))
 			break
 		}
 	}
-	return s
+	return s.String()
 }

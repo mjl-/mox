@@ -1188,7 +1188,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 					# during SMTP RCPT TO with this error response line. Useful when a catchall
 					# address is configured for the domain and messages to some addresses should be
 					# rejected. The response line must start with an error code. Currently the
-					# following error resonse codes are allowed: 421 (temporary local error), 550
+					# following error response codes are allowed: 421 (temporary local error), 550
 					# (user not found). If the line consists of only an error code, an appropriate
 					# error message is added. Rejecting messages with a 4xx code invites later retries
 					# by the remote, while 5xx codes should prevent further delivery attempts.
@@ -1240,6 +1240,16 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# (optional)
 			KeepRejects: false
 
+			# Mailbox for delivering messages to Inbox from new first-time message-from
+			# addresses (without established reputation). Useful for deprioritizing mail from
+			# unknown correspondents while keeping mail from known correspondents in Inbox.
+			# Must be different from Inbox and the RejectsMailbox. Moving a message from
+			# Introbox to its originally intended mailbox marks it as nonjunk, so future
+			# messages from the sender are delivered to their regular destination. Ensure this
+			# mailbox is matched by NeutralMailboxRegexp for proper automatic junk flags
+			# handling. (optional)
+			Introbox:
+
 			# Automatically set $Junk and $NotJunk flags based on mailbox messages are
 			# delivered/moved/copied to. Email clients typically have too limited
 			# functionality to conveniently set these flags, especially $NonJunk, but they can
@@ -1256,8 +1266,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Example: ^(junk|spam). (optional)
 				JunkMailboxRegexp:
 
-				# Example: ^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects), and you may wish to
-				# add trash depending on how you use it, or leave this empty. (optional)
+				# Example: ^(inbox|introbox|neutral|postmaster|dmarc|tlsrpt|rejects), and you may
+				# wish to add trash depending on how you use it, or leave this empty. (optional)
 				NeutralMailboxRegexp:
 
 				# Example: .* or an empty string. (optional)

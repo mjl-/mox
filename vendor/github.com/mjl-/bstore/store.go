@@ -531,18 +531,18 @@ func typeKind(t reflect.Type) (kind, error) {
 		return k, nil
 	}
 
-	if t == reflect.TypeOf(zerotime) {
+	if t == reflect.TypeFor[time.Time]() {
 		return kindTime, nil
 	}
 
-	if reflect.PointerTo(t).AssignableTo(reflect.TypeOf((*encoding.BinaryMarshaler)(nil)).Elem()) {
+	if reflect.PointerTo(t).AssignableTo(reflect.TypeFor[encoding.BinaryMarshaler]()) {
 		return kindBinaryMarshal, nil
 	}
 
 	if t.Kind() == reflect.Struct {
 		return kindStruct, nil
 	}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		return "", fmt.Errorf("%w: pointer to pointers not supported: %v", ErrType, t.Elem())
 	}
 	return "", fmt.Errorf("%w: unsupported type %v", ErrType, t)

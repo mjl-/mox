@@ -754,16 +754,16 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 			return "", rauthentic, fmt.Errorf("%w: unknown macro letter %c", ErrMacroSyntax, c)
 		}
 
-		digits := ""
+		var digits strings.Builder
 		for i < n && s[i] >= '0' && s[i] <= '9' {
-			digits += string(s[i])
+			digits.WriteString(string(s[i]))
 			i++
 		}
 		nlabels := -1
-		if digits != "" {
-			v, err := strconv.Atoi(digits)
+		if digits.String() != "" {
+			v, err := strconv.Atoi(digits.String())
 			if err != nil {
-				return "", rauthentic, fmt.Errorf("%w: bad macro transformer digits %q: %s", ErrMacroSyntax, digits, err)
+				return "", rauthentic, fmt.Errorf("%w: bad macro transformer digits %q: %s", ErrMacroSyntax, digits.String(), err)
 			}
 			nlabels = v
 			if nlabels == 0 {
@@ -857,14 +857,14 @@ func expandIP(ip net.IP) string {
 	if ip4 != nil {
 		return ip4.String()
 	}
-	v := ""
+	var v strings.Builder
 	for i, b := range ip.To16() {
 		if i > 0 {
-			v += "."
+			v.WriteString(".")
 		}
-		v += fmt.Sprintf("%x.%x", b>>4, b&0xf)
+		v.WriteString(fmt.Sprintf("%x.%x", b>>4, b&0xf))
 	}
-	return v
+	return v.String()
 }
 
 // validateDNS checks if a DNS name is valid. Must not end in dot. This does not

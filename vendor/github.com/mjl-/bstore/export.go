@@ -325,7 +325,7 @@ func (ft fieldType) parseValue(p *parser) any {
 		n := p.checkInt(un)
 		fm := p.Fieldmap(n)
 		var l []any
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if fm.Nonzero(i) {
 				l = append(l, ft.ListElem.parseValue(p))
 			} else {
@@ -338,7 +338,7 @@ func (ft fieldType) parseValue(p *parser) any {
 		n := ft.ArrayLength
 		l := make([]any, n)
 		fm := p.Fieldmap(n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if fm.Nonzero(i) {
 				l[i] = ft.ListElem.parseValue(p)
 			} else {
@@ -353,7 +353,7 @@ func (ft fieldType) parseValue(p *parser) any {
 		n := p.checkInt(un)
 		fm := p.Fieldmap(n)
 		m := map[string]any{}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			// Converting to string can be ugly, but the best we can do.
 			k := fmt.Sprintf("%v", ft.MapKey.parseValue(p))
 			if _, ok := m[k]; ok {

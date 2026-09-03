@@ -14,11 +14,9 @@ import (
 	"github.com/mjl-/adns/internal/bytealg"
 )
 
-var onceReadProtocols sync.Once
-
-// readProtocols loads contents of /etc/protocols into protocols map
+// readProtocolsOnce loads contents of /etc/protocols into protocols map
 // for quick access.
-func readProtocols() {
+var readProtocolsOnce = sync.OnceFunc(func() {
 	file, err := open("/etc/protocols")
 	if err != nil {
 		return
@@ -45,12 +43,12 @@ func readProtocols() {
 			}
 		}
 	}
-}
+})
 
 // lookupProtocol looks up IP protocol name in /etc/protocols and
 // returns correspondent protocol number.
 func lookupProtocol(_ context.Context, name string) (int, error) {
-	onceReadProtocols.Do(readProtocols)
+	readProtocolsOnce()
 	return lookupProtocolMap(name)
 }
 

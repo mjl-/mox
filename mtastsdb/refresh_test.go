@@ -6,7 +6,6 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	golog "log"
@@ -15,8 +14,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/mjl-/bstore"
@@ -49,9 +48,6 @@ func TestRefresh(t *testing.T) {
 	}()
 
 	cert := fakeCert(t, false)
-	defer func() {
-		mtasts.HTTPClient.Transport = nil
-	}()
 
 	insert := func(domain string, validEnd, lastUpdate, lastUse time.Time, backoff bool, recordID string, mode mtasts.Mode, maxAge int, mx string) {
 		t.Helper()
@@ -74,18 +70,6 @@ func TestRefresh(t *testing.T) {
 		}
 	}
 
-	now := time.Now()
-	// Updated just now.
-	insert("mox.example", now.Add(24*time.Hour), now, now, false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
-	// To be removed.
-	insert("stale.mox.example", now.Add(-time.Hour), now, now.Add(-181*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
-	// To be refreshed, same id.
-	insert("refresh.mox.example", now.Add(7*24*time.Hour), now.Add(-24*time.Hour), now.Add(-179*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
-	// To be refreshed and succeed.
-	insert("policyok.mox.example", now.Add(7*24*time.Hour), now.Add(-24*time.Hour), now.Add(-179*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
-	// To be refreshed and fail to fetch.
-	insert("policybad.mox.example", now.Add(7*24*time.Hour), now.Add(-24*time.Hour), now.Add(-179*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
-
 	resolver := dns.MockResolver{
 		TXT: map[string][]string{
 			"_mta-sts.refresh.mox.example.":   {"v=STSv1; id=1"},
@@ -97,7 +81,8 @@ func TestRefresh(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(cert.Leaf)
 
-	l := newPipeListener()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	tcheckf(t, err, "listen")
 	defer l.Close()
 	go func() {
 		mux := &http.ServeMux{}
@@ -119,13 +104,18 @@ func TestRefresh(t *testing.T) {
 	}()
 
 	mtasts.HTTPClient.Transport = &http.Transport{
-		Dial: func(network, addr string) (net.Conn, error) {
-			return l.Dial()
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, "tcp", l.Addr().String())
 		},
 		TLSClientConfig: &tls.Config{
 			RootCAs: pool,
 		},
 	}
+	defer func() {
+		mtasts.HTTPClient.CloseIdleConnections()
+		mtasts.HTTPClient.Transport = nil
+	}()
 
 	slept := 0
 	sleep := func(d time.Duration) {
@@ -135,13 +125,30 @@ func TestRefresh(t *testing.T) {
 			t.Fatalf("bad sleep duration %v", d)
 		}
 	}
-	if n, err := refresh1(ctxbg, log, resolver, sleep); err != nil || n != 3 {
-		t.Fatalf("refresh1: err %s, n %d, expected no error, 3", err, n)
-	}
-	if slept != 2 {
-		t.Fatalf("bad sleeps, %d instead of 2", slept)
-	}
-	time.Sleep(time.Second / 10) // Give goroutine time to write result, before we cleanup the database.
+
+	// Run with synctest, to ensure all goroutines that could write results are
+	// finished before we check again if all work is finished.
+	synctest.Test(t, func(t *testing.T) {
+		now := time.Now()
+		// Updated just now.
+		insert("mox.example", now.Add(24*time.Hour), now, now, false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
+		// To be removed.
+		insert("stale.mox.example", now.Add(-time.Hour), now, now.Add(-181*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
+		// To be refreshed, same id.
+		insert("refresh.mox.example", now.Add(7*24*time.Hour), now.Add(-24*time.Hour), now.Add(-179*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
+		// To be refreshed and succeed.
+		insert("policyok.mox.example", now.Add(7*24*time.Hour), now.Add(-24*time.Hour), now.Add(-179*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
+		// To be refreshed and fail to fetch.
+		insert("policybad.mox.example", now.Add(7*24*time.Hour), now.Add(-24*time.Hour), now.Add(-179*24*time.Hour), false, "1", mtasts.ModeEnforce, 3600, "mx.mox.example.com")
+
+		if n, err := refresh1(ctxbg, log, resolver, sleep); err != nil || n != 3 {
+			t.Fatalf("refresh1: err %s, n %d, expected no error, 3", err, n)
+		}
+
+		if slept != 2 {
+			t.Fatalf("bad sleeps, %d instead of 2", slept)
+		}
+	})
 
 	// Should not do any more refreshes and return immediately.
 	q := bstore.QueryDB[PolicyRecord](ctxbg, DB)
@@ -159,48 +166,6 @@ func TestRefresh(t *testing.T) {
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 }
 
-type pipeListener struct {
-	sync.Mutex
-	closed bool
-	C      chan net.Conn
-}
-
-var _ net.Listener = &pipeListener{}
-
-func newPipeListener() *pipeListener { return &pipeListener{C: make(chan net.Conn)} }
-func (l *pipeListener) Dial() (net.Conn, error) {
-	l.Lock()
-	defer l.Unlock()
-	if l.closed {
-		return nil, errors.New("closed")
-	}
-	c, s := net.Pipe()
-	l.C <- s
-	return c, nil
-}
-func (l *pipeListener) Accept() (net.Conn, error) {
-	conn := <-l.C
-	if conn == nil {
-		return nil, io.EOF
-	}
-	return conn, nil
-}
-func (l *pipeListener) Close() error {
-	l.Lock()
-	defer l.Unlock()
-	if !l.closed {
-		l.closed = true
-		close(l.C)
-	}
-	return nil
-}
-func (l *pipeListener) Addr() net.Addr { return pipeAddr{} }
-
-type pipeAddr struct{}
-
-func (a pipeAddr) Network() string { return "pipe" }
-func (a pipeAddr) String() string  { return "pipe" }
-
 func fakeCert(t *testing.T, expired bool) tls.Certificate {
 	notAfter := time.Now()
 	if expired {
@@ -214,7 +179,7 @@ func fakeCert(t *testing.T, expired bool) tls.Certificate {
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1), // Required field...
 		DNSNames:     []string{"mta-sts.policybad.mox.example", "mta-sts.policyok.mox.example"},
-		NotBefore:    time.Now().Add(-time.Hour),
+		NotBefore:    time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC), // synctest time
 		NotAfter:     notAfter,
 	}
 	localCertBuf, err := x509.CreateCertificate(cryptorand.Reader, template, template, privKey.Public(), privKey)

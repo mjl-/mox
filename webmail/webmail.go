@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -896,10 +897,10 @@ func inlineSanitizeHTML(log mlog.Log, setHeaders func(), w io.Writer, p *message
 // "<>", starting at the part's siblings, up the tree, and later from the
 // top-part down the tree.
 func findCID(p *message.Part, parents []*message.Part, cid string) *message.Part {
-	for i := len(parents) - 1; i >= 0; i-- {
-		for j, pp := range parents[i].Parts {
+	for _, parent := range slices.Backward(parents) {
+		for j, pp := range parent.Parts {
 			if pp.ContentID != nil && strings.EqualFold(*pp.ContentID, cid) {
-				return &parents[i].Parts[j]
+				return &parent.Parts[j]
 			}
 		}
 	}

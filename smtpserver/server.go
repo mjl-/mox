@@ -1789,9 +1789,11 @@ func (c *conn) cmdMail(p *parser) {
 			// ../rfc/4954:704
 			// todo future: should we accept utf-8-addr-xtext if there is no smtputf8, and utf-8 if there is? need to find a spec ../rfc/6533:259
 			p.xtake("=")
-			p.xtake("<")
-			p.xtext()
-			p.xtake(">")
+			if p.take("<") {
+				p.xtake(">")
+			} else {
+				p.xtext()
+			}
 		case "SMTPUTF8":
 			// ../rfc/6531:213
 			c.smtputf8 = true
@@ -2817,7 +2819,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 
 			sig := base64.StdEncoding.EncodeToString(r.Sig.Signature)
-			sig = sig[:12] // Must be at least 8 characters and unique among the signatures.
+			sig = sig[:min(len(sig), 12)] // Must be at least 8 characters and unique among the signatures.
 			props = []message.AuthProp{
 				message.MakeAuthProp("header", "d", r.Sig.Domain.XName(c.msgsmtputf8), true, r.Sig.Domain.ASCIIExtra(c.msgsmtputf8)),
 				message.MakeAuthProp("header", "s", r.Sig.Selector.XName(c.msgsmtputf8), true, r.Sig.Selector.ASCIIExtra(c.msgsmtputf8)),
@@ -3446,7 +3448,19 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 							mbrej = &nmb
 						}
-						a.d.m.MailboxID = mbrej.ID
+
+						mailbox := a.mailboxDestined
+						if mailbox == "" {
+							mailbox = a.mailbox
+						}
+						var modseq store.ModSeq
+						mbDest, chl, err := a.d.acc.MailboxEnsure(tx, mailbox, true, store.SpecialUse{}, &modseq)
+						if err != nil {
+							return fmt.Errorf("ensuring destined mailbox exists: %v", err)
+						}
+						a.d.m.MailboxDestinedID = mbDest.ID
+						changes = append(changes, chl...)
+
 						if err := a.d.acc.MessageAdd(log, tx, mbrej, a.d.m, dataFile, store.AddOpts{}); err != nil {
 							return fmt.Errorf("delivering spammy mail to rejects mailbox: %v", err)
 						}
@@ -3548,7 +3562,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 			var delivered bool
 			a.d.acc.WithWLock(func() {
-				if err := a.d.acc.DeliverMailbox(log, a.mailbox, a.d.m, dataFile); err != nil {
+				if err := a.d.acc.DeliverMailbox(log, a.mailbox, a.mailboxDestined, a.d.m, dataFile); err != nil {
 					log.Errorx("delivering", err)
 					metricDelivery.WithLabelValues("delivererror", a0.reason).Inc()
 					if errors.Is(err, store.ErrOverQuota) {

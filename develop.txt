@@ -1,4 +1,4 @@
-This file has notes useful for mox developers.
+This file has notes useful for contributors.
 
 # Building & testing
 
@@ -37,8 +37,11 @@ instructions below.
   but use proper filepath functions when parameters are passed and in non-test
   code.  Mailbox names always use forward slash, so use package "path" for mailbox
   name/path manipulation. Do not remove/rename files that are still open.
-- Not all code uses adns, the DNSSEC-aware resolver. Such as code that makes
-  http requests, like mtasts and autotls/autocert.
+- Use github.com/mjl-/adns for DNS where possible, it returns whether DNS
+  results are DNSSEC-verified. Keep in mind that some code paths don't use "adns",
+  e.g. HTTP requests (which go through the standard library, and we can't replace
+  the DNS library from the standard library, and we couldn't get the
+  DNSSEC-verification status from the "http" package anyway.
 - We don't have an internal/ directory, really just to prevent long paths in
   the repo, and to keep all Go code matching *.go */*.go (without matching
   vendor/). Part of the packages are reusable by other software. Those reusable
@@ -52,13 +55,108 @@ instructions below.
   fields and types that begin with an "x" indicate they can panic on errors. Both
   for i/o errors that are fatal for a connection, and also often for user-induced
   errors, for example bad IMAP commands or invalid web API requests. These panics
-  are caught again at the top of a command or top of the connection. Write code
-  that is panic-safe, using defer to clean up and release resources.
+  are caught again at the top of a command or top of the connection. In general,
+  write code that is panic-safe, using defer to clean up and release resources.
 - Try to check all errors, at the minimum using mlog.Log.Check() to log an error
   at the appropriate level. Also when just closing a file. Log messages sometimes
   unexpectedly point out latent issues. Only when there is no point in logging,
   for example when previous writes to stderr failed, can error logging be skipped.
   Test code is less strict about checking errors.
+- See the Makefile for commonly used command invocations, e.g. for tests,
+  various checks, formatting.
+- Keep the number of dependencies limited. Certainly protocol (especially
+  email) handling code should not be in an external dependency. By maintaining
+  that code ourselves, it's easier to ensure we don't introduce unexpected
+  changes in behaviour, and it allows us to thoroughly document our code against
+  the RFCs.
+- Mox can be compiled deterministically with the "go install" command (with
+  "CGO_ENABLED=0 go install -trimpath"). The frontend code is written in
+  typescript. To get working binaries after "go install", the generated/compiled
+  javascript code is also committed in the repository. The frontend machinations
+  should be kept simple, with a straightforward translation from typescript files
+  to javascript.
+- Write tests for high-level functional scenario's at a minimum, especially for
+  protocols. For server code, write the implementation so a server can be
+  started and driven from tests. This is relatively easy because of the bstore
+  database library used: All state is written to a simple single-file database
+  file that can easily be removed between test runs. Also write a client. That
+  will deepen your understanding of the protocol, and makes it easier to find
+  corner cases to test for. Keep long-term maintainability into account. Of both
+  this implementations, and the wider protocol/ecosystem.
+- Protocol/standards-related code is heavily cross-referenced with RFCs, by
+  placing comments such as "Command: ../rfc/9051:4330 ../rfc/3501:2992
+  ../rfc/7162:864" in the code. These reference line numbers in multiple RFCs.
+  Your editor/IDE may support opening them by clicking on them. Because these
+  references are on a single line, we consider them related. In this case, it's a
+  single command with references to its description in multiple versions of IMAP.
+  Run "make" in ./rfc to download RFCs and adding references back to the code.
+  See https://www.xmox.nl/xr/dev/ for an online version of cross-referenced RFCs
+  and code. The RFCs also point back to the code where the RFC-references have
+  been turned into links back to RFCs. It's easy to navigate between code and
+  (historic) versions of RFCs. Ideally, you can read the RFC for a
+  protocol/format, and see that all requirements/behaviour are implemented, and
+  where the code is that handles it. If annotations start with "// todo", "//
+  todo <word>:", the RFCs are annotated with "todo" or "todo <word>" to indicate
+  that functionality/behaviour may not be fully implemented.
+- When creating a PR, it helps to explain your considerations, including which
+  choices you face and how you came to decisions. Ensure you update all
+  relevant facets of the change. For example, when adding support for a new
+  IMAP-related feature, you may also have to add similar functionality to the
+  webmail interface.
+- Write documentation so packages stay readable at
+  https://pkg.go.dev/github.com/mjl-/mox.
+- Keep mechanisms as simple, standalone and with as few machinations as
+  possible. Automate where possible. Don't add dependencies on external services.
+  This helps long-term maintainability. For example, the "help" output of commands
+  are generated when building and included as documentation, so we can use
+  pkg.go.dev for documentation. The mox website also contains a generated copy of
+  the help output. We don't have to sync it manually, or remember to update it in
+  multiple places.
+
+
+# Storage
+
+Email messages are stored in files. Each message is in its own file. We don't
+use the mbox format (too much rewriting of data) or maildir format (better than
+mbox, but too limited for efficient handling of modern server requirements). We
+explicitly don't want other applications touching files in the directory that
+holds an accounts messages. Users should use standard protocols (e.g. IMAP) or
+the web interface to access email messages. Storage is per user account (that
+can have multiple addresses). All email message files are kept in a per-account
+directory, with subdirectories so they are grouped in sets of 8k (for
+reasonable directory listing performance). The email message file only contains
+the message data. Headers added by the SMTP server are not in this message
+file, but in the message index database file.
+
+Each account has a bstore database file with an index of the database messages.
+The email message files are named after IDs of records of the "Message" table
+in the database. The Message table also has all other metadata information
+about a message. Such as which mailbox it belongs to, and message flags (e.g.
+"seen" (also known as "read"), "junk", "non-junk"), various IMAP and
+synchronisation-related metadata (e.g. IMAP's UID, MODSEQ), and
+reputation-related information used for spam classification (e.g. the verified
+DKIM/SPF domains of the message, the originating IP address).
+
+Bstore database files are built on bbolt database files (like LMDB but in Go;
+transactional multi-bucket key/value b+trees in a single file, accessed by an
+in-process library (like sqlite) instead of a separate application (like
+PostgreSQL)). Bstore adds higher-level functionality:
+referential/unique/nonzero constraints, (multikey) indices, automatic schema
+management based on Go types and struct tags, and a query API. Bstore has no
+higher-level concepts such as joins (but those aren't typically needed) or a
+query language (the query API and getting/updating/deleting individual records
+by primary key are enough).
+
+Bbolt has known limitations. One relevant limitation is that writes are kept in
+memory until the end of the transaction. For large transactions where lots of
+data changes (e.g. when importing lots of messages, or updating all records in
+a large table), you will need to make changes in multiple transactions,
+committing partial work (and possibly adding a mechanism to undo the partial
+work). We want to keep working on machines with little memory too.
+
+See package "store" for details about storage in mox. See
+https://pkg.go.dev/github.com/mjl-/bstore for details about the bstore database
+files/library.
 
 
 # Reusable packages
@@ -95,7 +193,7 @@ little code, and this allows JavaScript/TypeScript developer to quickly get
 started. UI state is often encapsulated in a JavaScript object with a
 TypeScript interface exposing a "root" HTMLElement that is added to the DOM,
 and functions for accessing/changing the internal state, keeping the UI
-managable.
+manageable.
 
 
 # Website
@@ -281,7 +379,7 @@ testing purposes.
 
 # Messages for testing
 
-For compatibility and preformance testing, it helps to have many messages,
+For compatibility and performance testing, it helps to have many messages,
 created a long time ago and recently, by different mail user agents. A helpful
 source is the Linux kernel mailing list. Archives are available as multiple git
 repositories (split due to size) at
@@ -312,20 +410,20 @@ done
 ```
 
 
-# Release proces
+# Release process
 
 - Gather feedback on recent changes.
 - Check if dependencies need updates.
 - Run "make modernize".
-- Update to latest publicsuffix/ list.
+- Update to latest publicsuffix/ list ("make fetch-publicsuffixlist").
 - Check code if there are deprecated features that can be removed.
-- Generate apidiff and check if breaking changes can be prevented. Update moxtools.
+- Generate apidiff ("make genapidiff") and check if breaking changes can be prevented. Update moxtools.
 - Update features & roadmap in README.md and website.
 - Write release notes, copy from previous.
-- Build and run tests with previous major Go release, run "make docker-release" to test building images.
-- Run tests, including with race detector, also with TZ= for UTC-behaviour, and with -count 2.
-- Run integration and upgrade tests.
-- Run fuzzing tests for a while.
+- Build ("make build check buildall") and run tests with previous major Go release, run "make docker-release" to test building images.
+- Run tests ("make test"), including with race detector ("make test-race", also with TZ= for UTC-behaviour and with -count 2 ("make test-more").
+- Run integration ("make test-integration") and upgrade tests ("make test-upgrade").
+- Run fuzzing tests for a while ("make fuzz").
 - Deploy to test environment. Test the update instructions.
 - Test mox localserve on various OSes (linux, bsd, macos, windows).
 - Send and receive email through the major webmail providers, check headers.
@@ -335,7 +433,7 @@ done
 - Move apidiff/next.txt to apidiff/<version>.txt, and create empty next.txt.
 - Add release to the Latest release & News sections of website/index.md.
 - Create git tag (note: "#" is comment, not title/header), push code.
-- Build and publish new docker image.
+- Build and publish new docker image ("make docker-release").
 - Deploy update to website.
 - Create new release on the github page, so watchers get a notification.
   Copy/paste it manually from the tag text, and add link to download/compile

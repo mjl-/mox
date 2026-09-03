@@ -500,7 +500,7 @@ func (q *Query[T]) prepareValue(fname string, ft fieldType, st reflect.Type, rv 
 	if t == st {
 		return rv, true
 	}
-	if !ft.Ptr && rv.Kind() == reflect.Ptr {
+	if !ft.Ptr && rv.Kind() == reflect.Pointer {
 		q.errorf("%w: cannot set ptr value to nonptr field", ErrParam)
 		return rv, false
 	}
@@ -521,7 +521,7 @@ func (q *Query[T]) prepareValue(fname string, ft fieldType, st reflect.Type, rv 
 		}
 		rv = rv.Convert(dt)
 	}
-	if ft.Ptr && rv.Kind() != reflect.Ptr {
+	if ft.Ptr && rv.Kind() != reflect.Pointer {
 		nv := reflect.New(st.Elem())
 		nv.Elem().Set(rv)
 		rv = nv
@@ -589,7 +589,7 @@ func (q *Query[T]) FilterIDs(ids any) *Query[T] {
 	}
 	// todo: should we fail for a zero PK?
 	nids := map[any]struct{}{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		rev := kv.Index(i)
 		ev := rev.Interface()
 		if _, ok := prevIDs[ev]; !ok && prevIDs != nil {
@@ -897,7 +897,7 @@ func (q *Query[T]) GatherIDs(ids any) *Query[T] {
 	}
 	rv := reflect.ValueOf(ids)
 	t := rv.Type()
-	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Slice || t.Elem().Elem() != q.pkType {
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Slice || t.Elem().Elem() != q.pkType {
 		q.errorf("%w: ids must be pointer to slice of %v, not %T", ErrParam, q.pkType, ids)
 		return q
 	}
@@ -1126,7 +1126,7 @@ func (q *Query[T]) IDs(idsptr any) (rerr error) {
 		return fmt.Errorf("%w: idsptr must not be nil", ErrParam)
 	}
 	rv := reflect.ValueOf(idsptr)
-	if rv.Type().Kind() != reflect.Ptr || rv.Type().Elem().Kind() != reflect.Slice || rv.Type().Elem().Elem() != q.pkType {
+	if rv.Type().Kind() != reflect.Pointer || rv.Type().Elem().Kind() != reflect.Slice || rv.Type().Elem().Elem() != q.pkType {
 		return fmt.Errorf("%w: idsptr must be a ptr to slice of %v, not %T", ErrParam, q.pkType, idsptr)
 	}
 
@@ -1183,7 +1183,7 @@ func (q *Query[T]) NextID(idptr any) (rerr error) {
 		return q.err
 	}
 	t := rpkv.Type()
-	if t.Kind() != reflect.Ptr || t.Elem() != q.pkType {
+	if t.Kind() != reflect.Pointer || t.Elem() != q.pkType {
 		return fmt.Errorf("%w: value must be ptr to %v, not %v", ErrParam, q.pkType, t)
 	}
 	err := q.nextID(false, rpkv.Elem())

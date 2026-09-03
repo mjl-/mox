@@ -19,7 +19,7 @@ import (
 )
 
 func cmdExample(c *cmd) {
-	c.params = "[name]"
+	c.params = "[$name]"
 	c.help = `List available examples, or print a specific example.`
 
 	args := c.Parse()
@@ -45,7 +45,7 @@ func cmdExample(c *cmd) {
 }
 
 func cmdConfigExample(c *cmd) {
-	c.params = "[name]"
+	c.params = "[$name]"
 	c.help = `List available config examples, or print a specific example.`
 
 	args := c.Parse()

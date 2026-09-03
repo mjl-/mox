@@ -2,8 +2,6 @@
 set -x # print commands
 set -e # exit on failed command
 
-apk add curl
-
 (rm -r /tmp/mox 2>/dev/null || exit 0) # clean slate
 mkdir /tmp/mox
 cd /tmp/mox
@@ -20,7 +18,7 @@ TLS:
 			- /integration/tls/ca.pem
 EOF
 
-CURL_CA_BUNDLE=/integration/tls/ca.pem curl -o /integration/tmp-pebble-ca.pem https://acmepebble.example:15000/roots/0
+CURL_CA_BUNDLE=/integration/tls/ca.pem curl --retry 30 --retry-delay 1 --retry-connrefused -o /integration/tmp-pebble-ca.pem https://acmepebble.example:15000/roots/0
 
 mox -checkconsistency serve &
 while true; do

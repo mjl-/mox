@@ -252,18 +252,18 @@ func (p *parser) xerrorf(format string, args ...any) {
 
 // operates on original-cased characters.
 func (p *parser) xtakefn1(fn func(rune, int) bool) string {
-	r := ""
+	var r strings.Builder
 	for i, c := range p.s[p.o:] {
 		if !fn(c, i) {
 			break
 		}
-		r += string(c)
+		r.WriteString(string(c))
 	}
-	if r == "" {
+	if r.String() == "" {
 		p.xerrorf("need at least 1 char")
 	}
-	p.o += len(r)
-	return r
+	p.o += len(r.String())
+	return r.String()
 }
 
 // caller should set includingSlash to false when parsing "a" or "mx", or the / would be consumed as valid macro literal.
@@ -313,7 +313,7 @@ func (p *parser) xdomainSpec(includingSlash bool) string {
 
 func (p *parser) xmacroString(includingSlash bool) string {
 	// ../rfc/7208:1588
-	r := ""
+	var r strings.Builder
 	for !p.empty() {
 		w := p.takelist("%{", "%%", "%_", "%-") // "macro-expand"
 		if w == "" {
@@ -321,18 +321,18 @@ func (p *parser) xmacroString(includingSlash bool) string {
 			if !p.empty() {
 				b := p.peekchar()
 				if b > ' ' && b < 0x7f && b != '%' && (includingSlash || b != '/') {
-					r += string(b)
+					r.WriteString(string(b))
 					p.o++
 					continue
 				}
 			}
 			break
 		}
-		r += w
+		r.WriteString(w)
 		if w != "%{" {
 			continue
 		}
-		r += p.xtakelist("s", "l", "o", "d", "i", "p", "h", "c", "r", "t", "v") // "macro-letter"
+		r.WriteString(p.xtakelist("s", "l", "o", "d", "i", "p", "h", "c", "r", "t", "v")) // "macro-letter"
 		digits := p.digits()
 		if digits != "" {
 			if v, err := strconv.Atoi(digits); err != nil {
@@ -341,20 +341,20 @@ func (p *parser) xmacroString(includingSlash bool) string {
 				p.xerrorf("bad digits 0 for 0 labels")
 			}
 		}
-		r += digits
+		r.WriteString(digits)
 		if p.take("r") {
-			r += "r"
+			r.WriteString("r")
 		}
 		for {
 			delimiter := p.takelist(".", "-", "+", ",", "/", "_", "=")
 			if delimiter == "" {
 				break
 			}
-			r += delimiter
+			r.WriteString(delimiter)
 		}
-		r += p.xtake("}")
+		r.WriteString(p.xtake("}"))
 	}
-	return r
+	return r.String()
 }
 
 func (p *parser) empty() bool {
@@ -386,17 +386,17 @@ func (p *parser) takelist(l ...string) string {
 
 // digits parses zero or more digits.
 func (p *parser) digits() string {
-	r := ""
+	var r strings.Builder
 	for !p.empty() {
 		b := p.peekchar()
 		if b >= '0' && b <= '9' {
-			r += string(b)
+			r.WriteString(string(b))
 			p.o++
 		} else {
 			break
 		}
 	}
-	return r
+	return r.String()
 }
 
 func (p *parser) take(s string) bool {
