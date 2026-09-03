@@ -1081,7 +1081,7 @@ You can now start the mox container.
 	}
 	fmt.Printf(`
 File ownership and permissions are automatically set correctly by mox when
-starting up. On Linux or FreeBSD, you may want to enable mox as a service.
+starting up. You may want to enable mox as a service.
 
 `)
 
