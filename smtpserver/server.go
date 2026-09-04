@@ -52,6 +52,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/proxyprotocol"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/ratelimit"
@@ -236,7 +237,7 @@ func Listen() {
 					// https://github.com/golang/go/issues/70232.
 					tlsConfigDelivery.SessionTicketsDisabled = listener.SMTP.TLSSessionTicketsDisabled == nil || *listener.SMTP.TLSSessionTicketsDisabled
 				}
-				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, noTLSClientAuth, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
+				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, noTLSClientAuth, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay, listener.SMTP.ProxyProtocol)
 			}
 		}
 		if listener.Submission.Enabled {
@@ -246,7 +247,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submission.Port, 587)
 			for _, ip := range listener.IPs {
-				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, noTLSClientAuth, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, true, nil, 0)
+				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, noTLSClientAuth, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, true, nil, 0, listener.Submission.ProxyProtocol)
 			}
 		}
 
@@ -257,7 +258,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submissions.Port, 465)
 			for _, ip := range listener.IPs {
-				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, noTLSClientAuth, maxMsgSize, true, true, true, nil, 0)
+				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, noTLSClientAuth, maxMsgSize, true, true, true, nil, 0, listener.Submissions.ProxyProtocol)
 			}
 		}
 	}
@@ -265,7 +266,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration, proxyConfig *config.ProxyProtocol) {
 	log := mlog.New("smtpserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
@@ -299,7 +300,7 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 
 			// Package is set on the resolver by the dkim/spf/dmarc/etc packages.
 			resolver := dns.StrictResolver{Log: log.Logger}
-			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, false, noTLSClientAuth, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
+			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, false, noTLSClientAuth, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay, proxyConfig)
 		}
 	}
 
@@ -867,7 +868,26 @@ func ServeTLSConn(listenerName string, hostname dns.Domain, conn *tls.Conn, tlsC
 	serve(listenerName, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, true, viaHTTPS, true, maxMsgSize, true, true, requireTLS, nil, 0)
 }
 
-func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls, viaHTTPS, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls, viaHTTPS, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration, proxyConfigs ...*config.ProxyProtocol) {
+	proxyConfig := (*config.ProxyProtocol)(nil)
+	if len(proxyConfigs) > 0 {
+		proxyConfig = proxyConfigs[0]
+	}
+	rawConn := nc
+	mox.Connections.Register(rawConn, "smtp", listenerName)
+	defer mox.Connections.Unregister(rawConn)
+	if proxyConfig != nil {
+		conn, err := proxyprotocol.NewConn(rawConn, proxyConfig.TrustedProxyNets)
+		if err != nil {
+			log := mlog.New("smtpserver", nil)
+			log.Infox("smtp: proxy protocol", err, slog.String("listener", listenerName), slog.Any("remote", rawConn.RemoteAddr()))
+			if err := rawConn.Close(); err != nil {
+				log.Debugx("smtp: closing proxy protocol connection", err, slog.String("listener", listenerName))
+			}
+			return
+		}
+		nc = conn
+	}
 	var localIP, remoteIP net.IP
 	if a, ok := nc.LocalAddr().(*net.TCPAddr); ok {
 		localIP = a.IP
@@ -882,7 +902,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		remoteIP = net.ParseIP("127.0.0.10")
 	}
 
-	origConn := nc
+	origConn := rawConn
 	if viaHTTPS {
 		origConn = nc.(*tls.Conn).NetConn()
 	}
@@ -994,11 +1014,6 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		return
 	}
 	defer limiterConnections.Add(c.remoteIP, time.Now(), -1)
-
-	// We register and unregister the original connection, in case c.conn is replaced
-	// with a TLS connection later on.
-	mox.Connections.Register(nc, "smtp", listenerName)
-	defer mox.Connections.Unregister(nc)
 
 	// ../rfc/5321:964 ../rfc/5321:4294 about announcing software and version
 	// Syntax: ../rfc/5321:2586

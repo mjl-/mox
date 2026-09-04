@@ -748,6 +748,38 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		addListenerErrorf := func(format string, args ...any) {
 			addErrorf("listener %s: %w", name, fmt.Errorf(format, args...))
 		}
+		parseProxyProtocol := func(kind string, pp *config.ProxyProtocol) {
+			if pp == nil {
+				return
+			}
+			pp.TrustedProxyNets = nil
+			if len(pp.TrustedProxies) == 0 {
+				addListenerErrorf("%s ProxyProtocol requires at least one TrustedProxies entry", kind)
+				return
+			}
+			for _, s := range pp.TrustedProxies {
+				var network *net.IPNet
+				if ip := net.ParseIP(s); ip != nil {
+					if ip4 := ip.To4(); ip4 != nil {
+						network = &net.IPNet{IP: ip4, Mask: net.CIDRMask(32, 32)}
+					} else {
+						network = &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
+					}
+				} else {
+					_, network, _ = net.ParseCIDR(s)
+					if network == nil {
+						addListenerErrorf("%s ProxyProtocol TrustedProxies entry %q is not an IP address or CIDR", kind, s)
+						continue
+					}
+				}
+				pp.TrustedProxyNets = append(pp.TrustedProxyNets, network)
+			}
+		}
+		parseProxyProtocol("SMTP", l.SMTP.ProxyProtocol)
+		parseProxyProtocol("Submission", l.Submission.ProxyProtocol)
+		parseProxyProtocol("Submissions", l.Submissions.ProxyProtocol)
+		parseProxyProtocol("IMAP", l.IMAP.ProxyProtocol)
+		parseProxyProtocol("IMAPS", l.IMAPS.ProxyProtocol)
 
 		if l.Hostname != "" {
 			d, err := dns.ParseDomain(l.Hostname)
