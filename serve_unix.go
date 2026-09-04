@@ -499,6 +499,7 @@ func fixperms(log mlog.Log, workdir, configdir, datadir string, moxuid, moxgid u
 	//	$datadir mox:root 0750 + setgid, and recursively (but files 0640)
 	//	$workdir/mox (binary, optional) root:mox 0750
 	//	$workdir/mox.service (systemd service file, optional) root:root 0644
+	//	$workdir/mox.rc (FreeBSD service file, optional) root:root 0555
 
 	const root = 0
 	ensure(workdir, root, moxgid, 0751)
@@ -513,6 +514,10 @@ func fixperms(log mlog.Log, workdir, configdir, datadir string, moxuid, moxgid u
 	svc := filepath.Join(workdir, "mox.service")
 	if xexists(svc) {
 		ensure(svc, root, root, 0644)
+	}
+	svc = filepath.Join(workdir, "mox.rc")
+	if xexists(svc) {
+		ensure(svc, root, root, 0555)
 	}
 
 	if len(changes) == 0 {
