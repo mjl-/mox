@@ -3,6 +3,7 @@ package store
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -58,21 +59,43 @@ func TestMaildirReader(t *testing.T) {
 	}
 	defer curf.Close()
 
+	// Maildir uses timestamps and mtime to sort files.
+	// At least Dovecot does so:
+	// - unix timestamp as the first component of the filename is the "arrival time"
+	// - file mtime is IMAP's INTERNALDATE
+	// https://doc.dovecot.org/2.3/admin_manual/mailbox_formats/maildir/#usage-of-timestamps
+	//
+	// I guess that both are more or less the same time, usually, and mox already
+	// parses messages in this order (unix timestamp, and if that fails file
+	// mtime). However, we want to make sure that mox has sorted all existing
+	// messages before starting actual import since that's when ids (unique and
+	// strictly increasing integers).
+	//
+	// This test only uses unix timestamps in filenames since it is simpler.
+
+	var exp_names = []string{
+		"cur/1642966915.1.mox",
+		"new/1642968136.5.mox",
+		"cur/1642970123.9.mox",
+		"new/1642972987.13.mox",
+	}
+
 	log := mlog.New("maildirreader", nil)
 	mr := NewMaildirReader(log, createTemp, newf, curf)
-	_, mf0, _, err := mr.Next()
-	if err != nil {
-		t.Fatalf("next maildir message: %v", err)
-	}
-	defer os.Remove(mf0.Name())
-	defer mf0.Close()
 
-	_, mf1, _, err := mr.Next()
-	if err != nil {
-		t.Fatalf("next maildir message: %v", err)
+	for _, exp := range exp_names {
+		_, mf, fn, err := mr.Next()
+		if err != nil {
+			t.Fatalf("next maildir message: %v", err)
+		}
+		defer os.Remove(mf.Name())
+		defer mf.Close()
+
+		exp_ := filepath.FromSlash(exp)
+		if !strings.HasSuffix(fn, exp_) {
+			t.Fatalf("next maildir message should be '%v' instead of '%v'", exp_, fn)
+		}
 	}
-	defer os.Remove(mf1.Name())
-	defer mf1.Close()
 
 	_, _, _, err = mr.Next()
 	if err != io.EOF {
