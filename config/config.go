@@ -193,7 +193,7 @@ type Listener struct {
 	MetricsHTTP  struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 8010."`
-	} `sconf:"optional" sconf-doc:"Serve prometheus metrics, for monitoring. You should not enable this on a public IP."`
+	} `sconf:"optional" sconf-doc:"Serve prometheus metrics at /metrics and a health check at /health, for monitoring. You should not enable this on a public IP."`
 	PprofHTTP struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 8011."`

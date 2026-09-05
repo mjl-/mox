@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -72,4 +73,61 @@ func TestServeHTTP(t *testing.T) {
 	test("GET", "http://localhost/", http.StatusNotFound, "", nil)
 	test("GET", "http://mox.example/", http.StatusNotFound, "", nil)
 	test("GET", "http://mail.mox.example/", http.StatusNotFound, "", nil)
+}
+
+func TestHealth(t *testing.T) {
+	os.RemoveAll("../testdata/web/data")
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/web/mox.conf")
+	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
+	mox.MustLoadConfig(true, false)
+
+	l := mox.Conf.Static.Listeners["local"]
+	portSrvs := portServes("local", l)
+	srv := portSrvs[80]
+	req := httptest.NewRequest("GET", "http://localhost/health", nil)
+	rw := httptest.NewRecorder()
+	srv.ServeHTTP(rw, req)
+	if rw.Code != http.StatusNotFound {
+		t.Fatalf("health with metrics disabled: got status %d, expected %d", rw.Code, http.StatusNotFound)
+	}
+
+	l.MetricsHTTP.Enabled = true
+	l.MetricsHTTP.Port = 80
+	portSrvs = portServes("local", l)
+	srv = portSrvs[80]
+
+	// /health returns 200 when not shutting down.
+	req = httptest.NewRequest("GET", "http://localhost/health", nil)
+	rw = httptest.NewRecorder()
+	rw.Body = &bytes.Buffer{}
+	srv.ServeHTTP(rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("health: got status %d, expected %d", rw.Code, http.StatusOK)
+	}
+	if rw.Body.String() != "ok" {
+		t.Fatalf("health: got body %q, expected %q", rw.Body.String(), "ok")
+	}
+
+	// /health returns 503 after shutdown is signaled.
+	origCtx, origCancel := mox.Shutdown, mox.ShutdownCancel
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+	mox.ShutdownCancel() // Signal shutdown.
+	req = httptest.NewRequest("GET", "http://localhost/health", nil)
+	rw = httptest.NewRecorder()
+	rw.Body = &bytes.Buffer{}
+	srv.ServeHTTP(rw, req)
+	if rw.Code != http.StatusServiceUnavailable {
+		t.Fatalf("health during shutdown: got status %d, expected %d", rw.Code, http.StatusServiceUnavailable)
+	}
+	// Restore original shutdown context.
+	mox.Shutdown, mox.ShutdownCancel = origCtx, origCancel
+
+	// POST to /health returns 405.
+	req = httptest.NewRequest("POST", "http://localhost/health", nil)
+	rw = httptest.NewRecorder()
+	rw.Body = &bytes.Buffer{}
+	srv.ServeHTTP(rw, req)
+	if rw.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("health POST: got status %d, expected %d", rw.Code, http.StatusMethodNotAllowed)
+	}
 }
