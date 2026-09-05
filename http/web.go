@@ -102,9 +102,8 @@ func faviconHandle(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "favicon.ico", faviconModTime, strings.NewReader(faviconIco))
 }
 
-// healthzHandle returns 200 when the server is healthy, 503 when shutting down.
-// Registered as a SystemHandler on all HTTP ports for Kubernetes health probes.
-func healthzHandle(w http.ResponseWriter, r *http.Request) {
+// healthHandle returns 200 when the server is healthy, 503 when shutting down.
+func healthHandle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
@@ -418,7 +417,6 @@ type serve struct {
 	TLSConfig         *tls.Config
 	NextProto         tlsNextProtoMap // For HTTP server, when we do submission/imap with ALPN over the HTTPS port.
 	Favicon           bool
-	Healthz           bool
 	Forwarded         bool // Requests are coming from a reverse proxy, we'll use X-Forwarded-For for the IP address to ratelimit.
 	RateLimitDisabled bool // Don't apply ratelimiting.
 
@@ -636,17 +634,13 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	ensureServe = func(https, forwarded, rateLimitDisabled bool, port int, kind string, favicon bool) *serve {
 		s := portServe[port]
 		if s == nil {
-			s = &serve{nil, nil, tlsNextProtoMap{}, false, false, false, false, nil, false, nil}
+			s = &serve{nil, nil, tlsNextProtoMap{}, false, false, false, nil, false, nil}
 			portServe[port] = s
 		}
 		s.Kinds = append(s.Kinds, kind)
 		if favicon && !s.Favicon {
 			s.ServiceHandle("favicon", accountHostMatch, "/favicon.ico", mox.SafeHeaders(http.HandlerFunc(faviconHandle)))
 			s.Favicon = true
-		}
-		if !s.Healthz {
-			s.SystemHandle("healthz", nil, "/healthz", mox.SafeHeaders(http.HandlerFunc(healthzHandle)))
-			s.Healthz = true
 		}
 		s.Forwarded = s.Forwarded || forwarded
 		s.RateLimitDisabled = s.RateLimitDisabled || rateLimitDisabled
@@ -823,6 +817,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		port := config.Port(l.MetricsHTTP.Port, 8010)
 		srv := ensureServe(false, false, false, port, "metrics-http", false)
 		srv.SystemHandle("metrics", nil, "/metrics", mox.SafeHeaders(promhttp.Handler()))
+		srv.SystemHandle("health", nil, "/metrics/health", mox.SafeHeaders(http.HandlerFunc(healthHandle)))
 		srv.SystemHandle("metrics", nil, "/", mox.SafeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
 				http.NotFound(w, r)
@@ -887,7 +882,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 		if _, ok := portServe[port]; ok {
 			pkglog.Fatal("cannot serve pprof on same endpoint as other http services")
 		}
-		srv := &serve{[]string{"pprof-http"}, nil, nil, false, false, false, false, nil, false, nil}
+		srv := &serve{[]string{"pprof-http"}, nil, nil, false, false, false, nil, false, nil}
 		portServe[port] = srv
 		srv.SystemHandle("pprof", nil, "/", http.DefaultServeMux)
 	}

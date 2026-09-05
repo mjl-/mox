@@ -46,7 +46,7 @@ services:
     working_dir: /mox
     restart: on-failure
     healthcheck:
-      test: wget -q -O- http://localhost:80/healthz
+      test: wget -q -O- http://localhost:8010/metrics/health
       interval: 1s
       timeout: 1s
       retries: 10
