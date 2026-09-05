@@ -84,7 +84,7 @@ func TestHealth(t *testing.T) {
 	l := mox.Conf.Static.Listeners["local"]
 	portSrvs := portServes("local", l)
 	srv := portSrvs[80]
-	req := httptest.NewRequest("GET", "http://localhost/metrics/health", nil)
+	req := httptest.NewRequest("GET", "http://localhost/health", nil)
 	rw := httptest.NewRecorder()
 	srv.ServeHTTP(rw, req)
 	if rw.Code != http.StatusNotFound {
@@ -96,8 +96,8 @@ func TestHealth(t *testing.T) {
 	portSrvs = portServes("local", l)
 	srv = portSrvs[80]
 
-	// /metrics/health returns 200 when not shutting down.
-	req = httptest.NewRequest("GET", "http://localhost/metrics/health", nil)
+	// /health returns 200 when not shutting down.
+	req = httptest.NewRequest("GET", "http://localhost/health", nil)
 	rw = httptest.NewRecorder()
 	rw.Body = &bytes.Buffer{}
 	srv.ServeHTTP(rw, req)
@@ -108,11 +108,11 @@ func TestHealth(t *testing.T) {
 		t.Fatalf("health: got body %q, expected %q", rw.Body.String(), "ok")
 	}
 
-	// /metrics/health returns 503 after shutdown is signaled.
+	// /health returns 503 after shutdown is signaled.
 	origCtx, origCancel := mox.Shutdown, mox.ShutdownCancel
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 	mox.ShutdownCancel() // Signal shutdown.
-	req = httptest.NewRequest("GET", "http://localhost/metrics/health", nil)
+	req = httptest.NewRequest("GET", "http://localhost/health", nil)
 	rw = httptest.NewRecorder()
 	rw.Body = &bytes.Buffer{}
 	srv.ServeHTTP(rw, req)
@@ -122,8 +122,8 @@ func TestHealth(t *testing.T) {
 	// Restore original shutdown context.
 	mox.Shutdown, mox.ShutdownCancel = origCtx, origCancel
 
-	// POST to /metrics/health returns 405.
-	req = httptest.NewRequest("POST", "http://localhost/metrics/health", nil)
+	// POST to /health returns 405.
+	req = httptest.NewRequest("POST", "http://localhost/health", nil)
 	rw = httptest.NewRecorder()
 	rw.Body = &bytes.Buffer{}
 	srv.ServeHTTP(rw, req)

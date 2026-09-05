@@ -43,7 +43,7 @@ services:
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
     healthcheck:
-      test: wget -q -O- http://127.0.0.1:8010/metrics/health
+      test: wget -q -O- http://127.0.0.1:8010/health
       interval: 1s
       timeout: 1s
       retries: 10
@@ -68,7 +68,7 @@ services:
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
     healthcheck:
-      test: wget -q -O- http://127.0.0.1:8010/metrics/health
+      test: wget -q -O- http://127.0.0.1:8010/health
       interval: 1s
       timeout: 1s
       retries: 10
@@ -96,7 +96,7 @@ services:
       - ./testdata/integration/resolv.conf:/etc/resolv.conf:z
       - ./testdata/integration:/integration:z
     healthcheck:
-      test: wget -q -O- http://127.0.0.1:8010/metrics/health
+      test: wget -q -O- http://127.0.0.1:8010/health
       interval: 1s
       timeout: 1s
       retries: 10
@@ -121,7 +121,7 @@ services:
     environment:
       GOCACHE: /.go/.cache/go-build
     healthcheck:
-      test: wget -q -O- http://127.0.0.1:1081/metrics/health
+      test: wget -q -O- http://127.0.0.1:1081/health
       interval: 1s
       timeout: 1s
       retries: 10

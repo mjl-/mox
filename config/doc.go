@@ -466,8 +466,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# limiting and for the "secure" status of cookies. (optional)
 				Forwarded: false
 
-			# Serve prometheus metrics, for monitoring. You should not enable this on a public
-			# IP. (optional)
+			# Serve prometheus metrics at /metrics and a health check at /health, for monitoring.
+			# You should not enable this on a public IP. (optional)
 			MetricsHTTP:
 				Enabled: false
 
