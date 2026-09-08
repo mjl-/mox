@@ -202,6 +202,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		reqsmtputf8 = true
 		size = int64(len(m0.DSNUTF8))
 	} else {
+		reqsmtputf8 = m0.SMTPUTF8
 		req8bit = m0.Has8bit // todo: not require this, but just try to submit?
 		size = m0.Size
 
@@ -222,13 +223,29 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		}()
 	}
 
+	// If the message requires SMTPUTF8 but the submission server doesn't support it,
+	// attempt to downgrade the message headers. Only possible if envelope addresses
+	// are ASCII.
+	senderStr := m0.Sender().String()
+	if reqsmtputf8 && !client.SupportsSMTPUTF8() && !m0.SMTPUTF8Addr {
+		if final, ok := downgradeSMTPUTF8Msg(qlog, m0, msgr); ok {
+			reqsmtputf8 = false
+			size = int64(len(final))
+			err := msgr.Close()
+			qlog.Check(err, "closing original message reader")
+			msgr = io.NopCloser(bytes.NewReader(final))
+			senderStr = m0.Sender().XString(false)
+			qlog.Info("downgraded smtputf8 message for non-smtputf8 submission server")
+		}
+	}
+
 	deliverctx, delivercancel := context.WithTimeout(context.Background(), time.Duration(60+size/(1024*1024))*time.Second)
 	defer delivercancel()
 	rcpts := make([]string, len(msgs))
 	for i, m := range msgs {
 		rcpts[i] = m.Recipient().String()
 	}
-	rcptErrs, submiterr := client.DeliverMultiple(deliverctx, m0.Sender().String(), rcpts, size, msgr, req8bit, reqsmtputf8, requireTLS)
+	rcptErrs, submiterr := client.DeliverMultiple(deliverctx, senderStr, rcpts, size, msgr, req8bit, reqsmtputf8, requireTLS)
 	if submiterr != nil {
 		qlog.Infox("smtp transaction for delivery failed", submiterr)
 	}

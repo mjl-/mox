@@ -123,7 +123,7 @@ func TestCtl(t *testing.T) {
 	defer msgFile.Close()
 	addr, err := smtp.ParseAddress("mjl@mox.example")
 	tcheck(t, err, "parse address")
-	qml := []queue.Msg{queue.MakeMsg(addr.Path(), addr.Path(), false, false, int64(len(msg)), "<random@localhost>", nil, nil, time.Now(), "subject")}
+	qml := []queue.Msg{queue.MakeMsg(addr.Path(), addr.Path(), false, false, false, int64(len(msg)), "<random@localhost>", nil, nil, time.Now(), "subject")}
 	queue.Add(ctxbg, pkglog, "mjl", msgFile, qml...)
 	qmid := qml[0].ID
 
