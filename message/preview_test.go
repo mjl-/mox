@@ -156,4 +156,50 @@ link1 text wordword2.
 col1 col2
 row2
 `)
+
+	// A text/plain part that actually contains HTML with a <style> block; the
+	// preview is extracted via the HTML path so CSS/tags don't leak.
+	m = tcompose(t, "plain", "<style>.footer-box td.contact2 {text-align: right;}</style><div>Hello world</div><div>second line</div>")
+	check(m, "Hello world\nsecond line\n")
+
+	// A text/plain part where the sender stripped HTML tags but left the contents of
+	// <style> blocks as raw CSS; the leading CSS must not leak into the preview.
+	m = tcompose(t, "plain", "#outlook a { padding:0; }\nbody { margin:0;padding:0;-webkit-text-size-adjust:100% }\nRanní výběr: actual newsletter text\n")
+	check(m, "Ranní výběr: actual newsletter text\n")
+}
+
+func TestStripLeadingCSS(t *testing.T) {
+	check := func(s, exp string) {
+		t.Helper()
+		if got := stripLeadingCSS(s); got != exp {
+			t.Fatalf("stripLeadingCSS(%q) = %q, want %q", s, got, exp)
+		}
+	}
+	check("", "")
+	check("plain text only", "plain text only")
+	check("#outlook a { padding:0; }real text", "real text")
+	check("  .a{color:red;}\n .b{margin:0;}\nHello", "Hello")
+	check("@media screen { .x { color:red } }\nHello", "Hello")
+	check("body { margin:0;padding:0 }\nHello", "Hello")
+	// Not CSS: ordinary prose with braces, or no declaration colon.
+	check("config = {a: b}", "config = {a: b}")
+	check("note {hello}", "note {hello}")
+	// Leading prose is preserved (only leading CSS is stripped).
+	check("Hello .x{color:red}", "Hello .x{color:red}")
+}
+
+func TestLooksLikeHTML(t *testing.T) {
+	check := func(s string, exp bool) {
+		t.Helper()
+		if got := looksLikeHTML([]byte(s)); got != exp {
+			t.Fatalf("looksLikeHTML(%q) = %v, want %v", s, got, exp)
+		}
+	}
+	check("", false)
+	check("just a plain text email, nothing special", false)
+	check("3 < 5 and 6 > 2, some arithmetic", false)
+	check("<div>hello</div>", true)
+	check("text with a &nbsp; entity", true)
+	check("</p> a closing tag", true)
+	check("<style>.x{color:red}</style>", true)
 }
