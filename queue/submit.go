@@ -160,6 +160,8 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 					return sasl.NewClientCRAMMD5(a.Username, a.Password), nil
 				} else if mech == "PLAIN" {
 					return sasl.NewClientPlain(a.Username, a.Password), nil
+				} else if mech == "LOGIN" {
+					return sasl.NewClientLogin(a.Username, a.Password), nil
 				}
 				return nil, fmt.Errorf("internal error: unrecognized authentication mechanism %q for transport %s", mech, transportName)
 			}
