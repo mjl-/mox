@@ -81,6 +81,12 @@ var webmailtextHTML []byte
 //go:embed text.js
 var webmailtextJS []byte
 
+//go:embed dompurify.js
+var webmailDOMPurifyJS []byte
+
+//go:embed squire.js
+var webmailSquireJS []byte
+
 var (
 	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission and ../webapisrv/server.go:/metricSubmission
 	metricSubmission = promauto.NewCounterVec(
@@ -287,7 +293,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		}
 		return
 
-	case "/msg.js", "/text.js":
+	case "/msg.js", "/text.js", "/squire.js", "/dompurify.js":
 		switch r.Method {
 		default:
 			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
@@ -299,6 +305,10 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		var fallback = webmailmsgJS
 		if r.URL.Path == "/text.js" {
 			fallback = webmailtextJS
+		} else if r.URL.Path == "/squire.js" {
+			fallback = webmailSquireJS
+		} else if r.URL.Path == "/dompurify.js" {
+			fallback = webmailDOMPurifyJS
 		}
 
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")

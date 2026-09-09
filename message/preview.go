@@ -251,7 +251,21 @@ var regexpSpace = regexp.MustCompile(`[ \t]+`)                                  
 var regexpNewline = regexp.MustCompile(`\n\n\n+`)                                                 // Replaced with single newline.
 var regexpZeroWidth = regexp.MustCompile("[\u00a0\u200b\u200c\u200d][\u00a0\u200b\u200c\u200d]+") // Removed, combinations don't make sense, generated.
 
+// HTMLToText converts an HTML document to plain text. Block elements introduce
+// newlines, text inside <blockquote> is prefixed with "> " per nesting level.
+// The entire input is read. Used to derive a text/plain alternative for HTML
+// messages composed in webmail.
+func HTMLToText(r io.Reader) (string, error) {
+	return htmlToText(r, 0)
+}
+
 func previewHTML(r io.Reader) (string, error) {
+	return htmlToText(r, 4*1024)
+}
+
+// htmlToText walks the HTML DOM building plain text. If limit > 0, walking stops
+// once at least limit bytes have been gathered (used for previews).
+func htmlToText(r io.Reader, limit int) (string, error) {
 	// Stack/state, based on elements.
 	var ignores []bool
 	var inlines []bool
@@ -334,10 +348,10 @@ func previewHTML(r io.Reader) (string, error) {
 				}
 				text += s
 			}
-			// We need to generate at most 256 characters of preview. The text we're gathering
-			// will be cleaned up, with quoting removed, so we'll end up with less. Hopefully,
-			// 4k bytes is enough to read.
-			if len(text) >= 4*1024 {
+			// When a limit is set (preview use), stop once we have enough. Previews need at
+			// most 256 characters, and the gathered text is cleaned up afterwards (quoting
+			// removed), so a few kilobytes is plenty. A limit of 0 means read everything.
+			if limit > 0 && len(text) >= limit {
 				return false
 			}
 		}
