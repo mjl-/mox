@@ -1396,7 +1396,7 @@
 				},
 				{
 					"Name": "QueueMsgID",
-					"Docs": "ID of message in queue.",
+					"Docs": "ID of message in queue. Note: These are different from IDs of messages in accounts.",
 					"Typewords": [
 						"int64"
 					]
@@ -1661,7 +1661,7 @@
 			"Fields": [
 				{
 					"Name": "MsgID",
-					"Docs": "ID of message in storage, and to use in webapi calls like MessageGet.",
+					"Docs": "ID of message in storage, and to use in webapi calls like MessageGet. These IDs are different from ID from messages in the queue.",
 					"Typewords": [
 						"int64"
 					]

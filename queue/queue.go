@@ -359,6 +359,23 @@ func Init() error {
 			return metricHoldUpdate(tx)
 		})
 	}
+	if isNew && err == nil {
+		// Insert Msg with higher ID and remove it again. It will set the sequence for next
+		// ID so queue messages get assigned higher values (especially on new installs,
+		// among which localserve) so there can be no confusion between id's of messages in
+		// an account and id's of messages in the queue.
+		err = DB.Write(mox.Shutdown, func(tx *bstore.Tx) error {
+			m := Msg{ID: 1000 * 1000}
+			err := tx.Insert(&m)
+			if err == nil {
+				err = tx.Delete(&m)
+			}
+			return err
+		})
+		if err != nil {
+			err = fmt.Errorf("increasing Msg.ID sequence: %w", err)
+		}
+	}
 	if err != nil {
 		if isNew {
 			err := os.Remove(qpath)

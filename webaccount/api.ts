@@ -152,7 +152,7 @@ export interface Outgoing {
 	Event: OutgoingEvent  // Type of outgoing delivery event.
 	DSN: boolean  // If this event was triggered by a delivery status notification message (DSN).
 	Suppressing: boolean  // If true, this failure caused the address to be added to the suppression list.
-	QueueMsgID: number  // ID of message in queue.
+	QueueMsgID: number  // ID of message in queue. Note: These are different from IDs of messages in accounts.
 	FromID: string  // As used in MAIL FROM, can be empty, for incoming messages.
 	MessageID: string  // From Message-Id header, as set by submitter or us, with enclosing <>.
 	Subject: string  // Of original message.
@@ -198,7 +198,7 @@ export interface Structure {
 }
 
 export interface IncomingMeta {
-	MsgID: number  // ID of message in storage, and to use in webapi calls like MessageGet.
+	MsgID: number  // ID of message in storage, and to use in webapi calls like MessageGet. These IDs are different from ID from messages in the queue.
 	MailFrom: string  // Address used during SMTP "MAIL FROM" command.
 	MailFromValidated: boolean  // Whether SMTP MAIL FROM address was SPF-validated.
 	MsgFromValidated: boolean  // Whether address in message "From"-header was DMARC(-like) validated.

@@ -229,7 +229,7 @@ func TestCtl(t *testing.T) {
 
 	// "queueretiredprint"
 	testctl(func(xctl *ctl) {
-		ctlcmdQueueRetiredPrint(xctl, "1")
+		ctlcmdQueueRetiredPrint(xctl, "1000001")
 	})
 
 	// "queuehooklist"
