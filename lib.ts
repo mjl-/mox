@@ -180,6 +180,7 @@ const dom = {
 	style: (...l: ElemArg[]) => _domKids(document.createElement('style'), l),
 	search: (...l: ElemArg[]) => _domKids(document.createElement('search'), l),
 	p: (...l: ElemArg[]) => _domKids(document.createElement('p'), l),
+	canvas: (...l: ElemArg[]) => _domKids(document.createElement('canvas'), l),
 }
 const _attr = (k: string, v: string) => { const o: {[key: string]: string} = {}; o[k] = v; return {_attrs: o} }
 const attr = {

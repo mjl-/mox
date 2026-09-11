@@ -160,7 +160,8 @@
 		img: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("img"), l), "img"),
 		style: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("style"), l), "style"),
 		search: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("search"), l), "search"),
-		p: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("p"), l), "p")
+		p: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("p"), l), "p"),
+		canvas: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("canvas"), l), "canvas")
 	};
 	var _attr = /* @__PURE__ */ __name((k, v) => {
 		const o = {};

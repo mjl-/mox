@@ -160,7 +160,8 @@
 		img: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("img"), l), "img"),
 		style: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("style"), l), "style"),
 		search: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("search"), l), "search"),
-		p: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("p"), l), "p")
+		p: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("p"), l), "p"),
+		canvas: /* @__PURE__ */ __name((...l) => _domKids(document.createElement("canvas"), l), "canvas")
 	};
 	var _attr = /* @__PURE__ */ __name((k, v) => {
 		const o = {};
@@ -5970,6 +5971,70 @@
 				document.title = ["(" + mb.Unread + ") " + mb.Name, addr, "Mox Webmail"].join(" - ");
 			}
 		}, "updatePageTitle");
+		const faviconLink = document.head.querySelector('link[rel="icon"]');
+		const faviconImg = dom.img(attr.src("/favicon.ico"));
+		const faviconProm = new Promise((resolve, reject) => {
+			faviconImg.addEventListener("load", () => resolve());
+			faviconImg.addEventListener("error", () => reject());
+		});
+		let faviconState = 0;
+		const faviconDraw = /* @__PURE__ */ __name(async () => {
+			try {
+				await faviconProm;
+			} catch (err) {
+				return;
+			}
+			let state;
+			if (!eventSource) {
+				state = -1;
+			} else {
+				const inbox = mailboxlistView.findMailboxByName("Inbox");
+				state = Math.min(999, inbox?.Unread || 0);
+			}
+			if (faviconState === state) {
+				return;
+			}
+			const canvas = dom.canvas(prop({ width: faviconImg.naturalWidth, height: faviconImg.naturalHeight }));
+			const ctx = canvas.getContext("2d");
+			if (!ctx || !faviconLink) {
+				return;
+			}
+			ctx.drawImage(faviconImg, 0, 0);
+			if (state < 0) {
+				const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+				const px = imageData.data;
+				for (let i = 0; i < px.length; i += 4) {
+					const r = px[i];
+					const g = px[i + 1];
+					const b = px[i + 2];
+					const grey = Math.floor(0.2126 * r + 0.715 * g + 0.0722 * b);
+					px[i] = grey;
+					px[i + 1] = grey;
+					px[i + 2] = grey;
+					px[i + 3] = 127;
+				}
+				ctx.putImageData(imageData, 0, 0);
+			} else if (state > 0) {
+				ctx.font = "bold 14px sans-serif";
+				const size = ctx.measureText("" + state);
+				ctx.beginPath();
+				const radius = (size.fontBoundingBoxAscent + size.fontBoundingBoxDescent) / 2;
+				const slack = radius / 3;
+				const left = Math.min(32 - 2 * radius, 32 - 2 * slack - size.width);
+				const bottom = 32;
+				const right = 32;
+				ctx.arc(right - radius, bottom - radius, radius, 1.5 * Math.PI, 0.5 * Math.PI, false);
+				ctx.lineTo(left - radius, bottom);
+				ctx.arc(left + radius, bottom - radius, radius, 0.5 * Math.PI, 1.5 * Math.PI, false);
+				ctx.lineTo(right + radius, bottom - 2 * radius);
+				ctx.fillStyle = "#222";
+				ctx.fill();
+				ctx.fillStyle = "white";
+				ctx.fillText("" + state, (right + left) / 2 - size.width / 2, bottom - size.fontBoundingBoxDescent);
+			}
+			faviconLink.href = canvas.toDataURL("image/png");
+			faviconState = state;
+		}, "faviconDraw");
 		const setLocationHash = /* @__PURE__ */ __name(() => {
 			const msgid = requestMsgID || msglistView.activeMessageID();
 			let trail = msgid ? "," + msgid : "";
@@ -6584,6 +6649,7 @@
 		let openComposeOptions;
 		let connectOpenComposeMessageID = 0;
 		const uiConnectionStatus = /* @__PURE__ */ __name((connected) => {
+			faviconDraw();
 			composeBtn.disabled = !connected;
 			settingsBtn.disabled = !connected;
 			const toggle = /* @__PURE__ */ __name((e) => {
@@ -6940,6 +7006,7 @@
 							throw new Error("unknown change tag " + tag);
 						}
 					});
+					faviconDraw();
 				} catch (err) {
 					window.alert("Error processing changes (reloading advised): " + errmsg(err));
 				}
