@@ -5937,6 +5937,10 @@
 		let loginAddressElem;
 		let msglistscrollElem;
 		let queryactivityElem;
+		let composeBtn;
+		let searchbarElemBox;
+		let settingsBtn;
+		let mailboxesListMsgBox;
 		const listendElem = dom.div(css("msgListEnd", { borderTop: "1px solid", borderColor: styles.borderColor, color: styles.colorMilder, margin: "1ex" }));
 		const listloadingElem = dom.div(css("msgListLoading", { textAlign: "center", padding: ".15em 0", color: styles.colorMild, border: "1px solid", borderColor: styles.borderColor, margin: "1ex", backgroundColor: styles.backgroundColorMild }), "loading...");
 		const listerrElem = dom.div(css("msgListErr", { textAlign: "center", padding: ".15em 0", color: styles.colorMild, border: "1px solid", borderColor: styles.borderColor, margin: "1ex", backgroundColor: styles.backgroundColorMild }));
@@ -6205,7 +6209,6 @@
 		}, "searchViewClose");
 		let mailboxesElem, topcomposeboxElem, mailboxessplitElem;
 		let splitElem;
-		let searchbarElemBox;
 		const searchbarInitial = /* @__PURE__ */ __name(() => {
 			const mailboxActive = mailboxlistView.activeMailbox();
 			if (mailboxActive && mailboxActive.Name !== "Inbox") {
@@ -6268,7 +6271,7 @@
 		};
 		const topMailboxesStyle = css("topMailboxes", { backgroundColor: styles.mailboxesTopBackgroundColor });
 		css("searchbarActive", { background: styles.mailboxActiveBackground });
-		const webmailroot = dom.div(css("webmailRoot", { display: "flex", flexDirection: "column", alignContent: "stretch", height: "100dvh" }), dom.div(topMailboxesStyle, style({ display: "flex" }), attr.role("region"), attr.arialabel("Top bar"), topcomposeboxElem = dom.div(dom._class("pad"), style({ width: settings.mailboxesWidth + "px", textAlign: "center" }), dom.clickbutton("Compose", attr.title("Compose new email message."), /* @__PURE__ */ __name(function click() {
+		const webmailroot = dom.div(css("webmailRoot", { display: "flex", flexDirection: "column", alignContent: "stretch", height: "100dvh" }), dom.div(topMailboxesStyle, style({ display: "flex" }), attr.role("region"), attr.arialabel("Top bar"), topcomposeboxElem = dom.div(dom._class("pad"), style({ width: settings.mailboxesWidth + "px", textAlign: "center" }), composeBtn = dom.clickbutton("Compose", attr.title("Compose new email message."), /* @__PURE__ */ __name(function click() {
 			shortcutCmd(cmdCompose, shortcuts);
 		}, "click"))), dom.div(dom._class("pad"), css("searchbarBox", { paddingLeft: 0, display: "flex", flexGrow: 1 }), searchbarElemBox = dom.search(style({ display: "flex", marginRight: ".5em" }), dom.form(style({ display: "flex", flexGrow: 1 }), searchbarElem = dom.input(attr.placeholder("Search..."), style({ position: "relative", width: "100%" }), attr.title("Search messages based on criteria like matching free-form text, in a mailbox, labels, addressees."), focusPlaceholder('word "with space" -notword mb:Inbox f:from@x.example t:rcpt@x.example start:2023-7-1 end:2023-7-8 s:"subject" a:images l:$Forwarded h:Reply-To:other@x.example minsize:500kb'), /* @__PURE__ */ __name(function click() {
 			cmdSearch();
@@ -6321,7 +6324,7 @@
 			} else {
 				selectLayout(layoutElem.value);
 			}
-		}, "change")), " ", dom.clickbutton("Tooltip", attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), " ", dom.clickbutton("Help", attr.title("Show popup with basic usage information and a keyboard shortcuts."), clickCmd(cmdHelp, shortcuts)), " ", dom.clickbutton("Settings", attr.title("Change settings for composing messages."), clickCmd(cmdSettings, shortcuts)), " ", accountElem = dom.span(), " ", loginAddressElem = dom.span(), " ", dom.clickbutton("Logout", attr.title("Logout, invalidating this session."), /* @__PURE__ */ __name(async function click(e) {
+		}, "change")), " ", dom.clickbutton("Tooltip", attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), " ", dom.clickbutton("Help", attr.title("Show popup with basic usage information and a keyboard shortcuts."), clickCmd(cmdHelp, shortcuts)), " ", settingsBtn = dom.clickbutton("Settings", attr.title("Change settings for composing messages."), clickCmd(cmdSettings, shortcuts)), " ", accountElem = dom.span(), " ", loginAddressElem = dom.span(), " ", dom.clickbutton("Logout", attr.title("Logout, invalidating this session."), /* @__PURE__ */ __name(async function click(e) {
 			await withStatus("Logging out", client.Logout(), e.target);
 			localStorageRemove("webmailcsrftoken");
 			if (eventSource) {
@@ -6329,7 +6332,7 @@
 				eventSource = null;
 			}
 			window.location.reload();
-		}, "click"))))), dom.div(css("mailboxesListMsgBox", { flexGrow: "1", position: "relative" }), mailboxesElem = dom.div(topMailboxesStyle, style({ width: settings.mailboxesWidth + "px" }), css("mailboxesBox", { display: "flex", flexDirection: "column", alignContent: "stretch", position: "absolute", left: 0, top: 0, bottom: 0 }), dom.div(dom._class("pad"), yscrollAutoStyle, style({ flexGrow: "1", position: "relative" }), mailboxlistView.root)), mailboxessplitElem = dom.div(css("mailboxesListGrab", { position: "absolute", width: "5px", top: 0, bottom: 0, cursor: "ew-resize", zIndex: zindexes.splitter }), style({ left: "calc(" + settings.mailboxesWidth + "px - 2px)" }), dom.div(css("mailboxesListLine", { position: "absolute", width: "1px", top: 0, bottom: 0, left: "2px", right: "2px", backgroundColor: styles.popupBorderColor })), /* @__PURE__ */ __name(function mousedown(e) {
+		}, "click"))))), mailboxesListMsgBox = dom.div(css("mailboxesListMsgBox", { flexGrow: "1", position: "relative" }), mailboxesElem = dom.div(topMailboxesStyle, style({ width: settings.mailboxesWidth + "px" }), css("mailboxesBox", { display: "flex", flexDirection: "column", alignContent: "stretch", position: "absolute", left: 0, top: 0, bottom: 0 }), dom.div(dom._class("pad"), yscrollAutoStyle, style({ flexGrow: "1", position: "relative" }), mailboxlistView.root)), mailboxessplitElem = dom.div(css("mailboxesListGrab", { position: "absolute", width: "5px", top: 0, bottom: 0, cursor: "ew-resize", zIndex: zindexes.splitter }), style({ left: "calc(" + settings.mailboxesWidth + "px - 2px)" }), dom.div(css("mailboxesListLine", { position: "absolute", width: "1px", top: 0, bottom: 0, left: "2px", right: "2px", backgroundColor: styles.popupBorderColor })), /* @__PURE__ */ __name(function mousedown(e) {
 			startDrag(e, (e2) => {
 				mailboxesElem.style.width = Math.round(e2.clientX) + "px";
 				topcomposeboxElem.style.width = Math.round(e2.clientX) + "px";
@@ -6541,8 +6544,8 @@
 		});
 		let eventSource = null;
 		let connecting = false;
-		let noreconnect = false;
-		let noreconnectTimer = 0;
+		let autoReconnect = 1;
+		let autoReconnectResetTimer = 0;
 		let shutdownReconnectTimer = 0;
 		let leaving = false;
 		window.addEventListener("beforeunload", (e) => {
@@ -6559,20 +6562,20 @@
 		});
 		window.addEventListener("pageshow", async (e) => {
 			if (e.persisted && !eventSource && !connecting) {
-				noreconnect = false;
+				autoReconnect = 1;
 				connect(false);
 			}
 		});
 		window.addEventListener("focus", () => {
-			if (!eventSource && !connecting) {
-				noreconnect = false;
+			if (!eventSource && !connecting && autoReconnect >= 0) {
+				autoReconnect = 0;
 				connect(true);
 			}
 		});
 		const showNotConnected = /* @__PURE__ */ __name(() => {
 			dom._kids(connectionElem, attr.role("status"), dom.span(css("connectionStatus", { backgroundColor: styles.warningBackgroundColor, padding: "0 .15em", borderRadius: ".15em" }), "Not connected", attr.title("Not receiving real-time updates, including of new deliveries.")), " ", dom.clickbutton("Reconnect", /* @__PURE__ */ __name(function click() {
 				if (!eventSource && !connecting) {
-					noreconnect = false;
+					autoReconnect = 1;
 					connect(true);
 				}
 			}, "click")));
@@ -6580,6 +6583,18 @@
 		const capitalizeFirst = /* @__PURE__ */ __name((s) => s.charAt(0).toUpperCase() + s.slice(1), "capitalizeFirst");
 		let openComposeOptions;
 		let connectOpenComposeMessageID = 0;
+		const uiConnectionStatus = /* @__PURE__ */ __name((connected) => {
+			composeBtn.disabled = !connected;
+			settingsBtn.disabled = !connected;
+			const toggle = /* @__PURE__ */ __name((e) => {
+				e.style.opacity = connected ? "" : ".3";
+				e.style.pointerEvents = connected ? "" : "none";
+				e.toggleAttribute("inert", !connected);
+			}, "toggle");
+			toggle(searchbarElemBox);
+			toggle(mailboxesListMsgBox);
+		}, "uiConnectionStatus");
+		uiConnectionStatus(false);
 		const connect = /* @__PURE__ */ __name(async (isreconnect) => {
 			if (shutdownReconnectTimer) {
 				window.clearTimeout(shutdownReconnectTimer);
@@ -6588,14 +6603,14 @@
 			connectionElem.classList.toggle("loading", true);
 			dom._kids(connectionElem);
 			connectionElem.classList.toggle("loading", false);
-			noreconnect = isreconnect;
+			autoReconnect = isreconnect ? 0 : 1;
 			connecting = true;
 			let token;
 			try {
 				token = await withStatus("Fetching token for connection with real-time updates", client.Token(), void 0, true);
 			} catch (err) {
 				connecting = false;
-				noreconnect = true;
+				autoReconnect = 0;
 				dom._kids(statusElem, capitalizeFirst(err.message || "Error fetching connection token") + ", not automatically retrying. ");
 				showNotConnected();
 				return;
@@ -6666,13 +6681,14 @@
 				dom._kids(connectionElem);
 			});
 			const sseError = /* @__PURE__ */ __name((errmsg2, addNotRetrying) => {
+				uiConnectionStatus(false);
 				sseID = 0;
 				eventSource.close();
 				eventSource = null;
 				connecting = false;
-				if (noreconnectTimer) {
-					clearTimeout(noreconnectTimer);
-					noreconnectTimer = 0;
+				if (autoReconnectResetTimer) {
+					clearTimeout(autoReconnectResetTimer);
+					autoReconnectResetTimer = 0;
 				}
 				if (leaving) {
 					return;
@@ -6683,7 +6699,7 @@
 				}
 				document.title = ["(not connected)", loginAddress ? loginAddress.User + "@" + formatDomain(loginAddress.Domain) : "", "Mox Webmail"].filter((s) => s).join(" - ");
 				dom._kids(connectionElem);
-				if (noreconnect) {
+				if (autoReconnect < 1) {
 					let msg = capitalizeFirst(errmsg2);
 					if (addNotRetrying) {
 						msg += ", not automatically retrying. ";
@@ -6705,7 +6721,7 @@
 				sseError('Server error: "' + errmsg2 + '"', true);
 			});
 			eventSource.addEventListener("serverShutdown", (_) => {
-				noreconnect = true;
+				autoReconnect = 0;
 				sseError("Server shutting down, will try to reconnect in a few seconds", false);
 				shutdownReconnectTimer = window.setTimeout(() => {
 					connect(true);
@@ -6715,7 +6731,10 @@
 				try {
 					return fn();
 				} catch (err) {
-					window.alert("invalid event from server: " + (err.message || "(no message)"));
+					const errmsg2 = "invalid event from server: " + (err.message || "(no message)");
+					window.alert(errmsg2);
+					autoReconnect = -1;
+					sseError(errmsg2, true);
 					throw err;
 				}
 			}, "checkParse");
@@ -6803,10 +6822,11 @@
 				}
 				dom._kids(queryactivityElem, "loading...");
 				msglistscrollElem.appendChild(listloadingElem);
-				noreconnectTimer = window.setTimeout(() => {
-					noreconnect = false;
-					noreconnectTimer = 0;
+				autoReconnectResetTimer = window.setTimeout(() => {
+					autoReconnect = 1;
+					autoReconnectResetTimer = 0;
 				}, 5 * 1e3);
+				uiConnectionStatus(true);
 			});
 			eventSource.addEventListener("viewErr", async (e) => {
 				const viewErr = checkParse(() => parser.EventViewErr(JSON.parse(e.data)));

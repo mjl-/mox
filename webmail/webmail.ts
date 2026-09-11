@@ -6435,6 +6435,12 @@ const init = async () => {
 	let msglistscrollElem: HTMLElement
 	let queryactivityElem: HTMLElement // We show ... when a query is active and data is forthcoming.
 
+	// Elements we make inactive when we are not connected.
+	let composeBtn: HTMLButtonElement
+	let searchbarElemBox: HTMLElement
+	let settingsBtn: HTMLButtonElement
+	let mailboxesListMsgBox: HTMLDivElement
+
 	// Shown at the bottom of msglistscrollElem, immediately below the msglistView, when appropriate.
 	const listendElem = dom.div(css('msgListEnd', {borderTop: '1px solid', borderColor: styles.borderColor, color: styles.colorMilder, margin: '1ex'}))
 	const listloadingElem = dom.div(css('msgListLoading', {textAlign: 'center', padding: '.15em 0', color: styles.colorMild, border: '1px solid', borderColor: styles.borderColor, margin: '1ex', backgroundColor: styles.backgroundColorMild}), 'loading...')
@@ -6843,8 +6849,6 @@ const init = async () => {
 	let mailboxesElem: HTMLElement, topcomposeboxElem: HTMLElement, mailboxessplitElem: HTMLElement
 	let splitElem: HTMLElement
 
-	let searchbarElemBox: HTMLElement // Detailed search form, opened when searchbarElem gets focused.
-
 	const searchbarInitial = () => {
 		const mailboxActive = mailboxlistView.activeMailbox()
 		if (mailboxActive && mailboxActive.Name !== 'Inbox') {
@@ -6925,7 +6929,7 @@ const init = async () => {
 			attr.role('region'), attr.arialabel('Top bar'),
 			topcomposeboxElem=dom.div(dom._class('pad'),
 				style({width: settings.mailboxesWidth + 'px', textAlign: 'center'}),
-				dom.clickbutton('Compose', attr.title('Compose new email message.'), function click() {
+				composeBtn=dom.clickbutton('Compose', attr.title('Compose new email message.'), function click() {
 					shortcutCmd(cmdCompose, shortcuts)
 				}),
 			),
@@ -7023,7 +7027,7 @@ const init = async () => {
 					' ',
 					dom.clickbutton('Help', attr.title('Show popup with basic usage information and a keyboard shortcuts.'), clickCmd(cmdHelp, shortcuts)),
 					' ',
-					dom.clickbutton('Settings', attr.title('Change settings for composing messages.'), clickCmd(cmdSettings, shortcuts)),
+					settingsBtn=dom.clickbutton('Settings', attr.title('Change settings for composing messages.'), clickCmd(cmdSettings, shortcuts)),
 					' ',
 					accountElem=dom.span(),
 					' ',
@@ -7042,7 +7046,7 @@ const init = async () => {
 				),
 			),
 		),
-		dom.div(
+		mailboxesListMsgBox=dom.div(
 			css('mailboxesListMsgBox', {flexGrow: '1', position: 'relative'}),
 			mailboxesElem=dom.div(topMailboxesStyle,
 				style({width: settings.mailboxesWidth + 'px'}),
@@ -7347,8 +7351,11 @@ const init = async () => {
 
 	let eventSource: EventSource | null = null // If set, we have a connection.
 	let connecting = false // Check before reconnecting.
-	let noreconnect = false // Set after one reconnect attempt fails.
-	let noreconnectTimer = 0 // Timer ID for resetting noreconnect.
+	// autoreconnect is set to 0 when one reconnect attempt fails, which is cleared by
+	// window "focus" event. Set to -1 on fatal protocol errors, not cleared by window
+	// "focus" event (i.e. after the alert box is closed).
+	let autoReconnect = 1
+	let autoReconnectResetTimer = 0 // Timer ID for resetting autoReconnect.
 	// Set to timer when we plan to reconnect after a server shutdown. Cleared when we
 	// try to connect.
 	let shutdownReconnectTimer = 0
@@ -7372,15 +7379,15 @@ const init = async () => {
 	// have left, closed the connection, so we should restore it.
 	window.addEventListener('pageshow', async (e: PageTransitionEvent) => {
 		if (e.persisted && !eventSource && !connecting) {
-			noreconnect = false
+			autoReconnect = 1
 			connect(false)
 		}
 	})
 
 	// If user comes back to tab/window, and we are disconnected, try another reconnect.
 	window.addEventListener('focus', () => {
-		if (!eventSource && !connecting) {
-			noreconnect = false
+		if (!eventSource && !connecting && autoReconnect >= 0) {
+			autoReconnect = 0
 			connect(true)
 		}
 	})
@@ -7392,7 +7399,7 @@ const init = async () => {
 			' ',
 			dom.clickbutton('Reconnect', function click() {
 				if (!eventSource && !connecting) {
-					noreconnect = false
+					autoReconnect = 1
 					connect(true)
 				}
 			}),
@@ -7408,6 +7415,22 @@ const init = async () => {
 	// connected.
 	let connectOpenComposeMessageID = 0
 
+	const uiConnectionStatus = (connected: boolean) => {
+		composeBtn.disabled = !connected
+		settingsBtn.disabled = !connected
+
+		const toggle = (e: HTMLElement) => {
+			e.style.opacity = connected ? '' : '.3'
+			e.style.pointerEvents = connected ? '' : 'none' // Prevent mouse events.
+			e.toggleAttribute('inert', !connected) // Prevent navigation through keyboard.
+		}
+
+		toggle(searchbarElemBox)
+		toggle(mailboxesListMsgBox)
+	}
+
+	uiConnectionStatus(false)
+
 	const connect = async (isreconnect: boolean) => {
 		if (shutdownReconnectTimer) {
 			window.clearTimeout(shutdownReconnectTimer)
@@ -7417,7 +7440,7 @@ const init = async () => {
 		dom._kids(connectionElem)
 		connectionElem.classList.toggle('loading', false)
 
-		noreconnect = isreconnect
+		autoReconnect = isreconnect ? 0 : 1
 		connecting = true
 
 		let token: string
@@ -7425,7 +7448,7 @@ const init = async () => {
 			token = await withStatus('Fetching token for connection with real-time updates', client.Token(), undefined, true)
 		} catch (err) {
 			connecting = false
-			noreconnect = true
+			autoReconnect = 0
 			dom._kids(statusElem, (capitalizeFirst((err as any).message || 'Error fetching connection token'))+', not automatically retrying. ')
 			showNotConnected()
 			return
@@ -7506,13 +7529,14 @@ const init = async () => {
 		})
 
 		const sseError = (errmsg: string, addNotRetrying: boolean) => {
+			uiConnectionStatus(false)
 			sseID = 0
 			eventSource!.close()
 			eventSource = null
 			connecting = false
-			if (noreconnectTimer) {
-				clearTimeout(noreconnectTimer)
-				noreconnectTimer = 0
+			if (autoReconnectResetTimer) {
+				clearTimeout(autoReconnectResetTimer)
+				autoReconnectResetTimer = 0
 			}
 			if (leaving) {
 				return
@@ -7523,7 +7547,7 @@ const init = async () => {
 			}
 			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+formatDomain(loginAddress.Domain)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
 			dom._kids(connectionElem)
-			if (noreconnect) {
+			if (autoReconnect < 1) {
 				let msg = capitalizeFirst(errmsg)
 				if (addNotRetrying) {
 					msg += ', not automatically retrying. '
@@ -7548,7 +7572,7 @@ const init = async () => {
 		})
 		// Server is stopping, we'll assume for a restart, and will try to reconnect with some jitter.
 		eventSource.addEventListener('serverShutdown', (_: MessageEvent) => {
-			noreconnect = true
+			autoReconnect = 0
 			sseError('Server shutting down, will try to reconnect in a few seconds', false)
 
 			shutdownReconnectTimer = window.setTimeout(() => {
@@ -7560,7 +7584,10 @@ const init = async () => {
 			try {
 				return fn()
 			} catch (err) {
-				window.alert('invalid event from server: ' + ((err as any).message || '(no message)'))
+				const errmsg = 'invalid event from server: ' + ((err as any).message || '(no message)')
+				window.alert(errmsg)
+				autoReconnect = -1
+				sseError(errmsg, true)
 				throw err
 			}
 		}
@@ -7662,13 +7689,15 @@ const init = async () => {
 			dom._kids(queryactivityElem, 'loading...')
 			msglistscrollElem.appendChild(listloadingElem)
 
-			// We'll clear noreconnect when we've held a connection for 5 seconds. Firefox
+			// We'll set autoReconnect to 1 when we've held a connection for 5 seconds. Firefox
 			// disconnects often, on any network change including with docker container starts,
 			// such as for integration tests.
-			noreconnectTimer = window.setTimeout(() => {
-				noreconnect = false
-				noreconnectTimer = 0
+			autoReconnectResetTimer = window.setTimeout(() => {
+				autoReconnect = 1
+				autoReconnectResetTimer = 0
 			}, 5*1000)
+
+			uiConnectionStatus(true)
 		})
 		eventSource.addEventListener('viewErr', async (e: MessageEvent) => {
 			const viewErr = checkParse(() => api.parser.EventViewErr(JSON.parse(e.data)))
