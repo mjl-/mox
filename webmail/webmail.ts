@@ -64,7 +64,6 @@ Enable consistency checking in UI updates:
 - todo: composing of html messages. possibly based on contenteditable. would be good if we can include original html, but quoted. must make sure to not include dangerous scripts/resources, or sandbox it.
 - todo: make alt up/down keys work on html iframe too. requires loading it from sameorigin, to get access to its inner document.
 - todo: reconnect with last known modseq and don't clear the message list, only update it
-- todo: find and use svg icons for flags in the msgitemView. junk (fire), forwarded, replied, attachment (paperclip), flagged (flag), phishing (?). also for special-use mailboxes (junk, trash, archive, draft, sent). should be basic and slim.
 - todo: for embedded messages (message/rfc822 or message/global), allow viewing it as message, perhaps in a popup?
 - todo: only show orange underline where it could be a problem? in addresses and anchor texts. we may be lighting up a christmas tree now, desensitizing users.
 - todo: saved searches that are displayed below list of mailboxes, for quick access to preset view
@@ -86,6 +85,7 @@ Enable consistency checking in UI updates:
 import {dom, style, attr, prop, ElemArg} from '../lib'
 import {css, ensureCSS, styles, styleClasses, equalAddress, formatAddress, formatAddressShort, formatEmail, loadMsgheaderView, isImage, renderText, formatDomain, join} from './lib'
 import * as api from './api'
+import * as icons from './icons'
 
 // If we had to reload with a cache buster after a server update, the URL will
 // start with ?v=.... Remove it and load again.
@@ -780,6 +780,7 @@ const flagList = (miv: MsgitemView): HTMLElement[] => {
 	}
 	const addFlags = (mi: api.MessageItem) => {
 		const m = mi.Message
+		flag(!m.Junk && !m.Notjunk, '?', 'Unclassified, neither junk nor not junk: message does not contribute to spam classification of new incoming messages')
 		flag(m.Answered, 'r', 'Replied/answered')
 		flag(m.Flagged, '!', 'Flagged')
 		flag(m.Forwarded, 'f', 'Forwarded')
@@ -787,7 +788,6 @@ const flagList = (miv: MsgitemView): HTMLElement[] => {
 		flag(m.Deleted, 'D', 'Deleted, used in IMAP, message will likely be removed soon.')
 		flag(m.Draft, 'd', 'Draft')
 		flag(m.Phishing, 'p', 'Phishing')
-		flag(!m.Junk && !m.Notjunk, '?', 'Unclassified, neither junk nor not junk: message does not contribute to spam classification of new incoming messages')
 		flag(mi.Attachments && mi.Attachments.length > 0 ? true : false, 'a', 'Has at least one attachment')
 		if (m.ThreadMuted) {
 			flag(true, 'm', 'Muted, new messages are automatically marked as read.')
@@ -801,9 +801,26 @@ const flagList = (miv: MsgitemView): HTMLElement[] => {
 		}
 	}
 
+	const flagCharIcons: { [key: string]: () => SVGSVGElement } = {
+		'r': icons.reply,
+		'!': icons.flag,
+		'f': icons.forward,
+		'j': icons.junk,
+		'a': icons.attachment,
+		'D': icons.trash,
+	}
+
+	const flagChar = (c: string) => {
+		const fn = flagCharIcons[c]
+		if (fn) {
+			return fn()
+		}
+		return c
+	}
+
 	const msgItemFlagStyle = css('msgItemFlag', {marginRight: '1px', fontWeight: 'normal', fontSize: '.9em'})
-	return msgflags.map(t => dom.span(msgItemFlagStyle, t[1], attr.title(t[0])))
-		.concat(othermsgflags.map(t => dom.span(msgItemFlagStyle, css('msgItemFlagCollapsed', {color: styles.colorMilder}), t[1], attr.title(t[0]))))
+	return msgflags.map(t => dom.span(msgItemFlagStyle, flagChar(t[1]), attr.title(t[0])))
+		.concat(othermsgflags.map(t => dom.span(msgItemFlagStyle, css('msgItemFlagCollapsed', {color: styles.colorMilder}), flagChar(t[1]), attr.title(t[0]))))
 }
 
 // Turn filters from the search bar into filters with the refine filters (buttons
@@ -5301,6 +5318,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 		cmdExpand()
 	})
 
+	let icon: HTMLElement
 	let name: HTMLElement, unread: HTMLElement
 	let actionBtn: HTMLButtonElement
 
@@ -5443,6 +5461,25 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 	ensureCSS('.mailboxCollapse', {visibility: 'hidden'})
 	ensureCSS('.mailboxItem:hover .mailboxCollapse, .mailboxItem:focus .mailboxCollapse', {visibility: 'visible'})
 
+	const mailboxIcons = (mb: api.Mailbox) => {
+		const l: SVGSVGElement[] = []
+		const add = (v: boolean, fn: () => SVGSVGElement) => {
+			if (v) {
+				l.push(fn())
+			}
+		}
+
+		add(mb.Archive, icons.archive)
+		add(mb.Draft, icons.draft)
+		add(mb.Junk, icons.junk)
+		add(mb.Sent, icons.sent)
+		add(mb.Trash, icons.trash)
+		add(mb.Name === 'Inbox', icons.inbox)
+		add(mb.Name === rejectsMailbox, icons.rejects)
+		add(mb.Name === introboxMailbox, icons.introbox)
+		return l
+	}
+
 	const root = dom.div(
 		mailboxItemStyle,
 		attr.tabindex('0'),
@@ -5511,8 +5548,9 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 			}
 		},
 		dom.div(
-			css('mailbox', {padding: '.15em .25em', display: 'flex', justifyContent: 'space-between'}),
-			name=dom.div(css('mailboxName', {whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'})),
+			css('mailbox', {padding: '.15em .25em', display: 'flex', gap: '.25em', justifyContent: 'space-between', alignItems: 'baseline'}),
+			icon=dom.div(css('mailboxIcon', {width: '1.1em', fontSize: '1.1em'}), mailboxIcons(xmb)),
+			name=dom.div(css('mailboxName', {whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexGrow: '1'})),
 			dom.div(
 				style({whiteSpace: 'nowrap'}),
 				actionBtn=dom.clickbutton(dom._class('mailboxHoverOnly'),
@@ -5579,6 +5617,8 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 			mbv.mailbox.Junk = specialUse.Junk
 			mbv.mailbox.Sent = specialUse.Sent
 			mbv.mailbox.Trash = specialUse.Trash
+
+			dom._kids(icon, mailboxIcons(mbv.mailbox))
 		},
 		setKeywords: (keywords: string[]) => {
 			mbv.mailbox.Keywords = keywords

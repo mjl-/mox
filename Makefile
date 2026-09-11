@@ -140,8 +140,8 @@ install-js0:
 	-mkdir -p node_modules/.bin
 	npm install --ignore-scripts --save-dev --save-exact typescript@7.0.2 esbuild@v0.28.1
 
-webmail/webmail.js: webmail/webmail.ts webmail/api.ts webmail/lib.ts lib.ts
-	./tsc.sh $@ webmail/webmail.ts webmail/api.ts webmail/lib.ts lib.ts
+webmail/webmail.js: webmail/webmail.ts webmail/icons.ts webmail/api.ts webmail/lib.ts lib.ts
+	./tsc.sh $@ webmail/webmail.ts webmail/icons.ts webmail/api.ts webmail/lib.ts lib.ts
 
 webmail/msg.js: webmail/msg.ts webmail/api.ts webmail/lib.ts lib.ts
 	./tsc.sh $@ webmail/msg.ts webmail/api.ts webmail/lib.ts lib.ts

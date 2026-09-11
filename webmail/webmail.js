@@ -1340,9 +1340,9 @@
 		l.push(">");
 		return l;
 	}, "formatAddressValidated");
-	var formatAddressShort = /* @__PURE__ */ __name((a, junk) => {
+	var formatAddressShort = /* @__PURE__ */ __name((a, junk2) => {
 		const n = a.Name;
-		if (!junk && n && !n.includes("<") && !n.includes("@") && !n.includes(">")) {
+		if (!junk2 && n && !n.includes("<") && !n.includes("@") && !n.includes(">")) {
 			return n;
 		}
 		return "<" + a.User + "@" + formatDomain(a.Domain) + ">";
@@ -1387,6 +1387,34 @@
 			dom.tr(dom.td(moreHeaders.map((s) => dom.div(s + ":", msgHeaderFieldStyle, style({ visibility: "hidden", height: 0 })))), dom.td())
 		);
 	}, "loadMsgheaderView");
+
+	// .js/webmail/icons.js
+	var svgIcon = /* @__PURE__ */ __name((width, height, ...pathData) => {
+		const svgns = "http://www.w3.org/2000/svg";
+		const svg = document.createElementNS(svgns, "svg");
+		svg.setAttributeNS(null, "viewBox", "0 0 " + width + " " + height);
+		svg.style.height = "1em";
+		svg.style.verticalAlign = "middle";
+		svg.style.fill = "currentColor";
+		for (const e of pathData) {
+			const path = document.createElementNS(svgns, "path");
+			path.setAttributeNS(null, "d", e);
+			svg.appendChild(path);
+		}
+		return svg;
+	}, "svgIcon");
+	var flag = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M5 15.64c2-.87 4.28-.76 6.18.33c1.37.78 2.89 1.18 4.42 1.18c1.12 0 2.24-.21 3.32-.64l1.45-.58A1 1 0 0 0 21 15V4a1 1 0 0 0-1.37-.93l-1.45.58c-1.97.79-4.16.63-6-.42A8.9 8.9 0 0 0 3.77 3l-.21.1a1 1 0 0 0-.55.89v18h2v-6.36ZM5 4.63c2-.87 4.28-.75 6.18.34c2.37 1.36 5.19 1.55 7.74.54l.08-.03v8.85l-.82.33a6.85 6.85 0 0 1-6-.42a8.95 8.95 0 0 0-4.42-1.18c-.93 0-1.86.15-2.75.44V4.63Z"), "flag");
+	var forward = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M12.66 3.25c-.29-.26-.72-.33-1.07-.17c-.36.16-.59.52-.59.91v4h-1c-4.41 0-8 3.59-8 8v4c0 .42.27.8.67.94q.165.06.33.06c.3 0 .59-.13.78-.38l1.9-2.37a5.98 5.98 0 0 1 4.69-2.25h.64v4c0 .39.23.75.59.91s.78.1 1.07-.17l9-8c.21-.19.34-.46.34-.75s-.12-.56-.34-.75zM13 17.77V14h-2.64a7.97 7.97 0 0 0-6.25 3l-.12.15V16c0-3.31 2.69-6 6-6h3V6.23L19.48 12l-6.49 5.77Z"), "forward");
+	var reply = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M14 8h-1V4c0-.39-.23-.75-.59-.91a.98.98 0 0 0-1.07.17l-9 7.99c-.21.19-.34.46-.34.75s.12.56.34.75l9 8c.29.26.72.33 1.07.17c.36-.16.59-.52.59-.91v-4h.64c1.83 0 3.54.82 4.69 2.25l1.9 2.37a1 1 0 0 0 .78.38q.165 0 .33-.06c.4-.14.67-.52.67-.94v-4c0-4.41-3.59-8-8-8Zm6 9.15l-.12-.15c-1.53-1.91-3.8-3-6.25-3h-2.64v3.77L4.5 12l6.49-5.77V10h3c3.31 0 6 2.69 6 6v1.15Z"), "reply");
+	var archive = /* @__PURE__ */ __name(() => svgIcon(24, 24, "m21.8 6.4l-2.7-3.6c-.38-.5-.97-.8-1.6-.8h-11c-.63 0-1.23.3-1.6.8L2.2 6.4h.01c-.13.18-.21.37-.21.6v13c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-.23-.09-.42-.21-.59h.01ZM6.5 4h11L19 6H5zM4 20V8h16v12z", "M8 11h8v2H8z"), "archive");
+	var draft = /* @__PURE__ */ __name(() => svgIcon(24, 24, "m19.94 7.68l-.03-.09a.8.8 0 0 0-.2-.29l-5-5c-.09-.09-.19-.15-.29-.2l-.09-.03a.8.8 0 0 0-.26-.05c-.02 0-.04-.01-.06-.01H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-12s-.01-.04-.01-.06c0-.09-.02-.17-.05-.26ZM6 20V4h7v4c0 .55.45 1 1 1h4v11z", "M8 11h8v2H8zm0 4h8v2H8zm0-8h3v2H8z"), "draft");
+	var sent = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M20.56 3.17c-.29-.2-.67-.23-.99-.08l-17 8.01a.999.999 0 0 0 .03 1.82L8 15.28V22l5.84-4.17l4.76 2.08c.13.06.26.08.4.08c.18 0 .36-.05.52-.15a.99.99 0 0 0 .48-.79l1-15c.02-.35-.14-.69-.43-.89Zm-2.47 14.34l-5.21-2.28L16 9l-7.65 4.25l-2.93-1.28l13.47-6.34l-.79 11.89Z"), "sent");
+	var inbox = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M20 3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m0 2v7h-3.42c-.4 0-.76.24-.92.6c-.64 1.46-2.08 2.4-3.66 2.4s-3.02-.94-3.66-2.4c-.16-.36-.52-.6-.92-.6H4V5zM4 19v-5h2.81c1.06 1.84 3.04 3 5.19 3s4.13-1.16 5.19-3H20v5z"), "inbox");
+	var trash = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M17 6V4c0-1.1-.9-2-2-2H9c-1.1 0-2 .9-2 2v2H2v2h2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8h2V6zM9 4h6v2H9zM6 20V8h12v12z", "M9 10h2v8H9zm4 0h2v8h-2z"), "trash");
+	var junk = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M17.55 6.17c-.31-.2-.7-.22-1.03-.05c-.32.17-.53.51-.53.88c0 1.63-.5 5-2 5c-.23 0-.63-.13-.78-.41c-.21-.39.02-1.15.61-2.03c2-3-.59-6.12-2.23-7.35a.99.99 0 0 0-.83-.17a.98.98 0 0 0-.66.53C9.52 3.74 8.24 4.79 7.01 5.8c-.63.52-1.22 1-1.73 1.51c-2.27 2.27-2.29 5.57-2.29 5.71c0 4.96 4.04 9 9 9s9-4.04 9-9c0-.19-.04-4.56-3.45-6.83ZM12 20c-3.86 0-7-3.14-7-7c0-.03.04-2.63 1.71-4.3c.44-.44.99-.9 1.58-1.38c1-.82 2.1-1.73 2.92-2.79c.85.89 1.94 2.45.96 3.91c-1.33 1.99-1.12 3.32-.71 4.08c.54 1.02 1.67 1.47 2.54 1.47c1.21 0 2.82-.65 3.59-3.76c.09-.35.16-.71.21-1.05c1.15 1.7 1.19 3.75 1.19 3.8c0 3.86-3.14 7-7 7Z"), "junk");
+	var rejects = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M12 2c-4.96 0-9 4.04-9 9v8h.05c.25 1.69 1.69 3 3.45 3c1.17 0 2.07-.42 2.67-1.17c.72.72 1.72 1.17 2.83 1.17s2.11-.46 2.84-1.19c.6.76 1.5 1.19 2.66 1.19c1.93 0 3.5-1.57 3.5-3.5V11c0-4.96-4.04-9-9-9m7 16.5c0 .83-.67 1.5-1.5 1.5c-.45 0-1.5 0-1.5-2v-1h-2v1c0 1.1-.9 2-2 2s-2-.9-2-2v-1H8v1c0 1.85-.77 2-1.5 2c-.83 0-1.5-.67-1.5-1.5V11c0-3.86 3.14-7 7-7s7 3.14 7 7z", "M15.5 9a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3m-7 0a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3"), "rejects");
+	var introbox = /* @__PURE__ */ __name(() => svgIcon(24, 24, "M11 14h2v2h-2zM9.53 7.03C8.87 7.69 8.5 8.57 8.5 9.5h2c0-.4.16-.78.44-1.06c.57-.57 1.55-.57 2.12 0A1.499 1.499 0 0 1 12 11c-.55 0-1 .45-1 1v1h2v-.14c.55-.16 1.06-.46 1.47-.88c.66-.66 1.03-1.54 1.03-2.47s-.36-1.81-1.03-2.47c-1.32-1.32-3.63-1.32-4.95 0Z", "M12 3C6.49 3 2 6.59 2 11c0 2.91 1.9 5.51 5 6.93V21c0 .38.21.72.55.89c.14.07.29.11.45.11c.21 0 .42-.07.6-.2l3.74-2.8c5.36-.14 9.66-3.67 9.66-8s-4.49-8-10-8m0 14c-.22 0-.43.07-.6.2L9 19v-1.73c0-.41-.25-.78-.64-.93C5.67 15.3 4 13.26 4 11c0-3.31 3.59-6 8-6s8 2.69 8 6s-3.59 6-8 6"), "introbox");
+	var attachment = /* @__PURE__ */ __name(() => svgIcon(16, 16, "M4.5 3a2.5 2.5 0 0 1 5 0v9a1.5 1.5 0 0 1-3 0V5a.5.5 0 0 1 1 0v7a.5.5 0 0 0 1 0V3a1.5 1.5 0 1 0-3 0v9a2.5 2.5 0 0 0 5 0V5a.5.5 0 0 1 1 0v7a3.5 3.5 0 1 1-7 0z"), "attachment");
 
 	// .js/webmail/webmail.js
 	var reloadURL = URL.parse(window.location.href);
@@ -1941,7 +1969,7 @@
 		const othermsgflags = [];
 		let l = msgflags;
 		const seen = /* @__PURE__ */ new Set();
-		const flag = /* @__PURE__ */ __name((v, char, name) => {
+		const flag2 = /* @__PURE__ */ __name((v, char, name) => {
 			if (v && !seen.has(name)) {
 				l.push([name, char]);
 				seen.add(name);
@@ -1949,17 +1977,17 @@
 		}, "flag");
 		const addFlags = /* @__PURE__ */ __name((mi) => {
 			const m = mi.Message;
-			flag(m.Answered, "r", "Replied/answered");
-			flag(m.Flagged, "!", "Flagged");
-			flag(m.Forwarded, "f", "Forwarded");
-			flag(m.Junk, "j", "Junk");
-			flag(m.Deleted, "D", "Deleted, used in IMAP, message will likely be removed soon.");
-			flag(m.Draft, "d", "Draft");
-			flag(m.Phishing, "p", "Phishing");
-			flag(!m.Junk && !m.Notjunk, "?", "Unclassified, neither junk nor not junk: message does not contribute to spam classification of new incoming messages");
-			flag(mi.Attachments && mi.Attachments.length > 0 ? true : false, "a", "Has at least one attachment");
+			flag2(!m.Junk && !m.Notjunk, "?", "Unclassified, neither junk nor not junk: message does not contribute to spam classification of new incoming messages");
+			flag2(m.Answered, "r", "Replied/answered");
+			flag2(m.Flagged, "!", "Flagged");
+			flag2(m.Forwarded, "f", "Forwarded");
+			flag2(m.Junk, "j", "Junk");
+			flag2(m.Deleted, "D", "Deleted, used in IMAP, message will likely be removed soon.");
+			flag2(m.Draft, "d", "Draft");
+			flag2(m.Phishing, "p", "Phishing");
+			flag2(mi.Attachments && mi.Attachments.length > 0 ? true : false, "a", "Has at least one attachment");
 			if (m.ThreadMuted) {
-				flag(true, "m", "Muted, new messages are automatically marked as read.");
+				flag2(true, "m", "Muted, new messages are automatically marked as read.");
 			}
 		}, "addFlags");
 		addFlags(miv.messageitem);
@@ -1969,8 +1997,23 @@
 				addFlags(miv.messageitem);
 			}
 		}
+		const flagCharIcons = {
+			"r": reply,
+			"!": flag,
+			"f": forward,
+			"j": junk,
+			"a": attachment,
+			"D": trash
+		};
+		const flagChar = /* @__PURE__ */ __name((c) => {
+			const fn = flagCharIcons[c];
+			if (fn) {
+				return fn();
+			}
+			return c;
+		}, "flagChar");
 		const msgItemFlagStyle = css("msgItemFlag", { marginRight: "1px", fontWeight: "normal", fontSize: ".9em" });
-		return msgflags.map((t) => dom.span(msgItemFlagStyle, t[1], attr.title(t[0]))).concat(othermsgflags.map((t) => dom.span(msgItemFlagStyle, css("msgItemFlagCollapsed", { color: styles.colorMilder }), t[1], attr.title(t[0]))));
+		return msgflags.map((t) => dom.span(msgItemFlagStyle, flagChar(t[1]), attr.title(t[0]))).concat(othermsgflags.map((t) => dom.span(msgItemFlagStyle, css("msgItemFlagCollapsed", { color: styles.colorMilder }), flagChar(t[1]), attr.title(t[0]))));
 	}, "flagList");
 	var refineFilters = /* @__PURE__ */ __name((f, notf) => {
 		const refine = settings.refine;
@@ -2459,7 +2502,7 @@
 			await draftSavePromise;
 			await withStatus("Saving draft", draftSave());
 		}, "cmdSave");
-		const submit = /* @__PURE__ */ __name(async (archive) => {
+		const submit = /* @__PURE__ */ __name(async (archive2) => {
 			draftCancelSaveTimer();
 			await draftSavePromise;
 			const files = await new Promise((resolve, reject) => {
@@ -2502,7 +2545,7 @@
 				ResponseMessageID: opts.responseMessageID || 0,
 				RequireTLS: requiretls.value === "" ? null : requiretls.value === "yes",
 				FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
-				ArchiveThread: archive,
+				ArchiveThread: archive2,
 				ArchiveReferenceMailboxID: opts.archiveReferenceMailboxID || 0,
 				DraftMessageID: draftMessageID
 			};
@@ -3225,14 +3268,14 @@
 			const correspondents = /* @__PURE__ */ __name(() => {
 				let fromAddrs = [];
 				let toAddrs = [];
-				let junk = m.Junk || !!listMailboxes().find((mb) => mb.ID === m.MailboxID && (mb.Name === rejectsMailbox || mb.Junk));
+				let junk2 = m.Junk || !!listMailboxes().find((mb) => mb.ID === m.MailboxID && (mb.Name === rejectsMailbox || mb.Junk));
 				if (msgitemView.isCollapsedThreadRoot()) {
 					;
 					[msgitemView, ...msgitemView.descendants()].forEach((miv) => {
 						const [fa2, ta2] = correspondentAddrs(miv);
 						fromAddrs = [...fromAddrs, ...fa2];
 						toAddrs = [...toAddrs, ...ta2];
-						junk = junk || miv.messageitem.Message.Junk;
+						junk2 = junk2 || miv.messageitem.Message.Junk;
 					});
 				} else {
 					[fromAddrs, toAddrs] = correspondentAddrs(msgitemView);
@@ -3264,8 +3307,8 @@
 				return [
 					attr.title(title),
 					join([
-						...fa.map((a) => formatAddressShort(a, junk)),
-						...ta.map((a) => dom.span(style({ fontStyle: "italic" }), formatAddressShort(a, junk)))
+						...fa.map((a) => formatAddressShort(a, junk2)),
+						...ta.map((a) => dom.span(style({ fontStyle: "italic" }), formatAddressShort(a, junk2)))
 					], () => ", ")
 				];
 			}, "correspondents");
@@ -3410,7 +3453,7 @@
 			parsedMessageResolve = resolve;
 			parsedMessageReject = reject;
 		});
-		const react = /* @__PURE__ */ __name(async (to, cc, bcc, forward) => {
+		const react = /* @__PURE__ */ __name(async (to, cc, bcc, forward2) => {
 			const pm = await parsedMessagePromise;
 			let body = "";
 			const sel = window.getSelection();
@@ -3423,7 +3466,7 @@
 			}
 			body = body.replace(/\r/g, "").replace(/\n\n\n\n*/g, "\n\n").trim();
 			let editOffset = 0;
-			if (forward) {
+			if (forward2) {
 				const env = mi.Envelope;
 				const subject2 = env.Subject ? [env.Subject] : [];
 				const date = pm.Headers?.Date || [];
@@ -3476,7 +3519,7 @@
 					body = "\n\n" + sig + "\n" + onWroteLine + body;
 				}
 			}
-			const subjectPrefix = forward ? "Fwd:" : "Re:";
+			const subjectPrefix = forward2 ? "Fwd:" : "Re:";
 			let subject = mi.Envelope.Subject || "";
 			subject = (RegExp("^" + subjectPrefix, "i").test(subject) ? "" : subjectPrefix + " ") + subject;
 			const opts = {
@@ -3486,8 +3529,8 @@
 				bcc: bcc.map((a) => formatAddress(a)),
 				subject,
 				body,
-				isForward: forward,
-				attachmentsMessageItem: forward ? mi : void 0,
+				isForward: forward2,
+				attachmentsMessageItem: forward2 ? mi : void 0,
 				responseMessageID: m.ID,
 				isList: m.IsMailingList,
 				editOffset,
@@ -3499,7 +3542,7 @@
 			};
 			compose(opts, listMailboxes, setLocationHash);
 		}, "react");
-		const reply = /* @__PURE__ */ __name(async (all) => {
+		const reply2 = /* @__PURE__ */ __name(async (all) => {
 			const contains = /* @__PURE__ */ __name((l, a) => !!l.find((e) => equalAddress(e, a)), "contains");
 			let to = [];
 			let cc = [];
@@ -3538,10 +3581,10 @@
 			}
 		}, "cmdReplyList");
 		const cmdReply = /* @__PURE__ */ __name(async () => {
-			await reply(false);
+			await reply2(false);
 		}, "cmdReply");
 		const cmdReplyAll = /* @__PURE__ */ __name(async () => {
-			await reply(true);
+			await reply2(true);
 		}, "cmdReplyAll");
 		const cmdPrint = /* @__PURE__ */ __name(async () => {
 			if (urlType) {
@@ -5118,33 +5161,33 @@
 	}, "newMsglistView");
 	var popoverExport = /* @__PURE__ */ __name((reference, mailboxName, messageIDs) => {
 		let format;
-		let archive;
+		let archive2;
 		let mboxbtn;
 		const removeExport = popover(reference, {}, dom.h1("Export"), dom.form(/* @__PURE__ */ __name(function submit() {
 			window.setTimeout(() => removeExport(), 100);
-		}, "submit"), attr.target("_blank"), attr.method("POST"), attr.action("export"), dom.input(attr.type("hidden"), attr.name("csrf"), attr.value(localStorageGet("webmailcsrftoken") || "")), dom.input(attr.type("hidden"), attr.name("mailbox"), attr.value(mailboxName)), dom.input(attr.type("hidden"), attr.name("messageids"), attr.value((messageIDs || []).join(","))), format = dom.input(attr.type("hidden"), attr.name("format")), archive = dom.input(attr.type("hidden"), attr.name("archive")), dom.div(css("exportFields", { display: "flex", flexDirection: "column", gap: ".5ex" }), mailboxName ? dom.div(dom.label(dom.input(attr.type("checkbox"), attr.name("recursive"), attr.value("on"), /* @__PURE__ */ __name(function change(e) {
+		}, "submit"), attr.target("_blank"), attr.method("POST"), attr.action("export"), dom.input(attr.type("hidden"), attr.name("csrf"), attr.value(localStorageGet("webmailcsrftoken") || "")), dom.input(attr.type("hidden"), attr.name("mailbox"), attr.value(mailboxName)), dom.input(attr.type("hidden"), attr.name("messageids"), attr.value((messageIDs || []).join(","))), format = dom.input(attr.type("hidden"), attr.name("format")), archive2 = dom.input(attr.type("hidden"), attr.name("archive")), dom.div(css("exportFields", { display: "flex", flexDirection: "column", gap: ".5ex" }), mailboxName ? dom.div(dom.label(dom.input(attr.type("checkbox"), attr.name("recursive"), attr.value("on"), /* @__PURE__ */ __name(function change(e) {
 			mboxbtn.disabled = e.target.checked;
 		}, "change")), " Recursive")) : [], dom.div(!mailboxName && !messageIDs ? "Mbox " : mboxbtn = dom.submitbutton("Mbox", attr.title("Export as mbox file, not wrapped in an archive."), /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
-			archive.value = "none";
+			archive2.value = "none";
 		}, "click")), " ", dom.submitbutton("zip", /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
-			archive.value = "zip";
+			archive2.value = "zip";
 		}, "click")), " ", dom.submitbutton("tgz", /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
-			archive.value = "tgz";
+			archive2.value = "tgz";
 		}, "click")), " ", dom.submitbutton("tar", /* @__PURE__ */ __name(function click() {
 			format.value = "mbox";
-			archive.value = "tar";
+			archive2.value = "tar";
 		}, "click"))), dom.div("Maildir ", dom.submitbutton("zip", /* @__PURE__ */ __name(function click() {
 			format.value = "maildir";
-			archive.value = "zip";
+			archive2.value = "zip";
 		}, "click")), " ", dom.submitbutton("tgz", /* @__PURE__ */ __name(function click() {
 			format.value = "maildir";
-			archive.value = "tgz";
+			archive2.value = "tgz";
 		}, "click")), " ", dom.submitbutton("tar", /* @__PURE__ */ __name(function click() {
 			format.value = "maildir";
-			archive.value = "tar";
+			archive2.value = "tar";
 		}, "click"))))));
 	}, "popoverExport");
 	var newMailboxView = /* @__PURE__ */ __name((xmb, mailboxlistView, otherMailbox) => {
@@ -5170,6 +5213,7 @@
 			e.stopPropagation();
 			cmdExpand();
 		}, "click"));
+		let icon;
 		let name, unread;
 		let actionBtn;
 		const cmdOpenActions = /* @__PURE__ */ __name(async () => {
@@ -5263,6 +5307,23 @@
 		ensureCSS(".mailboxItem:hover .mailboxHoverOnly, .mailboxItem:focus .mailboxHoverOnly", { visibility: "visible" });
 		ensureCSS(".mailboxCollapse", { visibility: "hidden" });
 		ensureCSS(".mailboxItem:hover .mailboxCollapse, .mailboxItem:focus .mailboxCollapse", { visibility: "visible" });
+		const mailboxIcons = /* @__PURE__ */ __name((mb) => {
+			const l = [];
+			const add = /* @__PURE__ */ __name((v, fn) => {
+				if (v) {
+					l.push(fn());
+				}
+			}, "add");
+			add(mb.Archive, archive);
+			add(mb.Draft, draft);
+			add(mb.Junk, junk);
+			add(mb.Sent, sent);
+			add(mb.Trash, trash);
+			add(mb.Name === "Inbox", inbox);
+			add(mb.Name === rejectsMailbox, rejects);
+			add(mb.Name === introboxMailbox, introbox);
+			return l;
+		}, "mailboxIcons");
 		const root = dom.div(mailboxItemStyle, attr.tabindex("0"), /* @__PURE__ */ __name(async function keydown(e) {
 			if (e.key === "Enter") {
 				e.stopPropagation();
@@ -5317,7 +5378,7 @@
 				const mbSrcID = mailboxMsgIDs.find((mbMsgID) => mbMsgID[1] === msgID)[0];
 				await moveAskRuleset(msgID, mbSrcID, xmb, mailboxlistView.mailboxes());
 			}
-		}, "drop"), dom.div(css("mailbox", { padding: ".15em .25em", display: "flex", justifyContent: "space-between" }), name = dom.div(css("mailboxName", { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" })), dom.div(style({ whiteSpace: "nowrap" }), actionBtn = dom.clickbutton(
+		}, "drop"), dom.div(css("mailbox", { padding: ".15em .25em", display: "flex", gap: ".25em", justifyContent: "space-between", alignItems: "baseline" }), icon = dom.div(css("mailboxIcon", { width: "1.1em", fontSize: "1.1em" }), mailboxIcons(xmb)), name = dom.div(css("mailboxName", { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexGrow: "1" })), dom.div(style({ whiteSpace: "nowrap" }), actionBtn = dom.clickbutton(
 			dom._class("mailboxHoverOnly"),
 			"...",
 			attr.tabindex("-1"),
@@ -5372,6 +5433,7 @@
 				mbv.mailbox.Junk = specialUse.Junk;
 				mbv.mailbox.Sent = specialUse.Sent;
 				mbv.mailbox.Trash = specialUse.Trash;
+				dom._kids(icon, mailboxIcons(mbv.mailbox));
 			}, "setSpecialUse"),
 			setKeywords: /* @__PURE__ */ __name((keywords) => {
 				mbv.mailbox.Keywords = keywords;
@@ -5862,10 +5924,10 @@
 			}, "click")), " ", dom.clickbutton("1 year", /* @__PURE__ */ __name(function click() {
 				setPeriod(new Date((/* @__PURE__ */ new Date()).getTime() - 365 * 24 * 3600 * 1e3));
 			}, "click"))))), dom.tr(dom.td("Attachments"), dom.td(dom.label(style({ whiteSpace: "nowrap" }), attachmentNone = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("none"), attachmentHandlers), " None"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentAny = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("any"), attachmentHandlers), " Any"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentImage = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("image"), attachmentHandlers), " Images"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentPDF = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("pdf"), attachmentHandlers), " PDFs"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentArchive = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("archive"), attachmentHandlers), " Archives"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentSpreadsheet = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("spreadsheet"), attachmentHandlers), " Spreadsheets"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentDocument = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("document"), attachmentHandlers), " Documents"), " ", dom.label(style({ whiteSpace: "nowrap" }), attachmentPresentation = dom.input(attr.type("radio"), attr.name("attachments"), attr.value("presentation"), attachmentHandlers), " Presentations"), " ")), dom.tr(dom.td("Labels"), dom.td(style({ lineHeight: 2 }), join(flagViews = Object.entries({ Read: "\\Seen", Replied: "\\Answered", Flagged: "\\Flagged", Deleted: "\\Deleted", Draft: "\\Draft", Forwarded: "$Forwarded", Junk: "$Junk", NotJunk: "$NotJunk", Phishing: "$Phishing", MDNSent: "$MDNSent" }).map((t) => {
-				const [name, flag] = t;
+				const [name, flag2] = t;
 				const v = {
 					active: null,
-					flag,
+					flag: flag2,
 					root: dom.clickbutton(name, /* @__PURE__ */ __name(function click() {
 						if (v.active === null) {
 							v.active = true;
@@ -5988,8 +6050,8 @@
 			if (!eventSource) {
 				state = -1;
 			} else {
-				const inbox = mailboxlistView.findMailboxByName("Inbox");
-				state = Math.min(999, inbox?.Unread || 0);
+				const inbox2 = mailboxlistView.findMailboxByName("Inbox");
+				state = Math.min(999, inbox2?.Unread || 0);
 			}
 			if (faviconState === state) {
 				return;
