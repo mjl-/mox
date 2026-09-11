@@ -40,10 +40,10 @@ var submitconf struct {
 	STARTTLS                        bool             `sconf-doc:"After starting in plain text, use STARTTLS to enable TLS. For port 587 and 25."`
 	TLSInsecureSkipVerify           bool             `sconf:"optional" sconf-doc:"If true, do not verify the server TLS identity."`
 	Username                        string           `sconf-doc:"For SMTP authentication."`
-	Password                        string           `sconf:"optional" sconf-doc:"For password-based SMTP authentication, e.g. SCRAM-SHA-256-PLUS, CRAM-MD5, PLAIN."`
+	Password                        string           `sconf:"optional" sconf-doc:"For password-based SMTP authentication, e.g. SCRAM-SHA-256-PLUS, CRAM-MD5, PLAIN, LOGIN."`
 	ClientAuthEd25519PrivateKey     string           `sconf:"optional" sconf-doc:"If set, used for TLS client authentication with a certificate. The private key must be a raw-url-base64-encoded ed25519 key. A basic certificate is composed automatically. The server must use the public key of a certificate to identify/verify users."`
 	ClientAuthCertPrivateKeyPEMFile string           `sconf:"optional" sconf-doc:"If set, an absolute path to a PEM file containing both a PKCS#8 unencrypted private key and a certificate. Used for TLS client authentication."`
-	AuthMethod                      string           `sconf-doc:"If set, only attempt this authentication mechanism. E.g. EXTERNAL (for TLS client authentication), SCRAM-SHA-256-PLUS, SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5, PLAIN. If not set, any mutually supported algorithm can be used, in order listed, from most to least secure. It is recommended to specify the strongest authentication mechanism known to be implemented by the server, to prevent mechanism downgrade attacks. Exactly one of Password, ClientAuthEd25519PrivateKey and ClientAuthCertPrivateKeyPEMFile must be set."`
+	AuthMethod                      string           `sconf-doc:"If set, only attempt this authentication mechanism. E.g. EXTERNAL (for TLS client authentication), SCRAM-SHA-256-PLUS, SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5, PLAIN, LOGIN. If not set, any mutually supported algorithm can be used, in order listed, from most to least secure. It is recommended to specify the strongest authentication mechanism known to be implemented by the server, to prevent mechanism downgrade attacks. Exactly one of Password, ClientAuthEd25519PrivateKey and ClientAuthCertPrivateKeyPEMFile must be set."`
 	From                            string           `sconf-doc:"Address for MAIL FROM in SMTP and From-header in message."`
 	DefaultDestination              string           `sconf:"optional" sconf-doc:"Used when specified address does not contain an @ and may be a local user (eg root)."`
 	RequireTLS                      RequireTLSOption `sconf:"optional" sconf-doc:"If yes, submission server must implement SMTP REQUIRETLS extension, and connection to submission server must use verified TLS. If no, a TLS-Required header with value no is added to the message, allowing fallback to unverified TLS or plain text delivery despite recpient domain policies. By default, the submission server will follow the policies of the recipient domain (MTA-STS and/or DANE), and apply unverified opportunistic TLS with STARTTLS."`
@@ -355,6 +355,8 @@ binary should be setgid that group:
 			return sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password), nil
 		case "PLAIN":
 			return sasl.NewClientPlain(submitconf.Username, submitconf.Password), nil
+		case "LOGIN":
+			return sasl.NewClientLogin(submitconf.Username, submitconf.Password), nil
 		}
 
 		// Try the defaults, from more to less secure.
@@ -372,6 +374,8 @@ binary should be setgid that group:
 			return sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password), nil
 		} else if slices.Contains(mechanisms, "PLAIN") {
 			return sasl.NewClientPlain(submitconf.Username, submitconf.Password), nil
+		} else if slices.Contains(mechanisms, "LOGIN") {
+			return sasl.NewClientLogin(submitconf.Username, submitconf.Password), nil
 		}
 		// No mutually supported mechanism.
 		return nil, nil
