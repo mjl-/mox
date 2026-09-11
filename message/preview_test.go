@@ -1,6 +1,7 @@
 package message
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -38,6 +39,35 @@ func TestPreviewText(t *testing.T) {
 	check("On <longdate>\n<user> wrote:\n> hi\nresponse", "[...]\nresponse\n")
 	check("> quote\nresponse\n--\nsignature\n", "[...]\nresponse\n")
 	check("> quote\nline1\nline2\nline3\n", "[...]\nline1\nline2\nline3\n")
+}
+
+// TestPreviewLongLine ensures a single line longer than the scanner's buffer
+// does not fail the preview.
+//
+// Quoted-printable soft line breaks, and format=flowed, both turn a body that
+// is wrapped at 78 columns on the wire into one very long logical line on
+// decode. bufio.ScanLines answers that with ErrTooLong, which previewText
+// returned and Part.Preview turned into an error, so the message was rejected
+// on delivery and on IMAP APPEND. A preview is advisory — RFC 8970 does not
+// require one exists — so refusing the message over it is out of proportion.
+func TestPreviewLongLine(t *testing.T) {
+	long := strings.Repeat("a", bufio.MaxScanTokenSize+100)
+
+	// The result is capped at 256 characters as it is for any other body, so the
+	// bytes past the scanner's buffer could never have been used anyway.
+	s, err := previewText(strings.NewReader(long))
+	tcompare(t, err, nil)
+	tcompare(t, s, strings.Repeat("a", 256))
+
+	// An over-long line must not swallow the lines around it.
+	s, err = previewText(strings.NewReader("first\n" + long + "\nlast\n"))
+	tcompare(t, err, nil)
+	tcompare(t, strings.HasPrefix(s, "first\n"), true)
+
+	// And it must not break a message whose preview is entirely in front of it.
+	s, err = previewText(strings.NewReader("the useful bit\n\n" + long + "\n"))
+	tcompare(t, err, nil)
+	tcompare(t, strings.HasPrefix(s, "the useful bit\n"), true)
 }
 
 func tcompose(t *testing.T, typeContents ...string) *bytes.Reader {
