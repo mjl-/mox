@@ -147,6 +147,7 @@ func monitorDNSBL(log mlog.Log) {
 
 // also see localserve.go, code is similar or even shared.
 func cmdServe(c *cmd) {
+	c.params = "[-unprivileged]"
 	c.help = `Start mox, serving SMTP/IMAP/HTTPS.
 
 Incoming email is accepted over SMTP. Email can be retrieved by users using
@@ -156,9 +157,16 @@ requested, other TLS certificates are requested on demand.
 
 Only implemented on unix systems, not Windows.
 `
+	var unprivileged bool
+	c.flag.BoolVar(&unprivileged, "unprivileged", false, "run mox as unprivileged user")
 	args := c.Parse()
 	if len(args) != 0 {
 		c.Usage()
+	}
+
+	// When running as unprivileged user, we don't need to pass files through environment variables to child.
+	if unprivileged {
+		mox.FilesImmediate = true
 	}
 
 	// Set debug logging until config is fully loaded.
@@ -210,7 +218,10 @@ Only implemented on unix systems, not Windows.
 			}
 		}
 	} else {
-		mox.RestorePassedFiles()
+		if !unprivileged {
+			mox.RestorePassedFiles()
+		}
+
 		mox.MustLoadConfig(true, checkACMEHosts)
 		log.Print("starting as unprivileged user",
 			slog.String("user", mox.Conf.Static.User),
@@ -255,8 +266,7 @@ Only implemented on unix systems, not Windows.
 	// unreachable over its ctl socket, and then fail because the network addresses are
 	// taken.
 	const mtastsdbRefresher = true
-	const skipForkExec = false
-	if err := start(mtastsdbRefresher, !mox.Conf.Static.NoOutgoingDMARCReports, !mox.Conf.Static.NoOutgoingTLSReports, skipForkExec); err != nil {
+	if err := start(mtastsdbRefresher, !mox.Conf.Static.NoOutgoingDMARCReports, !mox.Conf.Static.NoOutgoingTLSReports, unprivileged); err != nil {
 		log.Fatalx("start", err)
 	}
 	log.Print("ready to serve")
