@@ -75,6 +75,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
+	"github.com/mjl-/mox/proxyprotocol"
 	"github.com/mjl-/mox/ratelimit"
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/store"
@@ -396,14 +397,14 @@ func Listen() {
 		if listener.IMAP.Enabled {
 			port := config.Port(listener.IMAP.Port, 143)
 			for _, ip := range listener.IPs {
-				listen1("imap", name, ip, port, tlsConfig, false, noTLSClientAuth, listener.IMAP.NoRequireSTARTTLS)
+				listen1("imap", name, ip, port, tlsConfig, false, noTLSClientAuth, listener.IMAP.NoRequireSTARTTLS, listener.IMAP.ProxyProtocol)
 			}
 		}
 
 		if listener.IMAPS.Enabled {
 			port := config.Port(listener.IMAPS.Port, 993)
 			for _, ip := range listener.IPs {
-				listen1("imaps", name, ip, port, tlsConfig, true, noTLSClientAuth, false)
+				listen1("imaps", name, ip, port, tlsConfig, true, noTLSClientAuth, false, listener.IMAPS.ProxyProtocol)
 			}
 		}
 	}
@@ -411,7 +412,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noTLSClientAuth, noRequireSTARTTLS bool) {
+func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noTLSClientAuth, noRequireSTARTTLS bool, proxyConfig *config.ProxyProtocol) {
 	log := mlog.New("imapserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
@@ -444,7 +445,7 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 			}
 
 			metricIMAPConnection.WithLabelValues(protocol).Inc()
-			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noTLSClientAuth, noRequireSTARTTLS, false, "")
+			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noTLSClientAuth, noRequireSTARTTLS, false, "", proxyConfig)
 		}
 	}
 
@@ -771,7 +772,26 @@ var cleanClose struct{} // Sentinel value for panic/recover indicating clean clo
 // preauthenticated.
 //
 // The connection is closed before returning.
-func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noTLSClientAuth, noRequireSTARTTLS, viaHTTPS bool, preauthAddress string) {
+func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noTLSClientAuth, noRequireSTARTTLS, viaHTTPS bool, preauthAddress string, proxyConfigs ...*config.ProxyProtocol) {
+	proxyConfig := (*config.ProxyProtocol)(nil)
+	if len(proxyConfigs) > 0 {
+		proxyConfig = proxyConfigs[0]
+	}
+	rawConn := nc
+	mox.Connections.Register(rawConn, "imap", listenerName)
+	defer mox.Connections.Unregister(rawConn)
+	if proxyConfig != nil {
+		conn, err := proxyprotocol.NewConn(rawConn, proxyConfig.TrustedProxyNets)
+		if err != nil {
+			log := mlog.New("imapserver", nil)
+			log.Infox("imap: proxy protocol", err, slog.String("listener", listenerName), slog.Any("remote", rawConn.RemoteAddr()))
+			if err := rawConn.Close(); err != nil {
+				log.Debugx("imap: closing proxy protocol connection", err, slog.String("listener", listenerName))
+			}
+			return
+		}
+		nc = conn
+	}
 	var remoteIP net.IP
 	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {
 		remoteIP = a.IP
@@ -819,7 +839,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	// Many IMAP connections use IDLE to wait for new incoming messages. We'll enable
 	// keepalive to get a higher chance of the connection staying alive, or otherwise
 	// detecting broken connections early.
-	tcpconn := c.conn
+	tcpconn := rawConn
 	if viaHTTPS {
 		tcpconn = nc.(*tls.Conn).NetConn()
 	}
@@ -902,11 +922,6 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		return
 	}
 	defer limiterConnections.Add(c.remoteIP, time.Now(), -1)
-
-	// We register and unregister the original connection, in case it c.conn is
-	// replaced with a TLS connection later on.
-	mox.Connections.Register(nc, "imap", listenerName)
-	defer mox.Connections.Unregister(nc)
 
 	if preauthAddress != "" {
 		acc, _, _, err := store.OpenEmail(c.log, preauthAddress, false)

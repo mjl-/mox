@@ -12,6 +12,7 @@ require (
 	github.com/mjl-/sherpadoc v0.0.18
 	github.com/mjl-/sherpaprom v0.0.2
 	github.com/prometheus/client_golang v1.18.0
+	github.com/pires/go-proxyproto v0.15.0
 	github.com/russross/blackfriday/v2 v2.1.0
 	go.etcd.io/bbolt v1.3.12
 	golang.org/x/crypto v0.55.0
