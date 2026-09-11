@@ -187,8 +187,6 @@ func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 		slog.String("source", src))
 
 	var err error
-	var mboxf *os.File
-	var mdnewf, mdcurf *os.File
 	var msgreader store.MsgSource
 
 	// Ensure normalized form.
@@ -210,21 +208,6 @@ func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 	err = a.ThreadingWait(xctl.log)
 	xctl.xcheck(err, "waiting for account thread upgrade")
 
-	defer func() {
-		if mboxf != nil {
-			err := mboxf.Close()
-			xctl.log.Check(err, "closing mbox file after import")
-		}
-		if mdnewf != nil {
-			err := mdnewf.Close()
-			xctl.log.Check(err, "closing maildir new after import")
-		}
-		if mdcurf != nil {
-			err := mdcurf.Close()
-			xctl.log.Check(err, "closing maildir cur after import")
-		}
-	}()
-
 	// Messages don't always have a junk flag set. We'll assume anything in a mailbox
 	// starting with junk or spam is junk mail.
 
@@ -232,15 +215,23 @@ func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 	// Mox needs to be able to access those files, the user running the import command
 	// may be a different user who can access the files.
 	if mbox {
+		var mboxf *os.File
 		mboxf, err = os.Open(src)
 		xctl.xcheck(err, "open mbox file")
-		msgreader = store.NewMboxReader(xctl.log, store.CreateMessageTemp, src, mboxf)
+		defer func() {
+			err := mboxf.Close()
+			xctl.log.Check(err, "closing mbox file after import")
+		}()
+
+		msgreader, err = store.NewMboxReader(xctl.log, store.CreateMessageTemp, src, mboxf)
+		xctl.xcheck(err, "opening mbox file for reading")
 	} else {
-		mdnewf, err = os.Open(filepath.Join(src, "new"))
-		xctl.xcheck(err, "open subdir new of maildir")
-		mdcurf, err = os.Open(filepath.Join(src, "cur"))
-		xctl.xcheck(err, "open subdir cur of maildir")
-		msgreader = store.NewMaildirReader(xctl.log, store.CreateMessageTemp, mdnewf, mdcurf)
+		msgreader, err = store.NewMaildirReader(xctl.log, store.CreateMessageTemp, src)
+		xctl.xcheck(err, "opening maildir for reading")
+		defer func() {
+			err := msgreader.Close()
+			xctl.log.Check(err, "closing maildir reader")
+		}()
 	}
 
 	// todo: one goroutine for reading messages, one for parsing the message, one adding to database, one for junk filter training.

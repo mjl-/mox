@@ -572,7 +572,12 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		}
 		mb := xensureMailbox(mailbox)
 
-		mr := store.NewMboxReader(log, store.CreateMessageTemp, filename, r)
+		mr, err := store.NewMboxReader(log, store.CreateMessageTemp, filename, r)
+		ximportcheckf(err, "open mbox")
+		defer func() {
+			err := mr.Close()
+			log.Check(err, "closing mbox reader")
+		}()
 		for {
 			m, mf, pos, err := mr.Next()
 			if err == io.EOF {

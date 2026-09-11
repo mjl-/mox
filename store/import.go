@@ -21,6 +21,7 @@ import (
 type MsgSource interface {
 	// Return next message, or io.EOF when there are no more.
 	Next() (*Message, *os.File, string, error)
+	Close() error
 }
 
 // MboxReader reads messages from an mbox file, implementing MsgSource.
@@ -37,14 +38,15 @@ type MboxReader struct {
 	header     bool   // Now in header section.
 }
 
-func NewMboxReader(log mlog.Log, createTemp func(log mlog.Log, pattern string) (*os.File, error), filename string, r io.Reader) *MboxReader {
+// NewMboxReader initializes a MsgSource from which messages can be read.
+func NewMboxReader(log mlog.Log, createTemp func(log mlog.Log, pattern string) (*os.File, error), filename string, r io.Reader) (*MboxReader, error) {
 	return &MboxReader{
 		log:        log,
 		createTemp: createTemp,
 		path:       filename,
 		line:       1,
 		r:          bufio.NewReader(r),
-	}
+	}, nil
 }
 
 // Position returns "<filename>:<lineno>" for the current position.
@@ -202,27 +204,78 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 	return m, mf, mr.Position(), nil
 }
 
-type MaildirReader struct {
-	log          mlog.Log
-	createTemp   func(log mlog.Log, pattern string) (*os.File, error)
-	newf, curf   *os.File
-	f            *os.File // File we are currently reading from. We first read newf, then curf.
-	dir          string   // Name of directory for f. Can be empty on first call.
-	entries      []os.DirEntry
-	dovecotFlags []string // Lower-case flags/keywords.
+// Close is currently a no op, for interface MsgSource.
+func (mr *MboxReader) Close() error {
+	return nil
 }
 
-func NewMaildirReader(log mlog.Log, createTemp func(log mlog.Log, pattern string) (*os.File, error), newf, curf *os.File) *MaildirReader {
+// we make a slice of files, for cur & new, for sorting by time, so we import
+// messages in a natural order, with most recent messages latest.
+type maildirFile struct {
+	Name string
+	Time time.Time
+}
+
+type MaildirReader struct {
+	log                    mlog.Log
+	createTemp             func(log mlog.Log, pattern string) (*os.File, error)
+	dirNameCur, dirNameNew string
+	rootCur, rootNew       *os.Root // For opening files. Closed when Close is called.
+	filesCur, filesNew     []maildirFile
+	dovecotFlags           []string // Lower-case flags/keywords.
+}
+
+// NewMaildirReader opens the "cur" and "new" files in dir, and returns a MsgSource
+// to read messages from.
+func NewMaildirReader(log mlog.Log, createTemp func(log mlog.Log, pattern string) (*os.File, error), dir string) (*MaildirReader, error) {
+	pathCur := filepath.Join(dir, "cur")
+	pathNew := filepath.Join(dir, "new")
+
+	var rootCur, rootNew *os.Root
+
+	defer func() {
+		if rootCur != nil {
+			err := rootCur.Close()
+			log.Check(err, "closing root for cur dir")
+		}
+		if rootNew != nil {
+			err := rootNew.Close()
+			log.Check(err, "closing root for new dir")
+		}
+	}()
+
+	var err error
+	rootCur, err = os.OpenRoot(pathCur)
+	if err != nil {
+		return nil, fmt.Errorf("open 'cur' path: %w", err)
+	}
+	rootNew, err = os.OpenRoot(pathNew)
+	if err != nil {
+		return nil, fmt.Errorf("open 'new' path: %w", err)
+	}
+
+	filesCur, err := maildirRead(log, pathCur)
+	if err != nil {
+		return nil, fmt.Errorf("reading 'cur' directory: %w", err)
+	}
+	filesNew, err := maildirRead(log, pathNew)
+	if err != nil {
+		return nil, fmt.Errorf("reading 'new' directory: %w", err)
+	}
+
 	mr := &MaildirReader{
 		log:        log,
 		createTemp: createTemp,
-		newf:       newf,
-		curf:       curf,
-		f:          newf,
+		dirNameCur: pathCur,
+		dirNameNew: pathNew,
+		rootCur:    rootCur,
+		rootNew:    rootNew,
+		filesCur:   filesCur,
+		filesNew:   filesNew,
 	}
 
 	// Best-effort parsing of dovecot keywords.
-	kf, err := os.Open(filepath.Join(filepath.Dir(newf.Name()), "dovecot-keywords"))
+	kf, err := os.Open(filepath.Join(dir, "dovecot-keywords"))
 	if err == nil {
 		mr.dovecotFlags, err = ParseDovecotKeywordsFlags(kf, log)
 		log.Check(err, "parsing dovecot keywords file")
@@ -230,33 +283,77 @@ func NewMaildirReader(log mlog.Log, createTemp func(log mlog.Log, pattern string
 		log.Check(err, "closing dovecot-keywords file")
 	}
 
-	return mr
+	// Prevent cleanup, no more chance of error.
+	rootCur = nil
+	rootNew = nil
+
+	return mr, nil
+}
+
+func maildirRead(log mlog.Log, p string) ([]maildirFile, error) {
+	dir, err := os.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err := dir.Close()
+		log.Check(err, "closing maildir dir")
+	}()
+
+	var files []maildirFile
+	for {
+		ents, err := dir.ReadDir(100)
+		for _, e := range ents {
+			f := maildirFile{
+				Name: e.Name(),
+				Time: messageTime(e),
+			}
+			files = append(files, f)
+		}
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("read dir: %w", err)
+		}
+	}
+
+	slices.SortFunc(files, func(a, b maildirFile) int { return a.Time.Compare(b.Time) })
+	return files, nil
+}
+
+// Take received time from filename, falling back to mtime for maildirs
+// reconstructed some other sources of message files.
+func messageTime(f os.DirEntry) time.Time {
+	var t time.Time
+	parts := strings.SplitN(f.Name(), ".", 3)
+	if v, err := strconv.ParseInt(parts[0], 10, 64); len(parts) == 3 && err == nil {
+		t = time.Unix(v, 0)
+	} else if fi, err := f.Info(); err == nil {
+		t = fi.ModTime()
+	}
+	return t
 }
 
 func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
-	if mr.dir == "" {
-		mr.dir = mr.f.Name()
+	var file maildirFile
+	var root *os.Root
+	var dirName string
+	if len(mr.filesCur) > 0 {
+		file = mr.filesCur[0]
+		mr.filesCur = mr.filesCur[1:]
+		root = mr.rootCur
+		dirName = mr.dirNameCur
+	} else if len(mr.filesNew) > 0 {
+		file = mr.filesNew[0]
+		mr.filesNew = mr.filesNew[1:]
+		root = mr.rootNew
+		dirName = mr.dirNameNew
+	} else {
+		return nil, nil, "", io.EOF
 	}
 
-	if len(mr.entries) == 0 {
-		var err error
-		mr.entries, err = mr.f.ReadDir(100)
-		if err != nil && err != io.EOF {
-			return nil, nil, "", err
-		}
-		if len(mr.entries) == 0 {
-			if mr.f == mr.curf {
-				return nil, nil, "", io.EOF
-			}
-			mr.f = mr.curf
-			mr.dir = ""
-			return mr.Next()
-		}
-	}
-
-	p := filepath.Join(mr.dir, mr.entries[0].Name())
-	mr.entries = mr.entries[1:]
-	sf, err := os.Open(p)
+	p := filepath.Join(dirName, file.Name)
+	sf, err := root.Open(file.Name)
 	if err != nil {
 		return nil, nil, p, fmt.Errorf("open message in maildir: %s", err)
 	}
@@ -302,20 +399,10 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 		return nil, nil, p, fmt.Errorf("writing message: %v", err)
 	}
 
-	// Take received time from filename, falling back to mtime for maildirs
-	// reconstructed some other sources of message files.
-	var received time.Time
-	t := strings.SplitN(filepath.Base(sf.Name()), ".", 3)
-	if v, err := strconv.ParseInt(t[0], 10, 64); len(t) == 3 && err == nil {
-		received = time.Unix(v, 0)
-	} else if fi, err := sf.Stat(); err == nil {
-		received = fi.ModTime()
-	}
-
 	// Parse flags. See https://cr.yp.to/proto/maildir.html.
 	flags := Flags{}
 	keywords := map[string]bool{}
-	t = strings.SplitN(filepath.Base(sf.Name()), ":2,", 2)
+	t := strings.SplitN(file.Name, ":2,", 2)
 	if len(t) == 2 {
 		for _, c := range t[1] {
 			switch c {
@@ -357,13 +444,26 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 		}
 	}
 
-	m := &Message{Received: received, Flags: flags, Keywords: slices.Sorted(maps.Keys(keywords)), Size: size}
+	m := &Message{Received: file.Time, Flags: flags, Keywords: slices.Sorted(maps.Keys(keywords)), Size: size}
 
 	// Prevent cleanup by defer.
 	mf := f
 	f = nil
 
 	return m, mf, p, nil
+}
+
+// Close closes internal state. It does not close dirNew and dirCur passed to
+// NewMaildirReader.
+func (mr *MaildirReader) Close() error {
+	var err0, err1 error
+	if mr.rootCur != nil {
+		err0 = mr.rootCur.Close()
+	}
+	if mr.rootNew != nil {
+		err1 = mr.rootNew.Close()
+	}
+	return errors.Join(err0, err1)
 }
 
 // ParseDovecotKeywordsFlags attempts to parse a dovecot-keywords file. It only
