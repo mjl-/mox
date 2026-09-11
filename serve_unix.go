@@ -131,11 +131,7 @@ func monitorDNSBL(log mlog.Log) {
 						slog.String("expl", expl),
 						slog.Any("status", status))
 				}
-				var v float64
-				if status == dnsbl.StatusPass {
-					v = 1
-				}
-				metricDNSBL.WithLabelValues(zone.Name(), ip.String()).Set(v)
+				updateDNSBLMetric(zone, ip.String(), status)
 				k := key{zone, ip.String()}
 				prevResults[k] = struct{}{}
 
@@ -143,6 +139,19 @@ func monitorDNSBL(log mlog.Log) {
 			}
 		}
 	}
+}
+
+func updateDNSBLMetric(zone dns.Domain, ip string, status dnsbl.Status) {
+	// A temporary DNS error is not an indication of whether our IP is in the block
+	// list, don't update the metric for it, keep the previous known value.
+	if status == dnsbl.StatusTemperr {
+		return
+	}
+	var v float64
+	if status == dnsbl.StatusPass {
+		v = 1
+	}
+	metricDNSBL.WithLabelValues(zone.Name(), ip).Set(v)
 }
 
 // also see localserve.go, code is similar or even shared.
