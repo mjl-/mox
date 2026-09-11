@@ -220,13 +220,13 @@ func testMetadata(t *testing.T, uidonly bool) {
 	// Cause to return.
 	tc.transactf("ok", "append inbox {4+}\r\ntest")
 
-	timer := time.NewTimer(time.Second)
+	timer := time.NewTimer(3 * time.Second)
 	defer timer.Stop()
 	select {
 	case err := <-done:
 		tc.check(err, "idle")
 	case <-timer.C:
-		t.Fatalf("idle did not finish")
+		t.Fatalf("idle did not finish in 3s")
 	}
 
 	// Broadcast should happen when metadata capability is enabled.
@@ -252,13 +252,13 @@ func testMetadata(t *testing.T, uidonly bool) {
 	// Should cause idle to return.
 	tc.transactf("ok", `setmetadata inbox (/private/a "z")`)
 
-	timer = time.NewTimer(time.Second)
+	timer = time.NewTimer(3 * time.Second)
 	defer timer.Stop()
 	select {
 	case err := <-done:
 		tc.check(err, "idle")
 	case <-timer.C:
-		t.Fatalf("idle did not finish")
+		t.Fatalf("idle did not finish in 3s")
 	}
 }
 

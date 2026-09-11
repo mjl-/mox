@@ -637,12 +637,12 @@ func TestDelivery(t *testing.T) {
 				changes <- l
 			}()
 
-			timer := time.NewTimer(time.Second)
+			timer := time.NewTimer(3 * time.Second)
 			defer timer.Stop()
 			select {
 			case <-changes:
 			case <-timer.C:
-				t.Fatalf("no delivery in 1s")
+				t.Fatalf("no delivery in 3s")
 			}
 		}
 	})

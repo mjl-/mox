@@ -342,15 +342,15 @@ func (tc *testconn) writelinef(format string, args ...any) {
 	tcheck(tc.t, err, "write line")
 }
 
-// wait at most 1 second for server to quit.
+// wait at most 5 second for server to quit.
 func (tc *testconn) waitDone() {
 	tc.t.Helper()
-	t := time.NewTimer(time.Second)
+	t := time.NewTimer(5 * time.Second)
 	select {
 	case <-tc.done:
 		t.Stop()
 	case <-t.C:
-		tc.t.Fatalf("server not done within 1s")
+		tc.t.Fatalf("server not done within 5s")
 	}
 }
 

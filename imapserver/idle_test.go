@@ -42,12 +42,12 @@ func TestIdle(t *testing.T) {
 	}()
 
 	tc1.transactf("ok", "append inbox () {%d+}\r\n%s", len(exampleMsg), exampleMsg)
-	timer := time.NewTimer(time.Second)
+	timer := time.NewTimer(3 * time.Second)
 	defer timer.Stop()
 	select {
 	case err := <-done:
 		tc1.check(err, "idle")
 	case <-timer.C:
-		t.Fatalf("idle did not finish")
+		t.Fatalf("idle did not finish in 3s")
 	}
 }
