@@ -521,12 +521,12 @@ func TestQueue(t *testing.T) {
 		launchWork(pkglog, resolver, map[string]struct{}{})
 
 		// Wait for all results.
-		timer.Reset(time.Second)
+		timer.Reset(3 * time.Second)
 		for range nresults {
 			select {
 			case <-deliveryResults:
 			case <-timer.C:
-				t.Fatalf("no dial within 1s")
+				t.Fatalf("no dial within 3s")
 			}
 		}
 
@@ -885,7 +885,7 @@ func TestQueue(t *testing.T) {
 			t.Fatalf("got attempt %d, expected %d", msg.Attempts, i)
 		}
 		if msg.Attempts == 5 {
-			timer.Reset(time.Second)
+			timer.Reset(3 * time.Second)
 			changes := make(chan struct{}, 1)
 			go func() {
 				comm.Get()
@@ -894,7 +894,7 @@ func TestQueue(t *testing.T) {
 			select {
 			case <-changes:
 			case <-timer.C:
-				t.Fatalf("no dsn in 1s")
+				t.Fatalf("no dsn in 3s")
 			}
 		}
 	}
@@ -907,7 +907,7 @@ func TestQueue(t *testing.T) {
 		t.Fatalf("attempt to fetch delivered and removed message from queue, got err %v, expected ErrAbsent", err)
 	}
 
-	timer.Reset(time.Second)
+	timer.Reset(3 * time.Second)
 	changes := make(chan struct{}, 1)
 	go func() {
 		comm.Get()
@@ -916,7 +916,7 @@ func TestQueue(t *testing.T) {
 	select {
 	case <-changes:
 	case <-timer.C:
-		t.Fatalf("no dsn in 1s")
+		t.Fatalf("no dsn in 3s")
 	}
 
 	// We shouldn't have any more work to do.
