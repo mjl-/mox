@@ -155,7 +155,7 @@ func New(conn net.Conn, opts *Opts) (client *Conn, rerr error) {
 	c.xtw = moxio.NewTraceWriter(c.log, "CW: ", &c)
 	c.xbw = bufio.NewWriter(c.xtw)
 
-	defer c.recoverErr(&rerr)
+	defer c.recover(&rerr, nil)
 	tag := c.xnonspace()
 	if tag != "*" {
 		c.xerrorf("expected untagged *, got %q", tag)
@@ -182,10 +182,6 @@ func New(conn net.Conn, opts *Opts) (client *Conn, rerr error) {
 		c.xerrorf("unexpected untagged %v", ut)
 	}
 	panic("not reached")
-}
-
-func (c *Conn) recoverErr(rerr *error) {
-	c.recover(rerr, nil)
 }
 
 func (c *Conn) recover(rerr *error, resp *Response) {
@@ -336,7 +332,7 @@ func (p *Proto) xtracewrite(level slog.Level) func() {
 // because the server may immediate close the underlying connection when it sees
 // the connection is being closed.
 func (c *Conn) Close() (rerr error) {
-	defer c.recoverErr(&rerr)
+	defer c.recover(&rerr, nil)
 
 	if c.conn == nil {
 		return nil
