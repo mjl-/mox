@@ -131,11 +131,15 @@ func monitorDNSBL(log mlog.Log) {
 						slog.String("expl", expl),
 						slog.Any("status", status))
 				}
-				var v float64
-				if status == dnsbl.StatusPass {
-					v = 1
+				// A temporary dns error says nothing about whether our ip is in the block
+				// list, so keep the last known value instead of resetting the metric.
+				if status != dnsbl.StatusTemperr {
+					var v float64
+					if status == dnsbl.StatusPass {
+						v = 1
+					}
+					metricDNSBL.WithLabelValues(zone.Name(), ip.String()).Set(v)
 				}
-				metricDNSBL.WithLabelValues(zone.Name(), ip.String()).Set(v)
 				k := key{zone, ip.String()}
 				prevResults[k] = struct{}{}
 
