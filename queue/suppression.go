@@ -18,10 +18,15 @@ import (
 
 var errSuppressed = errors.New("address is on suppression list")
 
+// baseAddress returns a simplified form of an address for suppression matching.
+// Localparts are lowercased, dots removed (Gmail-style equivalence), and truncated
+// at "+" (common plus-addressing / subaddress separator). Hyphens are kept: "-" is
+// a significant character in localparts and is not a universal subaddress separator.
+// Truncating at "-" incorrectly merged unrelated addresses that share a hyphen
+// prefix (e.g. user-nam96 and user-name96). See issue #478.
 func baseAddress(a smtp.Path) smtp.Path {
 	s := string(a.Localpart)
 	s, _, _ = strings.Cut(s, "+")
-	s, _, _ = strings.Cut(s, "-")
 	s = strings.ReplaceAll(s, ".", "")
 	s = strings.ToLower(s)
 	return smtp.Path{Localpart: smtp.Localpart(s), IPDomain: a.IPDomain}

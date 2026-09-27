@@ -7,6 +7,28 @@ import (
 	"github.com/mjl-/mox/webapi"
 )
 
+func TestBaseAddress(t *testing.T) {
+	mustPath := func(s string) smtp.Path {
+		t.Helper()
+		a, err := smtp.ParseAddress(s)
+		tcheck(t, err, "parse address")
+		return a.Path()
+	}
+	base := func(s string) string {
+		t.Helper()
+		return baseAddress(mustPath(s)).XString(true)
+	}
+
+	// Plus-addressing and Gmail-style dots are normalized.
+	tcompare(t, base("M.j.l2+catchall@Mox.example"), base("mjl2@mox.example"))
+
+	// Hyphenated localparts stay distinct; "-" is not a subaddress separator.
+	tcompare(t, base("user-nam96@example.com"), "user-nam96@example.com")
+	tcompare(t, base("user-name96@example.com"), "user-name96@example.com")
+	tcompare(t, base("user-nam96@example.com") == base("user-name96@example.com"), false)
+	tcompare(t, base("user-nam96@example.com") == base("user@example.com"), false)
+}
+
 func TestSuppression(t *testing.T) {
 	_, cleanup := setup(t)
 	defer cleanup()
@@ -28,6 +50,12 @@ func TestSuppression(t *testing.T) {
 	addr2b, err := smtp.ParseAddress("M.j.l2+catchall@Mox.example")
 	tcheck(t, err, "parse address")
 	path2b := addr2b.Path()
+	addrHyphenTypo, err := smtp.ParseAddress("user-nam96@example.com")
+	tcheck(t, err, "parse address")
+	pathHyphenTypo := addrHyphenTypo.Path()
+	addrHyphenOk, err := smtp.ParseAddress("user-name96@example.com")
+	tcheck(t, err, "parse address")
+	pathHyphenOk := addrHyphenOk.Path()
 
 	// No suppression yet.
 	sup, err := SuppressionLookup(ctxbg, "mjl", path1)
@@ -102,4 +130,17 @@ func TestSuppression(t *testing.T) {
 	tcheck(t, err, "add suppression")
 	err = SuppressionRemove(ctxbg, "bogus", path1)
 	tcheck(t, err, "remove suppression")
+
+	// Hyphenated addresses must not share a base address (#478).
+	err = SuppressionAdd(ctxbg, pathHyphenTypo, &webapi.Suppression{Account: "mjl"})
+	tcheck(t, err, "add hyphenated typo suppression")
+	sup, err = SuppressionLookup(ctxbg, "mjl", pathHyphenOk)
+	tcheck(t, err, "lookup correct hyphenated address")
+	tcompare(t, sup == nil, true) // Must not collide with typo prefix.
+	err = SuppressionAdd(ctxbg, pathHyphenOk, &webapi.Suppression{Account: "mjl"})
+	tcheck(t, err, "add correct hyphenated address independently")
+	err = SuppressionRemove(ctxbg, "mjl", pathHyphenTypo)
+	tcheck(t, err, "remove hyphenated typo suppression")
+	err = SuppressionRemove(ctxbg, "mjl", pathHyphenOk)
+	tcheck(t, err, "remove correct hyphenated suppression")
 }

@@ -188,7 +188,8 @@ type Suppression struct {
 	Account string `bstore:"nonzero,unique Account+BaseAddress"`
 
 	// Unicode. Address with fictional simplified localpart: lowercase, dots removed
-	// (gmail), first token before any "-" or "+" (typical catchall separator).
+	// (gmail), first token before any "+" (typical plus-addressing / catchall
+	// separator). Hyphens are kept; "-" is not treated as a subaddress separator.
 	BaseAddress string `bstore:"nonzero"`
 
 	// Unicode. Address that caused this suppression.
