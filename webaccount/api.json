@@ -1321,7 +1321,7 @@
 				},
 				{
 					"Name": "BaseAddress",
-					"Docs": "Unicode. Address with fictional simplified localpart: lowercase, dots removed (gmail), first token before any \"+\" (typical plus-addressing / catchall separator). Hyphens are kept; \"-\" is not treated as a subaddress separator.",
+					"Docs": "Unicode. Address with fictional simplified localpart: lowercase, first token before any \"+\" (typical plus-addressing / catchall separator). Dots are removed only for Gmail domains (gmail.com, googlemail.com); for other domains \".\" is kept as a significant localpart character. Hyphens are kept; \"-\" is not treated as a subaddress separator.",
 					"Typewords": [
 						"string"
 					]
