@@ -36,6 +36,7 @@ var Pedantic bool
 var (
 	ErrBadContentType = errors.New("bad content-type")
 	ErrHeader         = errors.New("bad message header")
+	ErrMaxDepth       = errors.New("maximum MIME parsing depth exceeded")
 )
 
 var (
@@ -48,6 +49,10 @@ var (
 	errBareCR                 = errors.New("invalid bare carriage return")
 	errUnexpectedEOF          = errors.New("unexpected eof")
 )
+
+// maxMIMEDepth counts the top-level message as level 1, and includes both
+// multipart children and embedded message/rfc822 and message/global messages.
+const maxMIMEDepth = 256
 
 // If set, during tests, attempts to reparse a part will cause an error, because sequentially reading parts should not lead to reparsing.
 var enforceSequential bool
@@ -88,6 +93,7 @@ type Part struct {
 	parent          *Part                // Parent part, for getting bound from, and setting nextBoundOffset when a part has finished reading. Only for subparts, not top-level parts.
 	bound           []byte               // Only set if valid multipart with boundary, includes leading --, excludes \r\n.
 	strict          bool                 // If set, valid crlf line endings are verified when reading body.
+	depth           int                  // MIME tree level during parsing, with the top-level message at 1.
 }
 
 // todo: have all Content* fields in Part?
@@ -116,13 +122,15 @@ type Address struct {
 }
 
 // Parse reads the headers of the mail message and returns a part.
+// Parsing is limited to 256 MIME tree levels, counting the top-level message as
+// level 1 and including embedded messages. The limit is enforced as parts are parsed.
 // A part provides access to decoded and raw contents of a message and its multiple parts.
 //
 // If strict is set, fewer attempts are made to continue parsing when errors are
 // encountered, such as with invalid content-type headers or bare carriage returns.
 func Parse(elog *slog.Logger, strict bool, r io.ReaderAt) (Part, error) {
 	log := mlog.New("message", elog)
-	return newPart(log, strict, r, 0, nil)
+	return newPart(log, strict, r, 0, nil, 1)
 }
 
 // EnsurePart parses a part as with Parse, but ensures a usable part is always
@@ -205,13 +213,16 @@ func (p *Part) Walk(elog *slog.Logger, parent *Part) error {
 
 	if len(p.bound) == 0 {
 		if p.MediaType == "MESSAGE" && (p.MediaSubType == "RFC822" || p.MediaSubType == "GLOBAL") {
+			if p.depth >= maxMIMEDepth {
+				return ErrMaxDepth
+			}
 			// todo: don't read whole submessage in memory...
 			buf, err := io.ReadAll(p.Reader())
 			if err != nil {
 				return err
 			}
 			br := bytes.NewReader(buf)
-			mp, err := Parse(log.Logger, p.strict, br)
+			mp, err := newPart(log, p.strict, br, 0, nil, p.depth+1)
 			if err != nil {
 				return fmt.Errorf("parsing embedded message: %w", err)
 			}
@@ -257,8 +268,12 @@ func (p *Part) String() string {
 
 // newPart parses a new part, which can be the top-level message.
 // offset is the bound offset for parts, and the start of message for top-level messages. parent indicates if this is a top-level message or sub-part.
+// depth is the MIME tree level, including embedded messages whose parent is nil.
 // If an error occurs, p's exported values can still be relevant. EnsurePart uses these values.
-func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
+func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Part, depth int) (p Part, rerr error) {
+	if depth > maxMIMEDepth {
+		return p, ErrMaxDepth
+	}
 	if r == nil {
 		panic("nil reader")
 	}
@@ -268,6 +283,7 @@ func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Par
 		r:              r,
 		parent:         parent,
 		strict:         strict,
+		depth:          depth,
 	}
 
 	b := &bufAt{strict: strict, r: r, offset: offset}
@@ -564,7 +580,7 @@ func (p *Part) ParseNextPart(elog *slog.Logger) (*Part, error) {
 			panic("access not sequential")
 		}
 		// Set nextBoundOffset by fully reading the last part.
-		last, err := newPart(log, p.strict, p.r, p.lastBoundOffset, p)
+		last, err := newPart(log, p.strict, p.r, p.lastBoundOffset, p, p.depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -608,7 +624,7 @@ func (p *Part) ParseNextPart(elog *slog.Logger) (*Part, error) {
 	boundOffset := p.nextBoundOffset
 	p.lastBoundOffset = boundOffset
 	p.nextBoundOffset = -1
-	np, err := newPart(log, p.strict, p.r, boundOffset, p)
+	np, err := newPart(log, p.strict, p.r, boundOffset, p, p.depth+1)
 	if err != nil {
 		return nil, err
 	}

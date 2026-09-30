@@ -3,6 +3,7 @@ package message
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -609,4 +610,100 @@ func TestParseQuotedCharset(t *testing.T) {
 	p, err := EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tcheck(t, err, "parse")
 	tcompare(t, p.Envelope.From, []Address{{"Kristýna", "k", "example.com"}})
+}
+
+// mimeDepthMessage builds a chain with exactly levels MIME entities. Mixed
+// nesting verifies that embedded messages do not reset multipart depth.
+func mimeDepthMessage(levels int, kind string) string {
+	s := "Content-Type: text/plain\r\n\r\nhello\r\n"
+	for i := 1; i < levels; i++ {
+		k := kind
+		if kind == "mixed" {
+			k = []string{"multipart", "rfc822", "global"}[i%3]
+		}
+		if k == "multipart" {
+			b := fmt.Sprintf("depth%d", i)
+			s = "Content-Type: multipart/mixed; boundary=" + b + "\r\n\r\n--" + b + "\r\n" + s + "\r\n--" + b + "--\r\n"
+		} else {
+			s = "Content-Type: message/" + k + "\r\n\r\n" + s
+		}
+	}
+	return "Subject: depth test\r\n" + s
+}
+
+func TestMIMEDepth(t *testing.T) {
+	check := func(kind string, strict bool, levels int) {
+		t.Helper()
+
+		s := mimeDepthMessage(levels, kind)
+		p, err := Parse(pkglog.Logger, strict, strings.NewReader(s))
+		tcheck(t, err, "parse")
+		err = p.Walk(pkglog.Logger, nil)
+		if levels > 256 {
+			tfail(t, err, ErrMaxDepth)
+			p, err = EnsurePart(pkglog.Logger, strict, strings.NewReader(s), int64(len(s)))
+			tfail(t, err, ErrMaxDepth)
+			tcompare(t, p.MediaType, "APPLICATION")
+			tcompare(t, p.MediaSubType, "OCTET-STREAM")
+			tcompare(t, len(p.Parts), 0)
+			tcompare(t, p.Message == nil, true)
+			tcompare(t, p.Envelope.Subject, "depth test")
+			body, err := io.ReadAll(p.Reader())
+			tcheck(t, err, "read fallback body")
+			tcompare(t, string(body), s[strings.Index(s, "\r\n\r\n")+4:])
+			return
+		}
+		tcheck(t, err, "walk")
+		depth := 1
+		for len(p.Parts) > 0 || p.Message != nil {
+			if p.Message != nil {
+				p = *p.Message
+			} else {
+				p = p.Parts[0]
+			}
+			depth++
+		}
+		tcompare(t, depth, levels)
+	}
+
+	for _, kind := range []string{"multipart", "rfc822", "global", "mixed"} {
+		for _, strict := range []bool{false, true} {
+			check(kind, strict, 255)
+			check(kind, strict, 256)
+			check(kind, strict, 257)
+		}
+	}
+}
+
+func TestMIMEDepthParseNextPart(t *testing.T) {
+	s := mimeDepthMessage(257, "multipart")
+	p, err := Parse(pkglog.Logger, false, strings.NewReader(s))
+	tcheck(t, err, "parse")
+	for level := 1; level < 256; level++ {
+		pp, err := p.ParseNextPart(pkglog.Logger)
+		tcheck(t, err, "parse child")
+		p = *pp // Report parsers also copy parts while descending.
+	}
+	_, err = p.ParseNextPart(pkglog.Logger)
+	tfail(t, err, ErrMaxDepth)
+}
+
+func TestMIMEDepthSiblings(t *testing.T) {
+	// More than 256 parts at one level must remain valid.
+	s := "Content-Type: multipart/mixed; boundary=b\r\n\r\n" + strings.Repeat("--b\r\nContent-Type: text/plain\r\n\r\nhello\r\n", 300) + "--b--\r\n"
+	p, err := EnsurePart(pkglog.Logger, true, strings.NewReader(s), int64(len(s)))
+	tcheck(t, err, "parse siblings")
+	tcompare(t, len(p.Parts), 300)
+}
+
+func TestMIMEDepthBeforeReadingEmbedded(t *testing.T) {
+	for _, subtype := range []string{"rfc822", "global"} {
+		s := "Content-Type: message/" + subtype + "\r\n\r\ninvalid bare LF\n"
+		p, err := Parse(pkglog.Logger, true, strings.NewReader(s))
+		tcheck(t, err, "parse")
+		p.depth = 256
+		// Reading the body would fail with errBareLF. The depth check must
+		// happen before reading or decoding an embedded message.
+		tfail(t, p.Walk(pkglog.Logger, nil), ErrMaxDepth)
+	}
 }
