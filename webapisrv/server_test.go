@@ -370,25 +370,40 @@ func TestServer(t *testing.T) {
 	tcheckf(t, err, "add address to suppression list")
 	_, err = client.SuppressionAdd(ctxbg, supAddReq)
 	terrcode(t, err, "error") // Already present.
-	supAddReq2 := webapi.SuppressionAddRequest{EmailAddress: "remotelast@☺.localhost", Manual: false, Reason: "tests"}
+	// Plus-addressing still shares a base address.
+	supAddReq2 := webapi.SuppressionAddRequest{EmailAddress: "Remote.Last-catchall+other@☺.localhost", Manual: false, Reason: "tests"}
 	_, err = client.SuppressionAdd(ctxbg, supAddReq2)
-	terrcode(t, err, "error") // Already present, same base address.
+	terrcode(t, err, "error") // Already present, same base address after + truncation.
+	// Dots and hyphens are significant on non-Gmail domains; this is distinct.
+	supAddReqDistinct := webapi.SuppressionAddRequest{EmailAddress: "remotelast@☺.localhost", Manual: false, Reason: "tests"}
+	_, err = client.SuppressionAdd(ctxbg, supAddReqDistinct)
+	tcheckf(t, err, "add distinct address that only matched under old baseAddress rules")
 	supAddReq3 := webapi.SuppressionAddRequest{EmailAddress: "not an address"}
 	_, err = client.SuppressionAdd(ctxbg, supAddReq3)
 	terrcode(t, err, "badAddress")
 
 	supListRes, err = client.SuppressionList(ctxbg, webapi.SuppressionListRequest{})
 	tcheckf(t, err, "listing suppressions")
-	tcompare(t, len(supListRes.Suppressions), 1)
+	tcompare(t, len(supListRes.Suppressions), 2)
 	supListRes.Suppressions[0].Created = now
+	supListRes.Suppressions[1].Created = now
 	tcompare(t, supListRes.Suppressions, []webapi.Suppression{
 		{
 			ID:              1,
 			Created:         now,
 			Account:         "mjl",
-			BaseAddress:     "remotelast@☺.localhost",
+			BaseAddress:     "remote.last-catchall@☺.localhost",
 			OriginalAddress: "Remote.Last-catchall@☺.localhost",
 			Manual:          true,
+			Reason:          "tests",
+		},
+		{
+			ID:              2,
+			Created:         now,
+			Account:         "mjl",
+			BaseAddress:     "remotelast@☺.localhost",
+			OriginalAddress: "remotelast@☺.localhost",
+			Manual:          false,
 			Reason:          "tests",
 		},
 	})
@@ -406,11 +421,13 @@ func TestServer(t *testing.T) {
 	supPresRes, err = client.SuppressionPresent(ctxbg, webapi.SuppressionPresentRequest{EmailAddress: "not an address"})
 	terrcode(t, err, "badAddress")
 
-	// SuppressionRemove
-	_, err = client.SuppressionRemove(ctxbg, webapi.SuppressionRemoveRequest{EmailAddress: "remote.LAST+more@☺.LocalHost"})
+	// SuppressionRemove — plus-addressing still matches the stored base address.
+	_, err = client.SuppressionRemove(ctxbg, webapi.SuppressionRemoveRequest{EmailAddress: "Remote.Last-catchall+more@☺.LocalHost"})
 	tcheckf(t, err, "remove suppressed address")
-	_, err = client.SuppressionRemove(ctxbg, webapi.SuppressionRemoveRequest{EmailAddress: "remote.LAST+more@☺.LocalHost"})
+	_, err = client.SuppressionRemove(ctxbg, webapi.SuppressionRemoveRequest{EmailAddress: "Remote.Last-catchall+more@☺.LocalHost"})
 	terrcode(t, err, "error") // Absent.
+	_, err = client.SuppressionRemove(ctxbg, webapi.SuppressionRemoveRequest{EmailAddress: "remotelast@☺.localhost"})
+	tcheckf(t, err, "remove second suppressed address")
 	_, err = client.SuppressionRemove(ctxbg, webapi.SuppressionRemoveRequest{EmailAddress: "not an address"})
 	terrcode(t, err, "badAddress")
 
