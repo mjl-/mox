@@ -126,11 +126,12 @@ type Client struct {
 	tr                      *moxio.TraceReader // Kept for changing trace levels between cmd/auth/data.
 	tw                      *moxio.TraceWriter
 	log                     mlog.Log
-	lastlog                 time.Time // For adding delta timestamps between log lines.
-	cmds                    []string  // Last or active command, for generating errors and metrics.
-	cmdStart                time.Time // Start of command.
-	tls                     bool      // Whether connection is TLS protected.
-	firstReadAfterHandshake bool      // To detect TLS alert error from remote just after handshake.
+	lastlog                 time.Time     // For adding delta timestamps between log lines.
+	cmds                    []string      // Last or active command, for generating errors and metrics.
+	cmdStart                time.Time     // Start of command.
+	readTimeout             time.Duration // For reading the next response line.
+	tls                     bool          // Whether connection is TLS protected.
+	firstReadAfterHandshake bool          // To detect TLS alert error from remote just after handshake.
 
 	botched  bool // If set, protocol is out of sync and no further commands can be sent.
 	needRset bool // If set, a new delivery requires an RSET command.
@@ -334,9 +335,8 @@ func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode,
 	// error.
 	c.tr = moxio.NewTraceReader(c.log, "RS: ", c.conn)
 	c.r = bufio.NewReader(c.tr)
-	// We use a single write timeout of 30 seconds.
-	// todo future: use different timeouts ../rfc/5321:3610
-	c.tw = moxio.NewTraceWriter(c.log, "LC: ", timeoutWriter{c.conn, 30 * time.Second, c.log})
+	c.readTimeout = timeoutReply
+	c.tw = moxio.NewTraceWriter(c.log, "LC: ", timeoutWriter{c.conn, timeoutWrite, c.log})
 	c.w = bufio.NewWriter(c.tw)
 
 	if err := c.hello(ctx, tlsMode, ehloHostname, opts.Auth); err != nil {
@@ -474,8 +474,24 @@ func (c *Client) xerrorf(permanent bool, code int, secode, firstLine string, mor
 	panic(c.errorf(permanent, code, secode, firstLine, moreLines, format, args...))
 }
 
+// Timeouts for reading responses and writing commands and message data, the
+// minimum per-command values from the RFC. Servers can delay responses
+// deliberately, e.g. to slow down spammers, and expect us to wait. Variables so
+// tests can lower them. ../rfc/5321:3610
+var (
+	// For the greeting and responses to commands, including MAIL, RCPT and DATA.
+	// ../rfc/5321:3623 ../rfc/5321:3631 ../rfc/5321:3633
+	timeoutReply = 5 * time.Minute
+	// For the response after the message data has been written. ../rfc/5321:3656
+	timeoutDataEnd = 10 * time.Minute
+	// For each write of commands or message data. ../rfc/5321:3651
+	timeoutWrite = 3 * time.Minute
+)
+
 // timeoutWriter passes each Write on to conn after setting a write deadline on conn based on
-// timeout.
+// timeout. Deadlines are absolute, so all writes, including those on a TLS
+// connection after STARTTLS, must go through a timeoutWriter: Otherwise the
+// deadline from the last write before STARTTLS stays in effect.
 type timeoutWriter struct {
 	conn    net.Conn
 	timeout time.Duration
@@ -493,8 +509,7 @@ func (w timeoutWriter) Write(buf []byte) (int, error) {
 var bufs = moxio.NewBufpool(8, 2*1024)
 
 func (c *Client) readline() (string, error) {
-	// todo: could have per-operation timeouts. and rfc suggests higher minimum timeouts. ../rfc/5321:3610
-	if err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+	if err := c.conn.SetReadDeadline(time.Now().Add(c.readTimeout)); err != nil {
 		c.log.Errorx("setting read deadline", err)
 	}
 
@@ -836,7 +851,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		c.firstReadAfterHandshake = true
 		cancel()
 		c.tr = moxio.NewTraceReader(c.log, "RS: ", c.conn)
-		c.tw = moxio.NewTraceWriter(c.log, "LC: ", c.conn) // No need to wrap in timeoutWriter, it would just set the timeout on the underlying connection, which is still active.
+		c.tw = moxio.NewTraceWriter(c.log, "LC: ", timeoutWriter{c.conn, timeoutWrite, c.log})
 		c.r = bufio.NewReader(c.tr)
 		c.w = bufio.NewWriter(c.tw)
 
@@ -1377,8 +1392,6 @@ func (c *Client) DeliverMultiple(ctx context.Context, mailFrom string, rcptTo []
 		}
 	}
 
-	// For a DATA write, the suggested timeout is 3 minutes, we use 30 seconds for all
-	// writes through timeoutWriter. ../rfc/5321:3651
 	defer c.xtrace(mlog.LevelTracedata)()
 	err := smtp.DataWrite(c.w, msg)
 	if err != nil {
@@ -1386,7 +1399,9 @@ func (c *Client) DeliverMultiple(ctx context.Context, mailFrom string, rcptTo []
 	}
 	c.xflush()
 	c.xtrace(mlog.LevelTrace) // Restore.
+	c.readTimeout = timeoutDataEnd
 	code, secode, firstLine, moreLines := c.xread()
+	c.readTimeout = timeoutReply
 	if code != smtp.C250Completed {
 		c.xerrorf(code/100 == 5, code, secode, firstLine, moreLines, "%w: got %d, expected 2xx", ErrStatus, code)
 	}
