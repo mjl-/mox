@@ -85,7 +85,8 @@ func (s *Sig) Header() (string, error) {
 	w.Addf(" ", "d=%s;", s.Domain.ASCII)
 	w.Addf(" ", "s=%s;", s.Selector.ASCII)
 	if s.Identity != nil {
-		w.Addf(" ", "i=%s;", s.Identity.String()) // todo: Is utf-8 ok here?
+		// AUID is encoded dkim-quoted-printable ../rfc/6376:1172
+		w.Addf(" ", "i=%s;", packDKIMQuotedPrintable(s.Identity.String()))
 	}
 	w.Addf(" ", "a=%s;", s.Algorithm())
 
@@ -95,6 +96,8 @@ func (s *Sig) Header() (string, error) {
 	if s.Length >= 0 {
 		w.Addf(" ", "l=%d;", s.Length)
 	}
+	// Currently only "dns/txt" is valid ../rfc/6376:1277.
+	// If extended need to use x-sig-q-tag-args ../rfc/6376-eid4810
 	if len(s.QueryMethods) > 0 && !(len(s.QueryMethods) == 1 && strings.EqualFold(s.QueryMethods[0], "dns/txt")) {
 		w.Addf(" ", "q=%s;", strings.Join(s.QueryMethods, ":"))
 	}
@@ -153,22 +156,26 @@ func (s *Sig) Header() (string, error) {
 	return w.String(), nil
 }
 
-// Like quoted printable, but with "|" encoded as well.
-// We also encode ":" because it is used as separator in DKIM headers which can
-// cause trouble for "q", even though it is listed in dkim-safe-char,
-// ../rfc/6376:497.
-func packQpHdrValue(s string) string {
-	// ../rfc/6376:474
-	const hex = "0123456789ABCDEF"
+// Like quoted quoted printable but with extra requirments for whitespace
+// encoding ../rfc/6376:497
+func packDKIMQuotedPrintable(s string) string {
 	var r strings.Builder
 	for _, b := range []byte(s) {
-		if b > ' ' && b < 0x7f && b != ';' && b != '=' && b != '|' && b != ':' {
+		switch {
+		// ../rfc/6376:496
+		case b >= 0x21 && b <= 0x3A, b == 0x3C, b >= 0x3E && b <= 0x7E:
 			r.WriteString(string(b))
-		} else {
-			r.WriteString("=" + string(hex[b>>4]) + string(hex[(b>>0)&0xf]))
+		default:
+			r.WriteString(fmt.Sprintf("=%02X", b))
 		}
 	}
 	return r.String()
+}
+
+// Like dkim-quoted-printable, but with "|" encoded as well.
+// ../rfc/6376:474.
+func packQpHdrValue(s string) string {
+	return strings.ReplaceAll(packDKIMQuotedPrintable(s), "|", "=7C")
 }
 
 var (

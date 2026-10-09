@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"golang.org/x/text/unicode/norm"
+	"unicode/utf8"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/smtp"
@@ -253,65 +252,22 @@ func (p *parser) xsignedHeaderFields() []string {
 }
 
 func (p *parser) xauid() Identity {
+	// AUID is encoded dkim-quoted-printable ../rfc/6376:1172
+	auid := p.xqp(false, false, true)
 	// ../rfc/6376:1192
 	// Localpart is optional.
-	if p.take("@") {
-		return Identity{Domain: p.xdomain()}
+	if strings.HasPrefix(auid, "@") {
+		d, err := dns.ParseDomain(auid[1:])
+		if err != nil {
+			p.xerrorf("parsing AUID domain %q: %s", auid, err)
+		}
+		return Identity{Domain: d}
 	}
-	lp := p.xlocalpart()
-	p.xtake("@")
-	dom := p.xdomain()
-	return Identity{&lp, dom}
-}
-
-// todo: reduce duplication between implementations: ../smtp/address.go:/xlocalpart ../dkim/parser.go:/xlocalpart ../smtpserver/parse.go:/xlocalpart
-func (p *parser) xlocalpart() smtp.Localpart {
-	// ../rfc/6376:434
-	// ../rfc/5321:2316
-	var s string
-	if p.hasPrefix(`"`) {
-		s = p.xquotedString()
-	} else {
-		s = p.xatom()
-		for p.take(".") {
-			s += "." + p.xatom()
-		}
+	addr, err := smtp.ParseAddress(auid)
+	if err != nil {
+		p.xerrorf("parsing AUID: %s", err)
 	}
-	// In the wild, some services use large localparts for generated (bounce) addresses.
-	if Pedantic && len(s) > 64 || len(s) > 128 {
-		// ../rfc/5321:3486
-		p.xerrorf("localpart longer than 64 octets")
-	}
-	return smtp.Localpart(norm.NFC.String(s))
-}
-
-func (p *parser) xquotedString() string {
-	p.xtake(`"`)
-	var s string
-	var esc bool
-	for {
-		c := p.xchar()
-		if esc {
-			if c >= ' ' && c < 0x7f {
-				s += string(c)
-				esc = false
-				continue
-			}
-			p.xerrorf("invalid localpart, bad escaped char %c", c)
-		}
-		if c == '\\' {
-			esc = true
-			continue
-		}
-		if c == '"' {
-			return s
-		}
-		if c >= ' ' && c < 0x7f && c != '\\' && c != '"' || (c > 0x7f && p.smtputf8) {
-			s += string(c)
-			continue
-		}
-		p.xerrorf("invalid localpart, invalid character %c", c)
-	}
+	return Identity{&addr.Localpart, addr.Domain}
 }
 
 func (p *parser) xchar() rune {
@@ -336,16 +292,6 @@ func (p *parser) xchar() rune {
 		p.o += o
 	}
 	return r
-}
-
-func (p *parser) xatom() string {
-	return p.xtakefn1(false, func(c rune, i int) bool {
-		switch c {
-		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '/', '=', '?', '^', '_', '`', '{', '|', '}', '~':
-			return true
-		}
-		return isalphadigit(c) || (c > 0x7f && p.smtputf8)
-	})
 }
 
 func (p *parser) xbodyLength() int64 {
@@ -439,14 +385,14 @@ func (p *parser) xqpSection() string {
 func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 	// ../rfc/6376:494 ../rfc/2045:1260
 
-	hex := func(c byte) rune {
+	hex := func(c byte) byte {
 		if c >= '0' && c <= '9' {
-			return rune(c - '0')
+			return byte(c - '0')
 		}
-		return rune(10 + c - 'A')
+		return byte(10 + c - 'A')
 	}
 
-	var s strings.Builder
+	var b []byte
 	for !p.empty() {
 		p.fws()
 		if pipeEncoded && p.hasPrefix("|") {
@@ -462,8 +408,7 @@ func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 			if len(h) != 2 {
 				p.xerrorf("expected qp-hdr-value")
 			}
-			c := (hex(h[0]) << 4) | hex(h[1])
-			s.WriteString(string(c))
+			b = append(b, hex(h[0])<<4|hex(h[1]))
 			continue
 		}
 		x := p.xtakefn(ignoreFWS, func(c rune, i int) bool {
@@ -472,9 +417,12 @@ func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 		if x == "" {
 			break
 		}
-		s.WriteString(x)
+		b = append(b, []byte(x)...)
 	}
-	return s.String()
+	if !utf8.Valid(b) {
+		p.xerrorf("decoded bytes are not valid UTF-8")
+	}
+	return string(b)
 }
 
 func (p *parser) xtimestamp() int64 {
