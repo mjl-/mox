@@ -1,0 +1,3 @@
+# home directory for the mox service
+# do not change unless you know what you're doing
+directory="/var/lib/mox"

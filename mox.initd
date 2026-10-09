@@ -1,0 +1,58 @@
+#!/sbin/openrc-run
+
+supervisor=supervise-daemon
+
+name=Mox
+description="All-in-one email server"
+command=/usr/bin/mox
+command_args=serve
+
+# log to /var/log/mox
+output_log=/var/log/${RC_SVCNAME}.log
+error_log=/var/log/${RC_SVCNAME}.log
+
+# we do this in start_pre() instead
+# to give more useful error messages
+#required_files="$directory/config/mox.conf $directory/config/domains.conf"
+
+umask=007
+[ $RC_UNAME = "Linux" ] && no_new_privs=1
+
+depend() {
+    want net
+}
+
+checkconfig() {
+    for i in $directory/config/{mox,domains}.conf; do
+        if ! [ -f $i ]; then
+            eerror "No $i"
+            eerror "Make sure to run quickstart first!"
+            eerror "# cd $directory && mox quickstart you@yourdomain.com"
+            return 1
+        fi
+    done
+
+    # subshell to not pollute $PWD
+    (
+        cd $directory
+        mox config test || return $?
+    )
+}
+
+start_pre() {
+    # https://github.com/OpenRC/openrc/blob/master/service-script-guide.md#dont-restartreload-with-a-broken-config
+    if [ $RC_CMD != "restart" ]; then
+        checkconfig || return $?
+    fi
+
+    checkpath -d -m 711 -o root:mox $directory
+    checkpath -f -m 660 -o root:mox /var/log/${RC_SVCNAME}.log
+}
+
+stop_pre() {
+    if [ $RC_CMD = "restart" ]; then
+        checkconfig || return $?
+    fi
+
+    return 0
+}
