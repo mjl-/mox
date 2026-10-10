@@ -52,6 +52,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/proxyprotocol"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/ratelimit"
@@ -236,7 +237,7 @@ func Listen() {
 					// https://github.com/golang/go/issues/70232.
 					tlsConfigDelivery.SessionTicketsDisabled = listener.SMTP.TLSSessionTicketsDisabled == nil || *listener.SMTP.TLSSessionTicketsDisabled
 				}
-				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, noTLSClientAuth, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
+				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, noTLSClientAuth, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay, listener.SMTP.ProxyProtocol)
 			}
 		}
 		if listener.Submission.Enabled {
@@ -246,7 +247,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submission.Port, 587)
 			for _, ip := range listener.IPs {
-				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, noTLSClientAuth, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, true, nil, 0)
+				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, noTLSClientAuth, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, true, nil, 0, listener.Submission.ProxyProtocol)
 			}
 		}
 
@@ -257,7 +258,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submissions.Port, 465)
 			for _, ip := range listener.IPs {
-				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, noTLSClientAuth, maxMsgSize, true, true, true, nil, 0)
+				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, noTLSClientAuth, maxMsgSize, true, true, true, nil, 0, listener.Submissions.ProxyProtocol)
 			}
 		}
 	}
@@ -265,7 +266,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls, noTLSClientAuth bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration, proxyConfig *config.ProxyProtocol) {
 	log := mlog.New("smtpserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
@@ -278,6 +279,9 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 	ln, err := mox.Listen(network, addr)
 	if err != nil {
 		log.Fatalx("smtp: listen for smtp", err, slog.String("protocol", protocol), slog.String("listener", name))
+	}
+	if proxyConfig != nil {
+		ln = proxyprotocol.NewListener(ln, proxyConfig.TrustedProxyNets)
 	}
 
 	// Each listener gets its own copy of the config, so session keys between different

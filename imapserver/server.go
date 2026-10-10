@@ -75,6 +75,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
+	"github.com/mjl-/mox/proxyprotocol"
 	"github.com/mjl-/mox/ratelimit"
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/store"
@@ -396,14 +397,14 @@ func Listen() {
 		if listener.IMAP.Enabled {
 			port := config.Port(listener.IMAP.Port, 143)
 			for _, ip := range listener.IPs {
-				listen1("imap", name, ip, port, tlsConfig, false, noTLSClientAuth, listener.IMAP.NoRequireSTARTTLS)
+				listen1("imap", name, ip, port, tlsConfig, false, noTLSClientAuth, listener.IMAP.NoRequireSTARTTLS, listener.IMAP.ProxyProtocol)
 			}
 		}
 
 		if listener.IMAPS.Enabled {
 			port := config.Port(listener.IMAPS.Port, 993)
 			for _, ip := range listener.IPs {
-				listen1("imaps", name, ip, port, tlsConfig, true, noTLSClientAuth, false)
+				listen1("imaps", name, ip, port, tlsConfig, true, noTLSClientAuth, false, listener.IMAPS.ProxyProtocol)
 			}
 		}
 	}
@@ -411,7 +412,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noTLSClientAuth, noRequireSTARTTLS bool) {
+func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noTLSClientAuth, noRequireSTARTTLS bool, proxyConfig *config.ProxyProtocol) {
 	log := mlog.New("imapserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
@@ -424,6 +425,9 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 	ln, err := mox.Listen(network, addr)
 	if err != nil {
 		log.Fatalx("imap: listen for imap", err, slog.String("protocol", protocol), slog.String("listener", listenerName))
+	}
+	if proxyConfig != nil {
+		ln = proxyprotocol.NewListener(ln, proxyConfig.TrustedProxyNets)
 	}
 
 	// Each listener gets its own copy of the config, so session keys between different
