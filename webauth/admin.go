@@ -4,7 +4,10 @@ import (
 	"context"
 	cryptorand "crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -121,4 +124,45 @@ func (a *adminSessionAuth) remove(ctx context.Context, log mlog.Log, accountName
 	}
 	delete(a.sessions, sessionToken)
 	return nil
+}
+
+// CheckAdminToken authenticates an admin API request through an
+// "Authorization: Bearer <token>" header, verifying the token against the admin
+// tokens in the database. Performs rate limiting and records the login attempt.
+//
+// On success, returns the token name and ok=true. 
+// On failure, writes an error to the response writer and returns ok=false.
+func CheckAdminToken(ctx context.Context, log mlog.Log, isForwarded bool, w http.ResponseWriter, r *http.Request, token string) (tokenName string, ok bool) {
+	const kind = "webadmin"
+
+	ip, start, ok := rateLimitAuth(log, kind, isForwarded, w, r, true)
+	if !ok {
+		return "", false
+	}
+
+	la := loginAttempt(ip.String(), r, kind, "admintoken")
+	la.AccountName = "(admin)"
+	defer func() {
+		store.LoginAttemptAdd(context.Background(), log, la)
+	}()
+
+	at, err := store.AdminTokenVerify(ctx, token)
+	if err != nil {
+		if errors.Is(err, store.ErrAdminTokenInvalid) {
+			la.Result = store.AuthBadCredentials
+			time.Sleep(BadAuthDelay)
+			respondAuthError(log, w, true, "user:badAuth", err.Error())
+		} else {
+			log.Errorx("verifying admin token", err)
+			respondAuthError(log, w, true, "server:error", "verifying admin token")
+		}
+		return "", false
+	}
+	la.LoginAddress = "admin token " + at.Name
+
+	mox.LimiterFailedAuth.Reset(ip, start)
+	la.Result = store.AuthSuccess
+
+	addAuthLogAttrs(w, slog.String("authaccount", "(admin)"), slog.String("admintoken", at.Name))
+	return at.Name, true
 }

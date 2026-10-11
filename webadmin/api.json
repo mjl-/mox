@@ -73,6 +73,60 @@
 			]
 		},
 		{
+			"Name": "AdminTokens",
+			"Docs": "AdminTokens returns the admin API token names",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"AdminTokenInfo"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AdminTokenAdd",
+			"Docs": "AdminTokenAdd generates a new admin API token with a descriptive name, and\noptional expiration time. The returned token is only available in this response,\nit is stored only in hashed form.",
+			"Params": [
+				{
+					"Name": "name",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "expires",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "token",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AdminTokenRemove",
+			"Docs": "AdminTokenRemove removes an admin API token, revoking access for it.",
+			"Params": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "CheckDomain",
 			"Docs": "CheckDomain checks the configuration for the domain, such as MX, SMTP STARTTLS,\nSPF, DKIM, DMARC, TLSRPT, MTASTS, autoconfig, autodiscover.",
 			"Params": [
@@ -2173,6 +2227,49 @@
 	],
 	"Sections": [],
 	"Structs": [
+		{
+			"Name": "AdminTokenInfo",
+			"Docs": "AdminTokenInfo describes an admin API token, without the token itself.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Name",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Created",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Expires",
+					"Docs": "Nil if the token does not expire.",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				},
+				{
+					"Name": "LastUsed",
+					"Docs": "Nil if never used.",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				}
+			]
+		},
 		{
 			"Name": "CheckResult",
 			"Docs": "CheckResult is the analysis of a domain, its actual configuration (DNS, TLS,\nconnectivity) and the mox configuration. It includes configuration instructions\n(e.g. DNS records), and warnings and errors encountered.",

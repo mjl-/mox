@@ -107,22 +107,6 @@ func loginAttempt(clientIP string, r *http.Request, protocol, authMech string) s
 // kind is used for the cookie name (webadmin, webaccount, webmail), and for
 // logging/metrics.
 func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind string, isForwarded bool, w http.ResponseWriter, r *http.Request, isAPI, requireCSRF, postFormCSRF bool) (accountName string, sessionToken store.SessionToken, loginAddress string, ok bool) {
-	// Respond with an authentication error.
-	respondAuthError := func(code, msg string) {
-		if isAPI {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			var result = struct {
-				Error sherpa.Error `json:"error"`
-			}{
-				sherpa.Error{Code: code, Message: msg},
-			}
-			err := json.NewEncoder(w).Encode(result)
-			log.Check(err, "writing error response")
-		} else {
-			http.Error(w, "403 - forbidden - "+msg, http.StatusForbidden)
-		}
-	}
-
 	// The frontends cannot inject custom headers for all requests, e.g. images loaded
 	// as resources. For those, we don't require the CSRF and rely on the session
 	// cookie with samesite=strict.
@@ -135,27 +119,20 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	}
 	csrfToken := store.CSRFToken(csrfValue)
 	if requireCSRF && csrfToken == "" {
-		respondAuthError("user:noAuth", "missing required csrf header")
+		respondAuthError(log, w, isAPI, "user:noAuth", "missing required csrf header")
 		return "", "", "", false
 	}
 
 	// Cookies are named "webmailsession", "webaccountsession", "webadminsession".
 	cookie, _ := r.Cookie(kind + "session")
 	if cookie == nil {
-		respondAuthError("user:noAuth", fmt.Sprintf("no session for %q web interface", strings.TrimPrefix(kind, "web")))
+		respondAuthError(log, w, isAPI, "user:noAuth", fmt.Sprintf("no session for %q web interface", strings.TrimPrefix(kind, "web")))
 		return "", "", "", false
 	}
 
-	ip := ClientIP(log, isForwarded, r)
-	if ip == nil {
-		respondAuthError("user:noAuth", "cannot find ip for rate limit check (missing x-forwarded-for header?)")
+	ip, start, ok := rateLimitAuth(log, kind, isForwarded, w, r, isAPI)
+	if !ok {
 		return "", "", "", false
-	}
-	start := time.Now()
-	if !mox.LimiterFailedAuth.Add(ip, start, 1) {
-		metrics.AuthenticationRatelimitedInc(kind)
-		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
-		return
 	}
 
 	la := loginAttempt(ip.String(), r, kind, "websession")
@@ -168,7 +145,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	t := strings.SplitN(cookie.Value, " ", 2)
 	if len(t) != 2 {
 		time.Sleep(BadAuthDelay)
-		respondAuthError("user:badAuth", "malformed session")
+		respondAuthError(log, w, isAPI, "user:badAuth", "malformed session")
 		return "", "", "", false
 	}
 	sessionToken = store.SessionToken(t[0])
@@ -177,7 +154,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	accountName, err = url.QueryUnescape(t[1])
 	if err != nil {
 		time.Sleep(BadAuthDelay)
-		respondAuthError("user:badAuth", "malformed session account name")
+		respondAuthError(log, w, isAPI, "user:badAuth", "malformed session account name")
 		return "", "", "", false
 	}
 	la.AccountName = accountName
@@ -186,7 +163,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	if err != nil {
 		la.Result = store.AuthBadCredentials
 		time.Sleep(BadAuthDelay)
-		respondAuthError("user:badAuth", err.Error())
+		respondAuthError(log, w, isAPI, "user:badAuth", err.Error())
 		return "", "", "", false
 	}
 	la.LoginAddress = loginAddress
@@ -194,11 +171,54 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	mox.LimiterFailedAuth.Reset(ip, start)
 	la.Result = store.AuthSuccess
 
-	// Add to HTTP logging that this is an authenticated request.
-	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
-		lw.AddAttr(slog.String("authaccount", accountName))
-	}
+	addAuthLogAttrs(w, slog.String("authaccount", accountName))
 	return accountName, sessionToken, loginAddress, true
+}
+
+// respondAuthError writes an authentication error response. For API requests, a
+// sherpa error object with the code, otherwise HTTP status 403.
+func respondAuthError(log mlog.Log, w http.ResponseWriter, isAPI bool, code, msg string) {
+	if isAPI {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		var result = struct {
+			Error sherpa.Error `json:"error"`
+		}{
+			sherpa.Error{Code: code, Message: msg},
+		}
+		err := json.NewEncoder(w).Encode(result)
+		log.Check(err, "writing error response")
+	} else {
+		http.Error(w, "403 - forbidden - "+msg, http.StatusForbidden)
+	}
+}
+
+// rateLimitAuth looks up the client IP and registers an authentication attempt
+// with the failed-auth rate limiter. The returned ip and start must be used to
+// reset the limiter on successful authentication. 
+// On failure, write an error to the response writer and returns ok=false.
+func rateLimitAuth(log mlog.Log, kind string, isForwarded bool, w http.ResponseWriter, r *http.Request, isAPI bool) (ip net.IP, start time.Time, ok bool) {
+	ip = ClientIP(log, isForwarded, r)
+	if ip == nil {
+		respondAuthError(log, w, isAPI, "user:noAuth", "cannot find ip for rate limit check (missing x-forwarded-for header?)")
+		return nil, time.Time{}, false
+	}
+	start = time.Now()
+	if !mox.LimiterFailedAuth.Add(ip, start, 1) {
+		metrics.AuthenticationRatelimitedInc(kind)
+		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
+		return nil, time.Time{}, false
+	}
+	return ip, start, true
+}
+
+// addAuthLogAttrs adds attributes to the HTTP request logging, marking the
+// request as authenticated.
+func addAuthLogAttrs(w http.ResponseWriter, attrs ...slog.Attr) {
+	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
+		for _, a := range attrs {
+			lw.AddAttr(a)
+		}
+	}
 }
 
 func ClientIP(log mlog.Log, isForwarded bool, r *http.Request) net.IP {

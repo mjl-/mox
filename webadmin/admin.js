@@ -242,10 +242,11 @@
 		AuthResult2["AuthError"] = "error";
 		AuthResult2["AuthAborted"] = "aborted";
 	})(AuthResult || (AuthResult = {}));
-	var structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "Canonicalization": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "ConfigDomain": true, "DANECheckResult": true, "DKIM": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARC": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Dynamic": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "LoginAttempt": true, "MTASTS": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Selector": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSPublicKey": true, "TLSRPT": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportFail": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebInternal": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
+	var structTypes = { "Account": true, "Address": true, "AddressAlias": true, "AdminTokenInfo": true, "Alias": true, "AliasAddress": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "Canonicalization": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "ConfigDomain": true, "DANECheckResult": true, "DKIM": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARC": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Dynamic": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "LoginAttempt": true, "MTASTS": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Selector": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSPublicKey": true, "TLSRPT": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportFail": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebInternal": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
 	var stringsTypes = { "Align": true, "AuthResult": true, "CSRFToken": true, "DMARCPolicy": true, "IP": true, "Localpart": true, "Mode": true, "RUA": true };
 	var intsTypes = {};
 	var types = {
+		"AdminTokenInfo": { "Name": "AdminTokenInfo", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "Created", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Expires", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "LastUsed", "Docs": "", "Typewords": ["nullable", "timestamp"] }] },
 		"CheckResult": { "Name": "CheckResult", "Docs": "", "Fields": [{ "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["DNSSECResult"] }, { "Name": "IPRev", "Docs": "", "Typewords": ["IPRevCheckResult"] }, { "Name": "MX", "Docs": "", "Typewords": ["MXCheckResult"] }, { "Name": "TLS", "Docs": "", "Typewords": ["TLSCheckResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["DANECheckResult"] }, { "Name": "SPF", "Docs": "", "Typewords": ["SPFCheckResult"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIMCheckResult"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["DMARCCheckResult"] }, { "Name": "HostTLSRPT", "Docs": "", "Typewords": ["TLSRPTCheckResult"] }, { "Name": "DomainTLSRPT", "Docs": "", "Typewords": ["TLSRPTCheckResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["MTASTSCheckResult"] }, { "Name": "SRVConf", "Docs": "", "Typewords": ["SRVConfCheckResult"] }, { "Name": "Autoconf", "Docs": "", "Typewords": ["AutoconfCheckResult"] }, { "Name": "Autodiscover", "Docs": "", "Typewords": ["AutodiscoverCheckResult"] }] },
 		"DNSSECResult": { "Name": "DNSSECResult", "Docs": "", "Fields": [{ "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"IPRevCheckResult": { "Name": "IPRevCheckResult", "Docs": "", "Fields": [{ "Name": "Hostname", "Docs": "", "Typewords": ["Domain"] }, { "Name": "IPNames", "Docs": "", "Typewords": ["{}", "[]", "string"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
@@ -424,6 +425,32 @@
 			const paramTypes = [];
 			const returnTypes = [["string"], ["string"], ["string"]];
 			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// AdminTokens returns the admin API token names
+		async AdminTokens() {
+			const fn = "AdminTokens";
+			const paramTypes = [];
+			const returnTypes = [["[]", "AdminTokenInfo"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// AdminTokenAdd generates a new admin API token with a descriptive name, and
+		// optional expiration time. The returned token is only available in this response,
+		// it is stored only in hashed form.
+		async AdminTokenAdd(name, expires) {
+			const fn = "AdminTokenAdd";
+			const paramTypes = [["string"], ["nullable", "timestamp"]];
+			const returnTypes = [["string"]];
+			const params = [name, expires];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// AdminTokenRemove removes an admin API token, revoking access for it.
+		async AdminTokenRemove(id) {
+			const fn = "AdminTokenRemove";
+			const paramTypes = [["int64"]];
+			const returnTypes = [];
+			const params = [id];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// CheckDomain checks the configuration for the domain, such as MX, SMTP STARTTLS,
@@ -1837,6 +1864,7 @@
 			dom.div(dom.a("Webserver", attr.href("#webserver"))),
 			dom.div(dom.a("Files", attr.href("#config"))),
 			dom.div(dom.a("Log levels", attr.href("#loglevels"))),
+			dom.div(dom.a("Authentication Tokens", attr.href("#tokens"))),
 			footer()
 		);
 	}, "index");
@@ -1893,6 +1921,40 @@
 		backgroundColor: color,
 		borderRadius: "3px"
 	}), l), "inlineBox");
+	var adminTokens = /* @__PURE__ */ __name(async () => {
+		let tokens = await client.AdminTokens() || [];
+		let tbody;
+		let newTokenBox;
+		let fieldset;
+		let name;
+		let expires;
+		const render = /* @__PURE__ */ __name(() => {
+			const nowSecs = (/* @__PURE__ */ new Date()).getTime() / 1e3;
+			dom._kids(tbody, tokens.length === 0 ? dom.tr(dom.td(attr.colspan("5"), "No tokens.")) : [], tokens.map((t) => dom.tr(dom.td(t.Name), dom.td(age(t.Created, false, nowSecs)), dom.td(t.Expires ? [t.Expires.getTime() < nowSecs * 1e3 ? box(red, "expired") : [], dom.span(attr.title(t.Expires.toString()), t.Expires.toLocaleDateString())] : "never"), dom.td(t.LastUsed ? age(t.LastUsed, false, nowSecs) : "never"), dom.td(dom.clickbutton("Remove", attr.title("Remove the token, revoking access for API calls using it."), /* @__PURE__ */ __name(async function click(e) {
+				if (!window.confirm('Are you sure you want to remove token "' + t.Name + '"? API calls with this token will fail.')) {
+					return;
+				}
+				await check(e.target, client.AdminTokenRemove(t.ID));
+				tokens = await client.AdminTokens() || [];
+				render();
+			}, "click"))))));
+		}, "render");
+		const root = dom.div(crumbs(crumblink("Mox Admin", "#"), "Authentication Tokens"), dom.p('Authentication tokens give full admin access to the admin API, without needing a browser session. Pass a token in an "Authorization: Bearer <token>" header. API calls are HTTP POST requests to the "api/" path below this admin page, with a JSON body with the parameters, e.g.:'), dom.pre(dom._class("literal"), `curl -X POST -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \\
+	-d '{"params": ["account", "user@example.com"]}' \\
+	` + window.location.origin + window.location.pathname + "api/AccountAdd"), dom.h2("Tokens"), dom.table(dom.thead(dom.tr(dom.th("Name"), dom.th("Created"), dom.th("Expires"), dom.th("Last used"), dom.th("Action"))), tbody = dom.tbody()), dom.br(), dom.h2("Generate token"), dom.form(/* @__PURE__ */ __name(async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			const exp = expires.value ? /* @__PURE__ */ new Date(expires.value + "T23:59:59") : null;
+			const token = await check(fieldset, client.AdminTokenAdd(name.value, exp));
+			dom._kids(newTokenBox, box(yellow, "New token generated. Copy it now, it is stored in hashed form and will not be shown again."), dom.pre(dom._class("literal"), style({ display: "inline-block" }), token));
+			name.value = "";
+			expires.value = "";
+			tokens = await client.AdminTokens() || [];
+			render();
+		}, "submit"), fieldset = dom.fieldset(dom.label(style({ display: "inline-block" }), dom.span("Name", attr.title("Descriptive name for the token, e.g. its purpose or where it is used. Must be unique.")), dom.br(), name = dom.input(attr.required(""))), " ", dom.label(style({ display: "inline-block" }), dom.span("Expires (optional)", attr.title("The token is valid until the end of this day. Leave empty for a token that does not expire.")), dom.br(), expires = dom.input(attr.type("date"))), " ", dom.submitbutton("Generate token"))), newTokenBox = dom.div(), footer());
+		render();
+		return root;
+	}, "adminTokens");
 	var accounts = /* @__PURE__ */ __name(async () => {
 		const [[accounts2, accountsDisabled], domains, loginAttempts] = await Promise.all([
 			client.Accounts(),
@@ -4100,6 +4162,8 @@
 					root = await config();
 				} else if (h === "loglevels") {
 					root = await loglevels();
+				} else if (h === "tokens") {
+					root = await adminTokens();
 				} else if (h === "accounts") {
 					root = await accounts();
 				} else if (h === "accounts/loginattempts") {

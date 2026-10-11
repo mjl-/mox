@@ -187,7 +187,12 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 
 	// All other URLs, except the login endpoint require some authentication.
 	var sessionToken store.SessionToken
-	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
+	if token, isBearer := bearerToken(r); isAPI && isBearer {
+		if _, ok := webauth.CheckAdminToken(ctx, log, isForwarded, w, r, token); !ok {
+			// Response has been written already.
+			return
+		}
+	} else if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
 		var ok bool
 		_, sessionToken, _, ok = webauth.Check(ctx, log, webauth.Admin, "webadmin", isForwarded, w, r, isAPI, isAPI, false)
 		if !ok {
@@ -204,6 +209,15 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 	}
 
 	http.NotFound(w, r)
+}
+
+// bearerToken returns the token from an "Authorization: Bearer <token>" header.
+func bearerToken(r *http.Request) (string, bool) {
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return "", false
+	}
+	return strings.TrimSpace(token), true
 }
 
 func xcheckf(ctx context.Context, err error, format string, args ...any) {
@@ -282,6 +296,64 @@ func (w Admin) Logout(ctx context.Context) {
 // Version returns the version, goos and goarch.
 func (w Admin) Version(ctx context.Context) (version, goos, goarch string) {
 	return moxvar.Version, runtime.GOOS, runtime.GOARCH
+}
+
+// AdminTokenInfo describes an admin API token, without the token itself.
+type AdminTokenInfo struct {
+	ID       int64
+	Name     string
+	Created  time.Time
+	Expires  *time.Time // Nil if the token does not expire.
+	LastUsed *time.Time // Nil if never used.
+}
+
+// AdminTokens returns the admin API token names
+func (Admin) AdminTokens(ctx context.Context) []AdminTokenInfo {
+	l, err := store.AdminTokenList(ctx)
+	xcheckf(ctx, err, "listing admin tokens")
+	r := make([]AdminTokenInfo, len(l))
+	for i, at := range l {
+		r[i] = AdminTokenInfo{ID: at.ID, Name: at.Name, Created: at.Created}
+		if !at.Expires.IsZero() {
+			r[i].Expires = &at.Expires
+		}
+		if !at.LastUsed.IsZero() {
+			r[i].LastUsed = &at.LastUsed
+		}
+	}
+	return r
+}
+
+// AdminTokenAdd generates a new admin API token with a descriptive name, and
+// optional expiration time. The returned token is only available in this response,
+// it is stored only in hashed form. 
+func (Admin) AdminTokenAdd(ctx context.Context, name string, expires *time.Time) (token string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		xusererrorf(ctx, "name required")
+	}
+	var exp time.Time
+	if expires != nil {
+		exp = *expires
+		if !exp.After(time.Now()) {
+			xusererrorf(ctx, "expiration must be in the future")
+		}
+	}
+	token, _, err := store.AdminTokenAdd(ctx, name, exp)
+	if errors.Is(err, store.ErrAdminTokenExists) {
+		xcheckuserf(ctx, err, "adding admin token")
+	}
+	xcheckf(ctx, err, "adding admin token")
+	return token
+}
+
+// AdminTokenRemove removes an admin API token, revoking access for it.
+func (Admin) AdminTokenRemove(ctx context.Context, id int64) {
+	err := store.AdminTokenRemove(ctx, id)
+	if err == bstore.ErrAbsent {
+		xusererrorf(ctx, "admin token not found")
+	}
+	xcheckf(ctx, err, "removing admin token")
 }
 
 type Result struct {
