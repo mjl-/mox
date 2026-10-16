@@ -194,7 +194,7 @@ func respondAuthError(log mlog.Log, w http.ResponseWriter, isAPI bool, code, msg
 
 // rateLimitAuth looks up the client IP and registers an authentication attempt
 // with the failed-auth rate limiter. The returned ip and start must be used to
-// reset the limiter on successful authentication. 
+// reset the limiter on successful authentication.
 // On failure, write an error to the response writer and returns ok=false.
 func rateLimitAuth(log mlog.Log, kind string, isForwarded bool, w http.ResponseWriter, r *http.Request, isAPI bool) (ip net.IP, start time.Time, ok bool) {
 	ip = ClientIP(log, isForwarded, r)

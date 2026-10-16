@@ -326,7 +326,7 @@ func (Admin) AdminTokens(ctx context.Context) []AdminTokenInfo {
 
 // AdminTokenAdd generates a new admin API token with a descriptive name, and
 // optional expiration time. The returned token is only available in this response,
-// it is stored only in hashed form. 
+// it is stored only in hashed form.
 func (Admin) AdminTokenAdd(ctx context.Context, name string, expires *time.Time) (token string) {
 	name = strings.TrimSpace(name)
 	if name == "" {

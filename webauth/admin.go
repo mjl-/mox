@@ -130,7 +130,7 @@ func (a *adminSessionAuth) remove(ctx context.Context, log mlog.Log, accountName
 // "Authorization: Bearer <token>" header, verifying the token against the admin
 // tokens in the database. Performs rate limiting and records the login attempt.
 //
-// On success, returns the token name and ok=true. 
+// On success, returns the token name and ok=true.
 // On failure, writes an error to the response writer and returns ok=false.
 func CheckAdminToken(ctx context.Context, log mlog.Log, isForwarded bool, w http.ResponseWriter, r *http.Request, token string) (tokenName string, ok bool) {
 	const kind = "webadmin"
