@@ -442,6 +442,7 @@ const index = async () => {
 		dom.div(dom.a('Webserver', attr.href('#webserver'))),
 		dom.div(dom.a('Files', attr.href('#config'))),
 		dom.div(dom.a('Log levels', attr.href('#loglevels'))),
+		dom.div(dom.a('Authentication Tokens', attr.href('#tokens'))),
 		footer(),
 	)
 }
@@ -584,6 +585,103 @@ const inlineBox = (color: string, ...l: ElemArg[]) =>
 		}),
 		l,
 	)
+
+const adminTokens = async () => {
+	let tokens = await client.AdminTokens() || []
+
+	let tbody: HTMLElement
+	let newTokenBox: HTMLElement
+	let fieldset: HTMLFieldSetElement
+	let name: HTMLInputElement
+	let expires: HTMLInputElement
+
+	const render = () => {
+		const nowSecs = new Date().getTime()/1000
+		dom._kids(tbody,
+			tokens.length === 0 ? dom.tr(dom.td(attr.colspan('5'), 'No tokens.')) : [],
+			tokens.map(t =>
+				dom.tr(
+					dom.td(t.Name),
+					dom.td(age(t.Created, false, nowSecs)),
+					dom.td(t.Expires ? [t.Expires.getTime() < nowSecs*1000 ? box(red, 'expired') : [], dom.span(attr.title(t.Expires.toString()), t.Expires.toLocaleDateString())] : 'never'),
+					dom.td(t.LastUsed ? age(t.LastUsed, false, nowSecs) : 'never'),
+					dom.td(
+						dom.clickbutton('Remove', attr.title('Remove the token, revoking access for API calls using it.'), async function click(e: MouseEvent) {
+							if (!window.confirm('Are you sure you want to remove token "'+t.Name+'"? API calls with this token will fail.')) {
+								return
+							}
+							await check(e.target! as HTMLButtonElement, client.AdminTokenRemove(t.ID))
+							tokens = await client.AdminTokens() || []
+							render()
+						}),
+					),
+				)
+			),
+		)
+	}
+
+	const root = dom.div(
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			'Authentication Tokens',
+		),
+		dom.p('Authentication tokens give full admin access to the admin API, without needing a browser session. Pass a token in an "Authorization: Bearer <token>" header. API calls are HTTP POST requests to the "api/" path below this admin page, with a JSON body with the parameters, e.g.:'),
+		dom.pre(dom._class('literal'), "curl -X POST -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \\\n\t-d '{\"params\": [\"account\", \"user@example.com\"]}' \\\n\t"+window.location.origin+window.location.pathname+"api/AccountAdd"),
+		dom.h2('Tokens'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Name'),
+					dom.th('Created'),
+					dom.th('Expires'),
+					dom.th('Last used'),
+					dom.th('Action'),
+				),
+			),
+			tbody=dom.tbody(),
+		),
+		dom.br(),
+		dom.h2('Generate token'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+				// Expire at the end of the selected day, in local time.
+				const exp = expires.value ? new Date(expires.value+'T23:59:59') : null
+				const token = await check(fieldset, client.AdminTokenAdd(name.value, exp))
+				dom._kids(newTokenBox,
+					box(yellow, 'New token generated. Copy it now, it is stored in hashed form and will not be shown again.'),
+					dom.pre(dom._class('literal'), style({display: 'inline-block'}), token),
+				)
+				name.value = ''
+				expires.value = ''
+				tokens = await client.AdminTokens() || []
+				render()
+			},
+			fieldset=dom.fieldset(
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Name', attr.title('Descriptive name for the token, e.g. its purpose or where it is used. Must be unique.')),
+					dom.br(),
+					name=dom.input(attr.required('')),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Expires (optional)', attr.title('The token is valid until the end of this day. Leave empty for a token that does not expire.')),
+					dom.br(),
+					expires=dom.input(attr.type('date')),
+				),
+				' ',
+				dom.submitbutton('Generate token'),
+			),
+		),
+		newTokenBox=dom.div(),
+		footer(),
+	)
+	render()
+	return root
+}
 
 const accounts = async () => {
 	const [[accounts, accountsDisabled], domains, loginAttempts] = await Promise.all([
@@ -5368,6 +5466,8 @@ const init = async () => {
 				root = await config()
 			} else if (h === 'loglevels') {
 				root = await loglevels()
+			} else if (h === 'tokens') {
+				root = await adminTokens()
 			} else if (h === 'accounts') {
 				root = await accounts()
 			} else if (h === 'accounts/loginattempts') {

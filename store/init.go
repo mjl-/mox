@@ -25,7 +25,7 @@ type AccountRemove struct {
 
 // AuthDB and AuthDBTypes are exported for ../backup.go.
 var AuthDB *bstore.DB
-var AuthDBTypes = []any{TLSPublicKey{}, LoginAttempt{}, LoginAttemptState{}, AccountRemove{}}
+var AuthDBTypes = []any{TLSPublicKey{}, LoginAttempt{}, LoginAttemptState{}, AccountRemove{}, AdminToken{}}
 
 var loginAttemptCleanerStop chan chan struct{}
 
