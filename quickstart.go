@@ -49,7 +49,7 @@ var moxService string
 var moxFreebsdRc string
 
 func cmdQuickstart(c *cmd) {
-	c.params = "[-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]"
+	c.params = "[-chatmail] [-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
 Quickstart writes configuration files, prints initial admin and account
@@ -88,9 +88,11 @@ output of "mox config describe-domains" and see the output of
 	var existingWebserver bool
 	var hostname string
 	var skipDial bool
+	var chatmail bool
 	c.flag.BoolVar(&existingWebserver, "existing-webserver", false, "use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.")
 	c.flag.StringVar(&hostname, "hostname", "", "hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener")
 	c.flag.BoolVar(&skipDial, "skipdial", false, "skip check for outgoing smtp (port 25) connectivity or for domain age with rdap")
+	c.flag.BoolVar(&chatmail, "chatmail", false, "configure mox as a chatmail server, e.g. for Delta Chat: only allow end-to-end encrypted outgoing messages, automatically create accounts on first login for the domain, and enable IMAP and SMTP submission on the HTTPS port for censorship circumvention. Also see https://delta.chat/en/chatmail.")
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
@@ -768,6 +770,13 @@ many authentication failures).
 	public.Submissions.Enabled = true
 	public.IMAPS.Enabled = true
 
+	if chatmail {
+		// Delta Chat clients can use IMAP and SMTP submission over the HTTPS port to
+		// circumvent networks that block mail ports. This uses TLS ALPN.
+		public.Submissions.EnabledOnHTTPS = true
+		public.IMAPS.EnabledOnHTTPS = true
+	}
+
 	if existingWebserver {
 		hostbase := filepath.FromSlash("path/to/" + dnshostname.Name())
 		mtastsbase := filepath.FromSlash("path/to/mta-sts." + domain.Name())
@@ -904,11 +913,15 @@ and check the admin page for the needed DNS records.`)
 	}
 	cleanupPaths = append(cleanupPaths, keyPaths...)
 
+	confDomain.Chatmail = chatmail
 	dc.Domains = map[string]config.Domain{
 		domain.Name(): confDomain,
 	}
 	dc.Accounts = map[string]config.Account{
 		accountName: accountConf,
+	}
+	if chatmail {
+		dc.Chatmail.Enabled = true
 	}
 
 	// Build config in memory, so we can easily comment out the DNSBLs config.

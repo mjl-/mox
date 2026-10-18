@@ -32,6 +32,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
@@ -429,7 +430,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var err error
-	acc, la.AccountName, err = store.OpenEmailAuth(log, email, password, true)
+	acc, la.AccountName, err = admin.OpenEmailAuth(log, email, password, true, true)
 	if err != nil {
 		mox.LimiterFailedAuth.Add(clientIP, t0, 1)
 		if errors.Is(err, mox.ErrDomainNotFound) || errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, store.ErrUnknownCredentials) || errors.Is(err, store.ErrLoginDisabled) {

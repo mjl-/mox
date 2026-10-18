@@ -20,7 +20,7 @@ any parameters. Followed by the help and usage information for each command.
 
 	mox [-config config/mox.conf] [-pedantic] ...
 	mox serve
-	mox quickstart [-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]
+	mox quickstart [-chatmail] [-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]
 	mox stop
 	mox setaccountpassword $account
 	mox setadminpassword
@@ -185,7 +185,9 @@ traffic to your existing backend applications. Look for "WebHandlers:" in the
 output of "mox config describe-domains" and see the output of
 "mox config example webhandlers".
 
-	usage: mox quickstart [-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]
+	usage: mox quickstart [-chatmail] [-skipdial] [-existing-webserver] [-hostname host] $user@domain [$user | $uid]
+	  -chatmail
+	    	configure mox as a chatmail server, e.g. for Delta Chat: only allow end-to-end encrypted outgoing messages, automatically create accounts on first login for the domain, and enable IMAP and SMTP submission on the HTTPS port for censorship circumvention. Also see https://delta.chat/en/chatmail.
 	  -existing-webserver
 	    	use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.
 	  -hostname string

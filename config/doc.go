@@ -813,6 +813,12 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# Free-form description of domain. (optional)
 			Description:
 
+			# If set, this is a chatmail domain: accounts for addresses at this domain can be
+			# created automatically on first login (see the Chatmail settings), and created
+			# accounts are marked as chatmail accounts. Requires chatmail mode to be enabled.
+			# (optional)
+			Chatmail: false
+
 			# Hostname for client settings instead of the mail server hostname. E.g.
 			# mail.<domain>. For future migration to another mail operator without requiring
 			# all clients to update their settings, it is convenient to have client settings
@@ -1098,6 +1104,11 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 			# Free form description, e.g. full name or alternative contact info. (optional)
 			Description:
+
+			# If set, this is a chatmail account: with chatmail mode enabled, the account must
+			# send outgoing messages end-to-end encrypted. Requires chatmail mode to be
+			# enabled. (optional)
+			Chatmail: false
 
 			# Full name, to use in message From header when composing messages in webmail. Can
 			# be overridden per destination. (optional)
@@ -1530,6 +1541,30 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	# bl.spamcop.net. (optional)
 	MonitorDNSBLs:
 		-
+
+	# Chatmail settings, for running mox as a chatmail server, e.g. for Delta Chat.
+	# Chatmail servers only accept outgoing messages that are end-to-end encrypted,
+	# and allow accounts to be created automatically on first login. Enabling chatmail
+	# is only recommended for servers dedicated to chatmail. Also see the Chatmail
+	# field on domains and accounts. (optional)
+	Chatmail:
+
+		# Enable chatmail mode. With chatmail mode enabled, accounts marked as Chatmail
+		# must send outgoing messages end-to-end encrypted, and accounts for domains
+		# marked as Chatmail can be created automatically on first login. Also see the
+		# Chatmail field on domains and accounts.
+		Enabled: false
+
+		# Require incoming messages for chatmail accounts to be end-to-end encrypted as
+		# well, rejecting unencrypted messages from other mail servers. Not recommended:
+		# this may prevent legitimate messages, e.g. delivery status notifications, from
+		# arriving. (optional)
+		IncomingEncryptedOnly: false
+
+		# Do not automatically create accounts for chatmail domains on first login. Useful
+		# as an emergency stop for abuse. By default, account creation is enabled for
+		# domains marked as Chatmail. (optional)
+		AutoregistrationDisabled: false
 
 # Examples
 
