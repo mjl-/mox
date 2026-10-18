@@ -39,6 +39,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
@@ -1414,7 +1415,7 @@ func (c *conn) cmdAuth(p *parser) {
 		}
 
 		var err error
-		account, la.AccountName, err = store.OpenEmailAuth(c.log, username, password, false)
+		account, la.AccountName, err = admin.OpenEmailAuth(c.log, username, password, false, true)
 		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
 			// ../rfc/4954:274
 			la.Result = store.AuthBadCredentials
@@ -1457,7 +1458,7 @@ func (c *conn) cmdAuth(p *parser) {
 		c.xtrace(mlog.LevelTrace) // Restore.
 
 		var err error
-		account, la.AccountName, err = store.OpenEmailAuth(c.log, username, password, false)
+		account, la.AccountName, err = admin.OpenEmailAuth(c.log, username, password, false, true)
 		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
 			// ../rfc/4954:274
 			la.Result = store.AuthBadCredentials
