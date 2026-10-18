@@ -284,7 +284,7 @@ func TestCtl(t *testing.T) {
 
 	// "addressadd"
 	testctl(func(xctl *ctl) {
-		ctlcmdConfigAddressAdd(xctl, "mjl3@mox2.example", "mjl2")
+		ctlcmdConfigAddressAdd(xctl, "Mjl3@mox2.example", "mjl2")
 	})
 	testctl(func(xctl *ctl) {
 		ctlcmdConfigAddressAdd(xctl, "@mox2.example", "mjl2")
@@ -301,7 +301,7 @@ func TestCtl(t *testing.T) {
 
 	// "addressrm"
 	testctl(func(xctl *ctl) {
-		ctlcmdConfigAddressRemove(xctl, "mjl3@mox2.example")
+		ctlcmdConfigAddressRemove(xctl, "Mjl3@mox2.example")
 	})
 
 	// "addressaccount"

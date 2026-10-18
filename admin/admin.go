@@ -863,9 +863,43 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 
 	defer mox.Conf.DynamicLockUnlock()()
 
-	ad, ok := mox.Conf.AccountDestinationsLocked[address]
+	var pa smtp.Address // For non-catchall addresses (most).
+	var dom dns.Domain
+	var err error
+	// Destination keys retain catchall suffixes; queue lookups use delivery matching.
+	addressKey := address
+	queueAddressKey := address
+	if strings.HasPrefix(address, "@") {
+		dom, err = dns.ParseDomain(address[1:])
+		if err != nil {
+			return fmt.Errorf("%w: parsing domain for catchall address: %v", ErrRequest, err)
+		}
+		addressKey = "@" + dom.Name()
+	} else {
+		pa, err = smtp.ParseAddress(address)
+		if err != nil {
+			return fmt.Errorf("%w: parsing address: %v", ErrRequest, err)
+		}
+		dom = pa.Domain
+		dc, ok := mox.Conf.Dynamic.Domains[dom.Name()]
+		if !ok {
+			return fmt.Errorf("%w: unknown domain in address %q", ErrRequest, address)
+		}
+		lp := pa.Localpart
+		if !dc.LocalpartCaseSensitive {
+			lp = smtp.Localpart(strings.ToLower(string(lp)))
+		}
+		addressKey = smtp.NewAddress(lp, pa.Domain).String()
+		queueAddressKey = smtp.NewAddress(mox.CanonicalLocalpart(pa.Localpart, dc), pa.Domain).String()
+	}
+
+	ad, ok := mox.Conf.AccountDestinationsLocked[addressKey]
 	if !ok {
 		return fmt.Errorf("%w: address does not exists", ErrRequest)
+	}
+	configuredAddress := addressKey
+	if !ad.Catchall {
+		configuredAddress = smtp.NewAddress(ad.Localpart, dom).String()
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -878,7 +912,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	na.Destinations = map[string]config.Destination{}
 	var dropped bool
 	for destAddr, d := range a.Destinations {
-		if destAddr != address {
+		if destAddr != configuredAddress {
 			na.Destinations[destAddr] = d
 		} else {
 			dropped = true
@@ -890,21 +924,6 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 
 	// Also remove matching address from FromIDLoginAddresses, composing a new slice.
 	// Refuse if address is referenced in a TLS public key.
-	var dom dns.Domain
-	var pa smtp.Address // For non-catchall addresses (most).
-	var err error
-	if strings.HasPrefix(address, "@") {
-		dom, err = dns.ParseDomain(address[1:])
-		if err != nil {
-			return fmt.Errorf("%w: parsing domain for catchall address: %v", ErrRequest, err)
-		}
-	} else {
-		pa, err = smtp.ParseAddress(address)
-		if err != nil {
-			return fmt.Errorf("%w: parsing address: %v", ErrRequest, err)
-		}
-		dom = pa.Domain
-	}
 	dc, ok := mox.Conf.Dynamic.Domains[dom.Name()]
 	if !ok {
 		return fmt.Errorf("%w: unknown domain in address %q", ErrRequest, address)
@@ -949,7 +968,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	// And remove as member from aliases configured in domains.
 	domains := maps.Clone(mox.Conf.Dynamic.Domains)
 	for _, aa := range na.Aliases {
-		if aa.SubscriptionAddress != address {
+		if aa.SubscriptionAddress != configuredAddress {
 			continue
 		}
 
@@ -964,7 +983,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 			return fmt.Errorf("cannot find alias %s", aliasAddr)
 		}
 		a.Addresses = slices.Clone(a.Addresses)
-		a.Addresses = slices.DeleteFunc(a.Addresses, func(v string) bool { return v == address })
+		a.Addresses = slices.DeleteFunc(a.Addresses, func(v string) bool { return v == configuredAddress })
 		if len(a.Addresses) == 0 {
 			return fmt.Errorf("address is last member of alias %s, add new members or remove alias first", aliasAddr)
 		}
@@ -997,7 +1016,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		} else {
 			// We are removing a regular address. If the queued message matches the address,
 			// the catchall address must be configured for this account.
-			if xad, ok := mox.Conf.AccountDestinationsLocked["@"+m.SenderDomainStr]; (!ok || xad.Account != ad.Account) && sa == address {
+			if xad, ok := mox.Conf.AccountDestinationsLocked["@"+m.SenderDomainStr]; (!ok || xad.Account != ad.Account) && sa == queueAddressKey {
 				return fmt.Errorf("%w: message delivery queue contains message with sender address %q and no catchall address is configured, drop message from queue first", ErrRequest, sa)
 			}
 		}
