@@ -66,9 +66,18 @@ func monitorDNSBL(log mlog.Log) {
 	}
 	prevResults := map[key]struct{}{}
 
+	// When a zone/ip first hit a temporary dns error, so a persistent resolver
+	// failure still shows up as "possibly listed" instead of freezing a stale
+	// value forever.
+	temperrSince := map[key]time.Time{}
+	const temperrLimit = time.Hour
+
 	// Last time we checked, and how many outgoing delivery connections were made at that time.
 	var last time.Time
 	var lastConns int64
+	// Whether the previous round ended with a temporary dns error. If so, check
+	// again instead of waiting up to 3 hours for the next round.
+	var lastTemperr bool
 
 	resolver := dns.StrictResolver{Pkg: "dnsblmonitor"}
 	var sleep time.Duration // No sleep on first iteration.
@@ -77,7 +86,7 @@ func monitorDNSBL(log mlog.Log) {
 		// We check more often when we send more. Every 100 messages, and between 5 mins
 		// and 3 hours.
 		conns := queue.ConnectionCounter()
-		if sleep > 0 && conns < lastConns+100 && time.Since(last) < 3*time.Hour {
+		if sleep > 0 && conns < lastConns+100 && time.Since(last) < 3*time.Hour && !lastTemperr {
 			continue
 		}
 		sleep = 5 * time.Minute
@@ -117,10 +126,12 @@ func monitorDNSBL(log mlog.Log) {
 			if !slices.Contains(zones, k.zone) || !slices.Contains(publicIPstrs, k.ip) {
 				metricDNSBL.DeleteLabelValues(k.zone.Name(), k.ip)
 				delete(prevResults, k)
+				delete(temperrSince, k)
 			}
 		}
 
 		// Do DNSBL checks and update metric.
+		lastTemperr = false
 		for _, ip := range publicIPs {
 			for _, zone := range zones {
 				status, expl, err := dnsbl.Lookup(mox.Context, log.Logger, resolver, zone, ip)
@@ -131,17 +142,28 @@ func monitorDNSBL(log mlog.Log) {
 						slog.String("expl", expl),
 						slog.Any("status", status))
 				}
-				// A temporary dns error says nothing about whether our ip is in the block
-				// list, so keep the last known value instead of resetting the metric.
-				if status != dnsbl.StatusTemperr {
+				k := key{zone, ip.String()}
+				prevResults[k] = struct{}{}
+				if status == dnsbl.StatusTemperr {
+					lastTemperr = true
+					// A temporary dns error says nothing about whether our ip is in the block
+					// list, so keep the last known value instead of resetting the metric. But
+					// don't keep it forever: after a while, report "possibly listed" so a
+					// persistent resolver failure is still visible.
+					since, ok := temperrSince[k]
+					if !ok {
+						temperrSince[k] = time.Now()
+					} else if time.Since(since) >= temperrLimit {
+						metricDNSBL.WithLabelValues(zone.Name(), ip.String()).Set(1)
+					}
+				} else {
+					delete(temperrSince, k)
 					var v float64
 					if status == dnsbl.StatusPass {
 						v = 1
 					}
 					metricDNSBL.WithLabelValues(zone.Name(), ip.String()).Set(v)
 				}
-				k := key{zone, ip.String()}
-				prevResults[k] = struct{}{}
 
 				time.Sleep(time.Second)
 			}
