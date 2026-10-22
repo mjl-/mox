@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/store"
 )
@@ -15,7 +16,7 @@ var Accounts SessionAuth = accountSessionAuth{}
 type accountSessionAuth struct{}
 
 func (accountSessionAuth) login(ctx context.Context, log mlog.Log, username, password string) (valid, disabled bool, accName string, rerr error) {
-	acc, accName, err := store.OpenEmailAuth(log, username, password, true)
+	acc, accName, err := admin.OpenEmailAuth(log, username, password, true, true)
 	if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
 		return false, false, accName, nil
 	} else if err != nil && errors.Is(err, store.ErrLoginDisabled) {
