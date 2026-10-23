@@ -1668,6 +1668,18 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				}
 				c.Accounts[accName].Destinations[addrName].Rulesets[i].HeadersRegexpCompiled = hdr
 
+				if rs.AttachmentFilenameRegexp != "" {
+					n++
+					if strings.ToLower(rs.AttachmentFilenameRegexp) != rs.AttachmentFilenameRegexp {
+						addRulesetErrorf("AttachmentFilenameRegexp %q must only have lower case characters", rs.AttachmentFilenameRegexp)
+					}
+					r, err := regexp.Compile(rs.AttachmentFilenameRegexp)
+					if err != nil {
+						addRulesetErrorf("invalid AttachmentFilenameRegexp: %v", err)
+					}
+					c.Accounts[accName].Destinations[addrName].Rulesets[i].AttachmentFilenameRegexpCompiled = r
+				}
+
 				if n == 0 {
 					addRulesetErrorf("ruleset must have at least one rule")
 				}

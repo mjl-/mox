@@ -514,6 +514,8 @@ type Ruleset struct {
 	HeadersRegexp      map[string]string `sconf:"optional" sconf-doc:"Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>."`
 	// todo: add a SMTPRcptTo check
 
+	AttachmentFilenameRegexp string `sconf:"optional" sconf-doc:"Matches if this regular expression matches (a substring of) any MIME part filename. Filenames come from Content-Disposition filename or Content-Type name parameters. Filenames are converted to lower case before matching. Write the regular expression in lower case, e.g. '\\.html?$' to match .html/.htm attachments. Useful together with HeadersRegexp on Subject to route phishing patterns (e.g. invoice subjects with HTML attachments) to Junk."`
+
 	// todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.
 	IsForward              bool   `sconf:"optional" sconf-doc:"Influences spam filtering only, this option does not change whether a message matches this ruleset. Can only be used together with SMTPMailFromRegexp and VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver the forwarded message, e.g. '^user(|\\+.*)@forward\\.example$'. Changes to junk analysis: 1. Messages are not rejected for failing a DMARC policy, because a legitimate forwarded message without valid/intact/aligned DKIM signature would be rejected because any verified SPF domain will be 'unaligned', of the forwarding mail server. 2. The sending mail server IP address, and sending EHLO and MAIL FROM domains and matching DKIM domain aren't used in future reputation-based spam classifications (but other verified DKIM domains are) because the forwarding server is not a useful spam signal for future messages."`
 	ListAllowDomain        string `sconf:"optional" sconf-doc:"Influences spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation."`
@@ -522,16 +524,17 @@ type Ruleset struct {
 	Mailbox string `sconf-doc:"Mailbox to deliver to if this ruleset matches."`
 	Comment string `sconf:"optional" sconf-doc:"Free-form comments."`
 
-	SMTPMailFromRegexpCompiled *regexp.Regexp      `sconf:"-" json:"-"`
-	MsgFromRegexpCompiled      *regexp.Regexp      `sconf:"-" json:"-"`
-	VerifiedDNSDomain          dns.Domain          `sconf:"-"`
-	HeadersRegexpCompiled      [][2]*regexp.Regexp `sconf:"-" json:"-"`
-	ListAllowDNSDomain         dns.Domain          `sconf:"-"`
+	SMTPMailFromRegexpCompiled       *regexp.Regexp      `sconf:"-" json:"-"`
+	MsgFromRegexpCompiled            *regexp.Regexp      `sconf:"-" json:"-"`
+	VerifiedDNSDomain                dns.Domain          `sconf:"-"`
+	HeadersRegexpCompiled            [][2]*regexp.Regexp `sconf:"-" json:"-"`
+	AttachmentFilenameRegexpCompiled *regexp.Regexp      `sconf:"-" json:"-"`
+	ListAllowDNSDomain               dns.Domain          `sconf:"-"`
 }
 
 // Equal returns whether r and o are equal, only looking at their user-changeable fields.
 func (r Ruleset) Equal(o Ruleset) bool {
-	if r.SMTPMailFromRegexp != o.SMTPMailFromRegexp || r.MsgFromRegexp != o.MsgFromRegexp || r.VerifiedDomain != o.VerifiedDomain || r.IsForward != o.IsForward || r.ListAllowDomain != o.ListAllowDomain || r.AcceptRejectsToMailbox != o.AcceptRejectsToMailbox || r.Mailbox != o.Mailbox || r.Comment != o.Comment {
+	if r.SMTPMailFromRegexp != o.SMTPMailFromRegexp || r.MsgFromRegexp != o.MsgFromRegexp || r.VerifiedDomain != o.VerifiedDomain || r.AttachmentFilenameRegexp != o.AttachmentFilenameRegexp || r.IsForward != o.IsForward || r.ListAllowDomain != o.ListAllowDomain || r.AcceptRejectsToMailbox != o.AcceptRejectsToMailbox || r.Mailbox != o.Mailbox || r.Comment != o.Comment {
 		return false
 	}
 	if !reflect.DeepEqual(r.HeadersRegexp, o.HeadersRegexp) {
