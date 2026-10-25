@@ -2579,6 +2579,13 @@
 					]
 				},
 				{
+					"Name": "AttachmentFilenameRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "IsForward",
 					"Docs": "todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.",
 					"Typewords": [
