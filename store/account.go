@@ -2866,7 +2866,6 @@ func MessageRuleset(log mlog.Log, dest config.Destination, m *Message, msgPrefix
 	}
 
 	var attachmentsWalked bool
-	var attachmentsOK bool
 
 ruleset:
 	for _, rs := range dest.Rulesets {
@@ -2922,13 +2921,11 @@ ruleset:
 		if rs.AttachmentFilenameRegexpCompiled != nil {
 			if !attachmentsWalked {
 				attachmentsWalked = true
-				if err := p.Walk(log.Logger, nil); err != nil {
+				if err := p.WalkRaw(log.Logger, nil); err != nil {
 					log.Errorx("parsing message parts for attachment filename rulesets", err, slog.String("parse", ""))
-				} else {
-					attachmentsOK = true
 				}
 			}
-			if !attachmentsOK || !partMatchesAttachmentFilename(&p, rs.AttachmentFilenameRegexpCompiled) {
+			if !partMatchesAttachmentFilename(&p, rs.AttachmentFilenameRegexpCompiled) {
 				continue ruleset
 			}
 		}
