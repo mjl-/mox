@@ -274,6 +274,21 @@ func TestAccount(t *testing.T) {
 
 	api.DestinationSave(ctx, "mjl☺@mox.example", account.Destinations["mjl☺@mox.example"], account.Destinations["mjl☺@mox.example"]) // todo: save modified value and compare it afterwards
 
+	// Header field regexp with newline would inject lines into domains.conf.
+	badDest := account.Destinations["mjl☺@mox.example"]
+	badDest.Rulesets = []config.Ruleset{{HeadersRegexp: map[string]string{"^list-id$\n\t\t\t\t\tx": "test"}, Mailbox: "Inbox"}}
+	tneedErrorCode(t, "user:error", func() {
+		api.DestinationSave(ctx, "mjl☺@mox.example", account.Destinations["mjl☺@mox.example"], badDest)
+	})
+
+	// Header field regexps that would not parse back from domains.conf.
+	for _, k := range []string{"", "a:b", "(?:a|b)", "#x", " #x"} {
+		badDest.Rulesets = []config.Ruleset{{HeadersRegexp: map[string]string{k: "test"}, Mailbox: "Inbox"}}
+		tneedErrorCode(t, "user:error", func() {
+			api.DestinationSave(ctx, "mjl☺@mox.example", account.Destinations["mjl☺@mox.example"], badDest)
+		})
+	}
+
 	api.AccountSaveFullName(ctx, account.FullName+" changed") // todo: check if value was changed
 	api.AccountSaveFullName(ctx, account.FullName)
 

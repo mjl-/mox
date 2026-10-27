@@ -1653,6 +1653,21 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					if strings.ToLower(k) != k {
 						addRulesetErrorf("header field %q must only have lower case characters", k)
 					}
+					// Keys are written as-is to domains.conf, so must not contain newlines, and
+					// must parse back to the same key.
+					for _, c := range k {
+						if c < ' ' || c == 0x7f {
+							addRulesetErrorf("header field %q cannot contain control characters (including newlines)", k)
+							break
+						}
+					}
+					if k == "" {
+						addRulesetErrorf("header field cannot be empty")
+					} else if strings.Contains(k, ":") {
+						addRulesetErrorf("header field %q cannot contain a colon (use a capturing group instead of (?:...))", k)
+					} else if strings.HasPrefix(strings.TrimSpace(k), "#") {
+						addRulesetErrorf("header field %q cannot start with #", k)
+					}
 					if strings.ToLower(v) != v {
 						addRulesetErrorf("header value %q must only have lower case characters", v)
 					}
