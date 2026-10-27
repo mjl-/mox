@@ -610,3 +610,39 @@ func TestParseQuotedCharset(t *testing.T) {
 	tcheck(t, err, "parse")
 	tcompare(t, p.Envelope.From, []Address{{"Kristýna", "k", "example.com"}})
 }
+
+func TestFallbackHeaderOffsets(t *testing.T) {
+	// A header line that is too long stops the parse before the end of the header is
+	// found. The fallback part must still split header and body, or FETCH BODY[HEADER]
+	// comes up empty while BODY[TEXT] returns the header too.
+	header := "Subject: test\r\nReferences: " + strings.Repeat("r", 1100) + "\r\n"
+	body := "the body\r\n"
+	s := header + "\r\n" + body
+	p, err := EnsurePart(pkglog.Logger, true, strings.NewReader(s), int64(len(s)))
+	tfail(t, err, errLineTooLong)
+	tcompare(t, p.HeaderOffset, int64(0))
+	tcompare(t, p.BodyOffset, int64(len(header)+2))
+
+	buf, err := io.ReadAll(p.HeaderReader())
+	tcheck(t, err, "read header")
+	tcompare(t, string(buf), header+"\r\n")
+
+	buf, err = io.ReadAll(p.Reader())
+	tcheck(t, err, "read body")
+	tcompare(t, string(buf), body)
+
+	// The scan for the empty line reads in chunks, and the empty line can straddle two
+	// of them.
+	for _, o := range []int{8189, 8190, 8191, 8192, 8193} {
+		header := "References: " + strings.Repeat("r", o-len("References: ")) + "\r\n"
+		s := header + "\r\n" + body
+		p, err := EnsurePart(pkglog.Logger, true, strings.NewReader(s), int64(len(s)))
+		tfail(t, err, errLineTooLong)
+		if p.BodyOffset != int64(o+4) {
+			t.Fatalf("empty line at offset %d: got body offset %d, expected %d", o, p.BodyOffset, o+4)
+		}
+		buf, err := io.ReadAll(p.Reader())
+		tcheck(t, err, "read body")
+		tcompare(t, string(buf), body)
+	}
+}
