@@ -48,7 +48,7 @@ func TestLookup(t *testing.T) {
 	test("one.example", StatusNone, "one.example", &r, nil)
 	test("absent.example", StatusNone, "absent.example", nil, ErrNoRecord)
 	test("multiple.example", StatusNone, "multiple.example", nil, ErrMultipleRecords)
-	test("malformed.example", StatusPermerror, "malformed.example", nil, ErrSyntax)
+	test("malformed.example", StatusNone, "malformed.example", &r, nil) // Bad tag is ignored, p=none applies. RFC 9989 section 4.8.
 	test("temperror.example", StatusTemperror, "temperror.example", nil, ErrDNS)
 	test("sub.example.com", StatusNone, "example.com", &r, nil) // Policy published at organizational domain, public suffix.
 }
@@ -88,7 +88,7 @@ func TestLookupExternalReportsAccepted(t *testing.T) {
 	test("example.com", "one.example", StatusNone, true, nil)
 	test("example.com", "absent.example", StatusNone, false, ErrNoRecord)
 	test("example.com", "multiple.example", StatusNone, true, nil)
-	test("example.com", "malformed.example", StatusPermerror, false, ErrSyntax)
+	test("example.com", "malformed.example", StatusNone, true, nil) // Bad tag is ignored. RFC 9989 section 4.8.
 	test("example.com", "temperror.example", StatusTemperror, false, ErrDNS)
 }
 
@@ -291,12 +291,14 @@ func TestVerify(t *testing.T) {
 		true, Result{false, StatusPass, true, false, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
-	// Bad DMARC record results in permerror without reject.
+	// A syntax error in a tag is ignored, p=none applies. RFC 9989 section 4.8.
+	malformedRecord := DefaultRecord
+	malformedRecord.Policy = PolicyNone
 	test("malformed.example",
 		[]dkim.Result{},
 		spf.StatusNone,
 		nil,
-		false, Result{false, StatusPermerror, false, false, dns.Domain{ASCII: "malformed.example"}, nil, false, ErrSyntax},
+		true, Result{false, StatusFail, false, false, dns.Domain{ASCII: "malformed.example"}, &malformedRecord, false, nil},
 	)
 
 	// DKIM domain that is higher-level than organizational can not result in a pass. ../rfc/7489:525
