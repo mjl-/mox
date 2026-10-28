@@ -1960,10 +1960,11 @@ func (Webmail) RulesetSuggestMove(ctx context.Context, msgID, mbSrcID, mbDstID i
 		var have bool
 		for _, rs := range dest.Rulesets {
 			xrs := config.Ruleset{
-				MsgFromRegexp:   rs.MsgFromRegexp,
-				HeadersRegexp:   rs.HeadersRegexp,
-				ListAllowDomain: rs.ListAllowDomain,
-				Mailbox:         nrs.Mailbox,
+				MsgFromRegexp:            rs.MsgFromRegexp,
+				HeadersRegexp:            rs.HeadersRegexp,
+				AttachmentFilenameRegexp: rs.AttachmentFilenameRegexp,
+				ListAllowDomain:          rs.ListAllowDomain,
+				Mailbox:                  nrs.Mailbox,
 			}
 			if xrs.Equal(*nrs) {
 				have = true

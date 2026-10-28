@@ -1145,6 +1145,14 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 							HeadersRegexp:
 								x:
 
+							# Matches if this regular expression matches (a substring of) any MIME part
+							# filename. Filenames come from Content-Disposition filename or Content-Type name
+							# parameters. Filenames are converted to lower case before matching. Write the
+							# regular expression in lower case, e.g. '\.html?$' to match .html/.htm
+							# attachments. Useful together with HeadersRegexp on Subject to route phishing
+							# patterns (e.g. invoice subjects with HTML attachments) to Junk. (optional)
+							AttachmentFilenameRegexp:
+
 							# Influences spam filtering only, this option does not change whether a message
 							# matches this ruleset. Can only be used together with SMTPMailFromRegexp and
 							# VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver

@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -2864,6 +2865,8 @@ func MessageRuleset(log mlog.Log, dest config.Destination, m *Message, msgPrefix
 		return nil
 	}
 
+	var attachmentsWalked bool
+
 ruleset:
 	for _, rs := range dest.Rulesets {
 		if rs.SMTPMailFromRegexpCompiled != nil {
@@ -2914,9 +2917,39 @@ ruleset:
 			}
 			continue ruleset
 		}
+
+		if rs.AttachmentFilenameRegexpCompiled != nil {
+			if !attachmentsWalked {
+				attachmentsWalked = true
+				if err := p.WalkRaw(log.Logger, nil); err != nil {
+					log.Errorx("parsing message parts for attachment filename rulesets", err, slog.String("parse", ""))
+				}
+			}
+			if !partMatchesAttachmentFilename(&p, rs.AttachmentFilenameRegexpCompiled) {
+				continue ruleset
+			}
+		}
 		return &rs
 	}
 	return nil
+}
+
+// partMatchesAttachmentFilename reports whether any MIME part filename matches re.
+// Filenames are lowercased before matching. Empty filenames are ignored.
+func partMatchesAttachmentFilename(p *message.Part, re *regexp.Regexp) bool {
+	_, filename, _ := p.DispositionFilename()
+	if filename != "" && re.MatchString(strings.ToLower(filename)) {
+		return true
+	}
+	if p.Message != nil && partMatchesAttachmentFilename(p.Message, re) {
+		return true
+	}
+	for i := range p.Parts {
+		if partMatchesAttachmentFilename(&p.Parts[i], re) {
+			return true
+		}
+	}
+	return false
 }
 
 // MessagePath returns the file system path of a message.

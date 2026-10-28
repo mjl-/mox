@@ -250,6 +250,55 @@ func (p *Part) Walk(elog *slog.Logger, parent *Part) error {
 	}
 }
 
+// WalkRaw is like Walk, but discards leaf bodies with RawReader instead of the
+// decoded Reader. Use when only part structure and headers (e.g. filenames) are
+// needed: Content-Transfer-Encoding errors such as truncated base64 then do not
+// prevent later sibling parts from being discovered.
+func (p *Part) WalkRaw(elog *slog.Logger, parent *Part) error {
+	log := mlog.New("message", elog)
+
+	if len(p.bound) == 0 {
+		if p.MediaType == "MESSAGE" && (p.MediaSubType == "RFC822" || p.MediaSubType == "GLOBAL") {
+			buf, err := io.ReadAll(p.RawReader())
+			if err != nil {
+				return err
+			}
+			br := bytes.NewReader(buf)
+			mp, err := Parse(log.Logger, p.strict, br)
+			if err != nil {
+				return fmt.Errorf("parsing embedded message: %w", err)
+			}
+			if err := mp.WalkRaw(log.Logger, nil); err != nil {
+				if errors.Is(err, errUnexpectedEOF) && !Pedantic && parent != nil && len(parent.Parts) >= 3 && p == &parent.Parts[2] && parent.MediaType == "MULTIPART" && parent.MediaSubType == "REPORT" {
+					mp, err = fallbackPart(mp, br, int64(len(buf)))
+					if err != nil {
+						return fmt.Errorf("parsing invalid embedded message: %w", err)
+					}
+				} else {
+					return fmt.Errorf("parsing parts of embedded message: %w", err)
+				}
+			}
+			p.Message = &mp
+			return nil
+		}
+		_, err := io.Copy(io.Discard, p.RawReader())
+		return err
+	}
+
+	for {
+		pp, err := p.ParseNextPart(log.Logger)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := pp.WalkRaw(log.Logger, p); err != nil {
+			return err
+		}
+	}
+}
+
 // String returns a debugging representation of the part.
 func (p *Part) String() string {
 	return fmt.Sprintf("&Part{%s/%s offsets %d/%d/%d/%d lines %d decodedsize %d next %d last %d bound %q parts %v}", p.MediaType, p.MediaSubType, p.BoundaryOffset, p.HeaderOffset, p.BodyOffset, p.EndOffset, p.RawLineCount, p.DecodedSize, p.nextBoundOffset, p.lastBoundOffset, p.bound, p.Parts)

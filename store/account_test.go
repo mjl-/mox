@@ -356,6 +356,186 @@ test
 	}
 
 	// todo: test the SMTPMailFrom and VerifiedDomains rule.
+
+	const attachDestConf = `
+Rulesets:
+	-
+		HeadersRegexp:
+			^subject$: rechnung
+		AttachmentFilenameRegexp: \.html?$
+		Mailbox: Junk
+`
+	var attachDest config.Destination
+	err = sconf.Parse(strings.NewReader(attachDestConf), &attachDest)
+	tcheck(t, err, "parse attachment ruleset config")
+	compileRuleset(t, &attachDest.Rulesets[0])
+
+	msgSubjectHTML := []byte(strings.ReplaceAll(`From: <spammer@evil.example>
+To: <you@mox.example>
+Subject: Ihre Rechnung 12345
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain
+
+See attachment.
+
+--b1
+Content-Type: text/html; name="invoice.html"
+Content-Disposition: attachment; filename="invoice.html"
+Content-Transfer-Encoding: 7bit
+
+<html><body>pay now</body></html>
+
+--b1--
+`, "\n", "\r\n"))
+	c = MessageRuleset(log, attachDest, &Message{}, msgSubjectHTML, f)
+	if c == nil {
+		t.Fatalf("expected ruleset match for subject+html attachment")
+	}
+
+	msgSubjectOnly := []byte(strings.ReplaceAll(`From: <vendor@example.org>
+To: <you@mox.example>
+Subject: Ihre Rechnung 12345
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain
+
+See PDF.
+
+--b1
+Content-Type: application/pdf; name="invoice.pdf"
+Content-Disposition: attachment; filename="invoice.pdf"
+Content-Transfer-Encoding: 7bit
+
+%PDF-1.4
+
+--b1--
+`, "\n", "\r\n"))
+	c = MessageRuleset(log, attachDest, &Message{}, msgSubjectOnly, f)
+	if c != nil {
+		t.Fatalf("expected no ruleset match for subject without html attachment")
+	}
+
+	msgHTMLOnly := []byte(strings.ReplaceAll(`From: <spammer@evil.example>
+To: <you@mox.example>
+Subject: Important document
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain
+
+See attachment.
+
+--b1
+Content-Type: text/html; name="doc.html"
+Content-Disposition: attachment; filename="doc.html"
+Content-Transfer-Encoding: 7bit
+
+<html><body>click</body></html>
+
+--b1--
+`, "\n", "\r\n"))
+	c = MessageRuleset(log, attachDest, &Message{}, msgHTMLOnly, f)
+	if c != nil {
+		t.Fatalf("expected no ruleset match for html attachment without matching subject")
+	}
+
+	msgNestedHTML := []byte(strings.ReplaceAll(`From: <spammer@evil.example>
+To: <you@mox.example>
+Subject: Rechnung offline
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: text/plain
+
+Nested.
+
+--outer
+Content-Type: multipart/mixed; boundary="inner"
+
+--inner
+Content-Type: text/html; name="rechnung.htm"
+Content-Disposition: attachment; filename="Rechnung.HTM"
+Content-Transfer-Encoding: 7bit
+
+<html><body>pay</body></html>
+
+--inner--
+--outer--
+`, "\n", "\r\n"))
+	c = MessageRuleset(log, attachDest, &Message{}, msgNestedHTML, f)
+	if c == nil {
+		t.Fatalf("expected ruleset match for nested html attachment with case-insensitive filename")
+	}
+
+	// Outlook forwards often attach a Word temp image (~WRD*.jpg) before the HTML
+	// payload. Broken/truncated base64 on that image must not prevent matching the
+	// later .html filename (decoded Walk would stop with unexpected EOF).
+	msgWRDThenHTML := []byte(strings.ReplaceAll(`From: <no-reply@evil.example>
+To: <you@mox.example>
+Subject: WG: Rechnung Rechnung LIC-1056
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain
+
+Hallo
+
+--b1
+Content-Type: image/jpeg; name="~WRD1693.jpg"
+Content-Disposition: attachment; filename="~WRD1693.jpg"
+Content-Transfer-Encoding: base64
+
+/9j/4AAQ=
+
+--b1
+Content-Type: application/octet-stream; name="2026-LIC-1056.html"
+Content-Disposition: attachment; filename="2026-LIC-1056.html"
+Content-Transfer-Encoding: 7bit
+
+<html><body>pay</body></html>
+
+--b1--
+`, "\n", "\r\n"))
+	c = MessageRuleset(log, attachDest, &Message{}, msgWRDThenHTML, f)
+	if c == nil {
+		t.Fatalf("expected ruleset match for html after truncated-base64 ~WRD jpg attachment")
+	}
+}
+
+func compileRuleset(t *testing.T, rs *config.Ruleset) {
+	t.Helper()
+	var hdrs [][2]*regexp.Regexp
+	for k, v := range rs.HeadersRegexp {
+		rk, err := regexp.Compile(k)
+		tcheck(t, err, "compile header key")
+		rv, err := regexp.Compile(v)
+		tcheck(t, err, "compile header value")
+		hdrs = append(hdrs, [...]*regexp.Regexp{rk, rv})
+	}
+	rs.HeadersRegexpCompiled = hdrs
+	if rs.AttachmentFilenameRegexp != "" {
+		r, err := regexp.Compile(rs.AttachmentFilenameRegexp)
+		tcheck(t, err, "compile AttachmentFilenameRegexp")
+		rs.AttachmentFilenameRegexpCompiled = r
+	}
+	if rs.SMTPMailFromRegexp != "" {
+		r, err := regexp.Compile(rs.SMTPMailFromRegexp)
+		tcheck(t, err, "compile SMTPMailFromRegexp")
+		rs.SMTPMailFromRegexpCompiled = r
+	}
+	if rs.MsgFromRegexp != "" {
+		r, err := regexp.Compile(rs.MsgFromRegexp)
+		tcheck(t, err, "compile MsgFromRegexp")
+		rs.MsgFromRegexpCompiled = r
+	}
 }
 
 // Check that opening an account forwards the Message.ID used for new additions if
