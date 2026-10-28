@@ -23,6 +23,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 # Internet Message Format
 822	Yes	Obs	Standard for ARPA Internet Text Messages
 1847	No	-	Security Multiparts for MIME: Multipart/Signed and Multipart/Encrypted
+3156	-Partial	-	MIME Security with OpenPGP
 1864	-	-	The Content-MD5 Header Field
 2045	Yes	-	Multipurpose Internet Mail Extensions (MIME) Part One: Format of Internet Message Bodies
 2046	Yes	-	Multipurpose Internet Mail Extensions (MIME) Part Two: Media Types
@@ -149,6 +150,9 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 7673	Roadmap	-	Using DNS-Based Authentication of Named Entities (DANE) TLSA Records with SRV Records
 7929	No	-	DNS-Based Authentication of Named Entities (DANE) Bindings for OpenPGP
 8162	No	-	Using Secure DNS to Associate Certificates with Domain Names for S/MIME
+
+# OpenPGP
+9580	-Partial	-	OpenPGP
 
 # MTA-STS
 8461	Yes	-	SMTP MTA Strict Transport Security (MTA-STS)

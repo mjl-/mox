@@ -2618,6 +2618,17 @@ func (a *Account) SetPassword(log mlog.Log, password string) error {
 	return err
 }
 
+// PasswordSet returns whether the account has a password set.
+func (a *Account) PasswordSet() (bool, error) {
+	_, err := bstore.QueryDB[Password](context.TODO(), a.DB).Get()
+	if err == bstore.ErrAbsent {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // SessionsClear invalidates all (web) login sessions for the account.
 func (a *Account) SessionsClear(ctx context.Context, log mlog.Log) error {
 	return a.DB.Write(ctx, func(tx *bstore.Tx) error {

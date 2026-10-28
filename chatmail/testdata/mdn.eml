@@ -1,0 +1,33 @@
+Subject: Message opened
+From: <one@example.org>
+To: <two@example.org>
+Date: Sun, 15 Oct 2023 16:43:25 +0000
+Message-ID: <Mr.78MWtlV7RAi.goCFzBhCYfy@c2.testrun.org>
+Auto-Submitted: auto-replied
+Chat-Version: 1.0
+MIME-Version: 1.0
+Content-Type: multipart/report; report-type=disposition-notification;
+	boundary="Gl92xgZjOShJ5PGHntqYkoo2OK2Dvi"
+
+
+--Gl92xgZjOShJ5PGHntqYkoo2OK2Dvi
+Content-Type: text/plain; charset=utf-8; format=flowed; delsp=no
+
+The "Hi!" message you sent was displayed on the screen of the recipient.
+
+This is no guarantee the content was read.
+
+
+--Gl92xgZjOShJ5PGHntqYkoo2OK2Dvi
+Content-Type: message/disposition-notification
+
+Reporting-UA: Delta Chat 1.124.1
+Original-Recipient: rfc822;barbaz@c2.testrun.org
+Final-Recipient: rfc822;barbaz@c2.testrun.org
+Original-Message-ID: <Mr.MvmCz-GQbi_.6FGRkhDf05c@c2.testrun.org>
+Disposition: manual-action/MDN-sent-automatically; displayed
+
+
+--Gl92xgZjOShJ5PGHntqYkoo2OK2Dvi--
+
+

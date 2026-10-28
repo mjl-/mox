@@ -71,6 +71,8 @@ check:
 	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which xshadow) rfc/xr.go
 
 fuzz:
+	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzEncryptedPayload -fuzztime 5m ./chatmail
+	CGO_ENABLED=0 nice go test -fullpath -fuzz '^FuzzEncrypted$' -fuzztime 5m ./chatmail
 	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseSignature -fuzztime 5m ./dkim
 	CGO_ENABLED=0 nice go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./dkim
 	CGO_ENABLED=0 nice go test -fullpath -fuzz . -fuzztime 5m ./dmarc
