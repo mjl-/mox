@@ -24,7 +24,6 @@ func TestParse(t *testing.T) {
 	bad("v=DMARC1 p=none")                                     // missing ;
 	bad("v=DMARC1;")                                           // missing p, no rua
 	bad("v=DMARC1; sp=invalid")                                // invalid sp, no rua
-	bad("v=DMARC1; sp=reject; p=reject")                       // p must be directly after v
 	bad("v=DMARC1; p=none; p=none")                            // dup
 	bad("v=DMARC1; p=none; p=reject")                          // dup
 	bad("v=DMARC1;;")                                          // missing tag
@@ -94,6 +93,23 @@ func TestParse(t *testing.T) {
 			{Address: "mailto:mjl@mox.example"},
 		},
 	})) // ../rfc/7489:1407
+	// p may appear anywhere after v, only v must be first. RFC 9989 section 4.8.
+	xr := DefaultRecord
+	xr.Policy = PolicyReject
+	xr.SubdomainPolicy = PolicyReject
+	valid("v=DMARC1; sp=reject; p=reject", xr)
+	// Tags with syntax errors are discarded, the rest of the record (notably p=)
+	// must still apply. RFC 9989 section 4.8.
+	xr = DefaultRecord
+	xr.Policy = PolicyReject
+	valid("v=DMARC1; p=reject; rua=dmarc@example.com", xr) // bad rua dropped.
+	xr.AggregateReportAddresses = []URI{{Address: "mailto:dmarc@example.com"}}
+	valid("v=DMARC1; p=reject;; rua=mailto:dmarc@example.com", xr) // empty tag dropped.
+	xr = DefaultRecord
+	xr.Policy = PolicyReject
+	valid("v=DMARC1; p=reject; rua=mailto:dmarc@example.com,", xr) // bad rua list dropped.
+	valid("v=DMARC1; p=reject; adkim=relaxed", xr)                 // bad adkim dropped, keeps default.
+	valid("v=DMARC1; p=reject; fo=1:2", xr)                        // bad fo dropped.
 	valid("v=DMARC1; p=none; rua=mailto:dmarc-feedback@example.com", record(Record{
 		Policy: "none",
 		AggregateReportAddresses: []URI{

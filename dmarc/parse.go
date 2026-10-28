@@ -65,85 +65,101 @@ func parseRecord(s string, checkRequired bool) (record *Record, isdmarc bool, re
 		if p.empty() {
 			break
 		}
-		W := p.xword()
-		w := strings.ToLower(W)
-		if seen[w] {
-			// RFC does not say anything about duplicate tags. They can only confuse, so we
-			// don't allow them.
-			p.xerrorf("duplicate tag %q", W)
-		}
-		seen[w] = true
-		p.wsp()
-		p.xtake("=")
-		p.wsp()
-		switch w {
-		default:
-			// ../rfc/7489:924 implies that we should know how to parse unknown tags.
-			// The formal definition at ../rfc/7489:1127 does not allow for unknown tags.
-			// We just parse until the next semicolon or end.
-			for !p.empty() {
-				if p.peek(';') {
-					break
-				}
-				p.xtaken(1)
+		// A syntax error in a tag must not reject the entire record. RFC 9989
+		// section 4.8 requires discarding/ignoring errors in the remainder of the
+		// record, keeping the rest (notably the p= policy). Parse the tag against a
+		// copy, and restore the copy if the tag turns out to be invalid.
+		snapshot := r
+		var w string
+		var dup bool
+		ok := p.xtag(func() {
+			W := p.xword()
+			w = strings.ToLower(W)
+			if seen[w] {
+				// RFC does not say anything about duplicate tags. They can only confuse, so we
+				// don't allow them.
+				dup = true
+				p.xerrorf("duplicate tag %q", W)
 			}
-		case "p":
-			if len(seen) != 1 {
-				// ../rfc/7489:1105
-				p.xerrorf("p= (policy) must be first tag")
-			}
-			r.Policy = Policy(p.xtakelist("none", "quarantine", "reject"))
-		case "sp":
-			r.SubdomainPolicy = Policy(p.xkeyword())
-			// note: we check if the value is valid before returning.
-		case "rua":
-			r.AggregateReportAddresses = append(r.AggregateReportAddresses, p.xuri())
 			p.wsp()
-			for p.take(",") {
-				p.wsp()
+			p.xtake("=")
+			p.wsp()
+			switch w {
+			default:
+				// ../rfc/7489:924 implies that we should know how to parse unknown tags.
+				// The formal definition at ../rfc/7489:1127 does not allow for unknown tags.
+				// We just parse until the next semicolon or end.
+				for !p.empty() {
+					if p.peek(';') {
+						break
+					}
+					p.xtaken(1)
+				}
+			case "p":
+				// RFC 9989 section 4.8 only requires v to be the first tag, p may
+				// appear anywhere after it.
+				r.Policy = Policy(p.xtakelist("none", "quarantine", "reject"))
+			case "sp":
+				r.SubdomainPolicy = Policy(p.xkeyword())
+				// note: we check if the value is valid before returning.
+			case "rua":
 				r.AggregateReportAddresses = append(r.AggregateReportAddresses, p.xuri())
 				p.wsp()
-			}
-		case "ruf":
-			r.FailureReportAddresses = append(r.FailureReportAddresses, p.xuri())
-			p.wsp()
-			for p.take(",") {
-				p.wsp()
+				for p.take(",") {
+					p.wsp()
+					r.AggregateReportAddresses = append(r.AggregateReportAddresses, p.xuri())
+					p.wsp()
+				}
+			case "ruf":
 				r.FailureReportAddresses = append(r.FailureReportAddresses, p.xuri())
 				p.wsp()
+				for p.take(",") {
+					p.wsp()
+					r.FailureReportAddresses = append(r.FailureReportAddresses, p.xuri())
+					p.wsp()
+				}
+			case "adkim":
+				r.ADKIM = Align(p.xtakelist("r", "s"))
+			case "aspf":
+				r.ASPF = Align(p.xtakelist("r", "s"))
+			case "ri":
+				r.AggregateReportingInterval = p.xnumber()
+			case "fo":
+				r.FailureReportingOptions = []string{p.xtakelist("0", "1", "d", "s")}
+				p.wsp()
+				for p.take(":") {
+					p.wsp()
+					r.FailureReportingOptions = append(r.FailureReportingOptions, p.xtakelist("0", "1", "d", "s"))
+					p.wsp()
+				}
+			case "rf":
+				r.ReportingFormat = []string{p.xkeyword()}
+				p.wsp()
+				for p.take(":") {
+					p.wsp()
+					r.ReportingFormat = append(r.ReportingFormat, p.xkeyword())
+					p.wsp()
+				}
+			case "pct":
+				r.Percentage = p.xnumber()
+				if r.Percentage > 100 {
+					p.xerrorf("bad percentage %d", r.Percentage)
+				}
 			}
-		case "adkim":
-			r.ADKIM = Align(p.xtakelist("r", "s"))
-		case "aspf":
-			r.ASPF = Align(p.xtakelist("r", "s"))
-		case "ri":
-			r.AggregateReportingInterval = p.xnumber()
-		case "fo":
-			r.FailureReportingOptions = []string{p.xtakelist("0", "1", "d", "s")}
 			p.wsp()
-			for p.take(":") {
-				p.wsp()
-				r.FailureReportingOptions = append(r.FailureReportingOptions, p.xtakelist("0", "1", "d", "s"))
-				p.wsp()
+			if !p.take(";") && !p.empty() {
+				p.xerrorf("expected ;")
 			}
-		case "rf":
-			r.ReportingFormat = []string{p.xkeyword()}
-			p.wsp()
-			for p.take(":") {
-				p.wsp()
-				r.ReportingFormat = append(r.ReportingFormat, p.xkeyword())
-				p.wsp()
+		})
+		if !ok {
+			if dup {
+				// Duplicate tags remain fatal. RFC 9989 does not specify a behaviour.
+				p.xerrorf("duplicate tag %q", w)
 			}
-		case "pct":
-			r.Percentage = p.xnumber()
-			if r.Percentage > 100 {
-				p.xerrorf("bad percentage %d", r.Percentage)
-			}
+			r = snapshot
+			continue
 		}
-		p.wsp()
-		if !p.take(";") && !p.empty() {
-			p.xerrorf("expected ;")
-		}
+		seen[w] = true
 	}
 
 	// ../rfc/7489:1106 says "p" is required, but ../rfc/7489:1407 implies we must be
@@ -194,6 +210,27 @@ func (p *parser) xerrorf(format string, args ...any) {
 		msg += fmt.Sprintf(" (remain %q)", p.s[p.o:])
 	}
 	panic(parseErr(msg))
+}
+
+// xtag runs fn, and if it panics with a parseErr, skips the rest of the tag up
+// to and including the next ";" (or the end of the record), and returns false.
+// Used to ignore tags with syntax errors, as required by RFC 9989 section 4.8.
+func (p *parser) xtag(fn func()) (ok bool) {
+	defer func() {
+		x := recover()
+		if x == nil {
+			return
+		}
+		if _, is := x.(parseErr); !is {
+			panic(x)
+		}
+		for !p.empty() && !p.peek(';') {
+			p.o++
+		}
+		p.take(";")
+	}()
+	fn()
+	return true
 }
 
 func (p *parser) empty() bool {
