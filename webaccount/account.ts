@@ -1474,7 +1474,7 @@ openssl pkcs12 \\
 		dom.table(
 			dom.thead(
 				dom.tr(
-					dom.th('Address', attr.title('Address that caused this entry to be added to the list. The title (shown on hover) displays an address with a fictional simplified localpart, with lower-cased, dots removed, only first part before "+" or "-" (typicaly catchall separators). When checking if an address is on the suppression list, it is checked against this address.')),
+					dom.th('Address', attr.title('Address that caused this entry to be added to the list. The title (shown on hover) displays an address with a fictional simplified localpart: lower-cased, only first part before "+" (typical plus-addressing / catchall separator), and with dots removed only for Gmail domains. When checking if an address is on the suppression list, it is checked against this address.')),
 					dom.th('Manual', attr.title('Whether suppression was added manually, instead of automatically based on bounces.')),
 					dom.th('Reason'),
 					dom.th('Since'),

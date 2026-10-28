@@ -135,7 +135,7 @@ export interface Suppression {
 	ID: number
 	Created: Date
 	Account: string  // Suppression applies to this account only.
-	BaseAddress: string  // Unicode. Address with fictional simplified localpart: lowercase, dots removed (gmail), first token before any "-" or "+" (typical catchall separator).
+	BaseAddress: string  // Unicode. Address with fictional simplified localpart: lowercase, first token before any "+" (typical plus-addressing / catchall separator). Dots are removed only for Gmail domains (gmail.com, googlemail.com); for other domains "." is kept as a significant localpart character. Hyphens are kept; "-" is not treated as a subaddress separator.
 	OriginalAddress: string  // Unicode. Address that caused this suppression.
 	Manual: boolean
 	Reason: string

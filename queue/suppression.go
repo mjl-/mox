@@ -9,6 +9,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/webapi"
@@ -18,11 +19,33 @@ import (
 
 var errSuppressed = errors.New("address is on suppression list")
 
+// gmailStyleDomain reports whether the domain is known to ignore dots in
+// localparts (Gmail / googlemail). Other domains treat "." as significant per
+// RFC 5321/5322, so suppression must not strip dots for them.
+func gmailStyleDomain(d dns.IPDomain) bool {
+	if len(d.IP) > 0 || d.Domain.ASCII == "" {
+		return false
+	}
+	switch strings.ToLower(d.Domain.ASCII) {
+	case "gmail.com", "googlemail.com":
+		return true
+	}
+	return false
+}
+
+// baseAddress returns a simplified form of an address for suppression matching.
+// Localparts are lowercased and truncated at "+" (common plus-addressing /
+// subaddress separator). Dots are removed only for Gmail domains (gmail.com,
+// googlemail.com), where they are not significant. For all other domains, "."
+// is kept: under the RFCs the local part is opaque and a bounce to a.b@example.com
+// must not suppress abc@example.com. Hyphens are kept for the same reason.
+// See issue #478.
 func baseAddress(a smtp.Path) smtp.Path {
 	s := string(a.Localpart)
 	s, _, _ = strings.Cut(s, "+")
-	s, _, _ = strings.Cut(s, "-")
-	s = strings.ReplaceAll(s, ".", "")
+	if gmailStyleDomain(a.IPDomain) {
+		s = strings.ReplaceAll(s, ".", "")
+	}
 	s = strings.ToLower(s)
 	return smtp.Path{Localpart: smtp.Localpart(s), IPDomain: a.IPDomain}
 }
