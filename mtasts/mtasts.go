@@ -117,7 +117,7 @@ func (p Policy) String() string {
 	line("mode", string(p.Mode))
 	line("max_age", fmt.Sprintf("%d", p.MaxAgeSeconds))
 	for _, mx := range p.MX {
-		s := mx.Domain.Name()
+		s := mx.Domain.ASCII
 		if mx.Wildcard {
 			s = "*." + s
 		}
