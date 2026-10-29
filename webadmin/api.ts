@@ -960,6 +960,7 @@ export interface TransportSMTP {
 	STARTTLSInsecureSkipVerify: boolean
 	NoSTARTTLS: boolean
 	Auth?: SMTPAuth | null
+	StripDKIM: boolean
 }
 
 // SMTPAuth hold authentication credentials used when delivering messages
@@ -1263,7 +1264,7 @@ export const types: TypenameMap = {
 	"WebForward": {"Name":"WebForward","Docs":"","Fields":[{"Name":"StripPath","Docs":"","Typewords":["bool"]},{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"ResponseHeaders","Docs":"","Typewords":["{}","string"]}]},
 	"WebInternal": {"Name":"WebInternal","Docs":"","Fields":[{"Name":"BasePath","Docs":"","Typewords":["string"]},{"Name":"Service","Docs":"","Typewords":["string"]}]},
 	"Transport": {"Name":"Transport","Docs":"","Fields":[{"Name":"Submissions","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"Submission","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"SMTP","Docs":"","Typewords":["nullable","TransportSMTP"]},{"Name":"Socks","Docs":"","Typewords":["nullable","TransportSocks"]},{"Name":"Direct","Docs":"","Typewords":["nullable","TransportDirect"]},{"Name":"Fail","Docs":"","Typewords":["nullable","TransportFail"]}]},
-	"TransportSMTP": {"Name":"TransportSMTP","Docs":"","Fields":[{"Name":"Host","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["int32"]},{"Name":"STARTTLSInsecureSkipVerify","Docs":"","Typewords":["bool"]},{"Name":"NoSTARTTLS","Docs":"","Typewords":["bool"]},{"Name":"Auth","Docs":"","Typewords":["nullable","SMTPAuth"]}]},
+	"TransportSMTP": {"Name":"TransportSMTP","Docs":"","Fields":[{"Name":"Host","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["int32"]},{"Name":"STARTTLSInsecureSkipVerify","Docs":"","Typewords":["bool"]},{"Name":"NoSTARTTLS","Docs":"","Typewords":["bool"]},{"Name":"Auth","Docs":"","Typewords":["nullable","SMTPAuth"]},{"Name":"StripDKIM","Docs":"","Typewords":["bool"]}]},
 	"SMTPAuth": {"Name":"SMTPAuth","Docs":"","Fields":[{"Name":"Username","Docs":"","Typewords":["string"]},{"Name":"Password","Docs":"","Typewords":["string"]},{"Name":"Mechanisms","Docs":"","Typewords":["[]","string"]}]},
 	"TransportSocks": {"Name":"TransportSocks","Docs":"","Fields":[{"Name":"Address","Docs":"","Typewords":["string"]},{"Name":"RemoteIPs","Docs":"","Typewords":["[]","string"]},{"Name":"RemoteHostname","Docs":"","Typewords":["string"]}]},
 	"TransportDirect": {"Name":"TransportDirect","Docs":"","Fields":[{"Name":"DisableIPv4","Docs":"","Typewords":["bool"]},{"Name":"DisableIPv6","Docs":"","Typewords":["bool"]}]},

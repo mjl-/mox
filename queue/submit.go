@@ -200,6 +200,9 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	var size int64
 	var req8bit, reqsmtputf8 bool
 	if len(m0.DSNUTF8) > 0 && client.SupportsSMTPUTF8() {
+		if transport.StripDKIM {
+			m0.DSNUTF8 = stripDKIMHeader(m0.DSNUTF8)
+		}
 		msgr = io.NopCloser(bytes.NewReader(m0.DSNUTF8))
 		reqsmtputf8 = true
 		size = int64(len(m0.DSNUTF8))
@@ -214,6 +217,12 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			submiterr = fmt.Errorf("transport %s: opening message file for submission: %w", transportName, err)
 			failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 			return
+		}
+		if transport.StripDKIM {
+			originalPrefixSize := int64(len(m0.MsgPrefix))
+			m0.MsgPrefix = stripDKIMHeader(m0.MsgPrefix)
+			newPrefixSize := int64(len(m0.MsgPrefix))
+			size = size - (originalPrefixSize - newPrefixSize)
 		}
 		msgr = store.FileMsgReader(m0.MsgPrefix, f)
 		defer func() {
@@ -293,4 +302,30 @@ func processDeliveries(qlog mlog.Log, m0 *Msg, msgs []*Msg, remoteAddr string, r
 		kick()
 	}
 	return
+}
+
+// Remove DKIM-Signature header. Used to strip signature from MsgPrefix
+// and DSNUTF8 when sending to smart hosts.
+func stripDKIMHeader(msgPrefix []byte) []byte {
+	msgPrefix, msgBody, headerEnd := bytes.Cut(msgPrefix, []byte("\r\n\r\n"))
+	if headerEnd {
+		msgPrefix = append(msgPrefix, []byte("\r\n\r\n")...)
+	}
+
+	var signature bool
+	var out bytes.Buffer
+	out.Grow(len(msgPrefix))
+	lines := bytes.SplitAfter(msgPrefix, []byte("\r\n"))
+
+	for _, line := range lines {
+		// Check not a continuation line ../rfc/5322:444
+		if len(line) > 0 && (line[0] != ' ' && line[0] != '\t') {
+			signature = bytes.HasPrefix(line, []byte("DKIM-Signature:"))
+		}
+		if !signature {
+			out.Write(line)
+		}
+	}
+
+	return append(out.Bytes(), msgBody...)
 }

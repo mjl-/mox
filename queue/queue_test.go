@@ -623,6 +623,31 @@ func TestQueue(t *testing.T) {
 		t.Fatalf("expected net.Dialer as dialer")
 	}
 
+	// Add a message to be delivered with submit because of explicitly configured transport, that strips DKIM signature.
+	hdr := strings.ReplaceAll(`DKIM-Signature: v=1; a=rsa-sha256; d=xn--h-bga.mox.example; s=xn--yr2021-pua;
+        i=m=C3=B8x@xn--h-bga.mox.example; t=1643719203; h=From:To:Cc:Bcc:Reply-To:
+        References:In-Reply-To:Subject:Date:Message-ID:Content-Type:From:To:Subject:
+        Date:Message-ID:Content-Type;
+        bh=g3zLYH4xKxcPrHOD18z9YfpQcnk/GaJedfustWU5uGs=; b=dtgAOl71h/dNPQrmZTi3SBVkm+
+        EjMnF7sWGT123fa5g+m6nGpPue+I+067wwtkWQhsedbDkqT7gZb5WaG5baZsr9e/XpJ/iX4g6YXpr
+        07aLY8eF9jazcGcRCVCqLtyq0UJQ2Oz/ML74aYu1beh3jXsoI+k3fJ+0/gKSVC7enCFpNe1HhbXVS
+        4HRy/Rw261OEIy2e20lyPT4iDk2oODabzYa28HnXIciIMELjbc/sSawG68SAnhwdkWBrRzBDMCCHm
+        wvkmgDsVJWtdzjJqjxK2mYVxBMJT0lvsutXgYQ+rr6BLtjHsOb8GMSbQGzY5SJ3N8TP02pw5OykBu
+        B/aHff1A==`, "\n", "\r\n") + "\r\n"
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", []byte(hdr), nil, time.Now(), "test")}
+	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
+	tcheck(t, err, "add message to queue for delivery")
+	transportSubmitStripDKIM := "submitstripdkim"
+	n, err = TransportSet(ctxbg, Filter{IDs: []int64{qml[0].ID}}, transportSubmitStripDKIM)
+	tcheck(t, err, "set transport")
+	if n != 1 {
+		t.Fatalf("TransportSet changed %d messages, expected 1", n)
+	}
+	wasNetDialer = testDeliver(fakeSubmitServer)
+	if !wasNetDialer {
+		t.Fatalf("expected net.Dialer as dialer")
+	}
+
 	// Add a message to be delivered with submit because of explicitly configured transport, that uses TLS.
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now(), "test")}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)

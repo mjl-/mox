@@ -6966,6 +6966,13 @@
 						"nullable",
 						"SMTPAuth"
 					]
+				},
+				{
+					"Name": "StripDKIM",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
 				}
 			]
 		},
