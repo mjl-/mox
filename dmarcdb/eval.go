@@ -753,7 +753,7 @@ Period: %s - %s UTC
 	}
 
 	// Compose the message.
-	msgPrefix, has8bit, smtputf8, messageID, err := composeAggregateReport(ctx, log, msgf, from, addrs, subject, text, reportFilename, reportFile)
+	msgPrefix, has8bit, smtputf8, smtputf8Addr, messageID, err := composeAggregateReport(ctx, log, msgf, from, addrs, subject, text, reportFilename, reportFile)
 	if err != nil {
 		return false, fmt.Errorf("composing message with outgoing dmarc aggregate report: %v", err)
 	}
@@ -790,7 +790,7 @@ Period: %s - %s UTC
 			continue
 		}
 
-		qm := queue.MakeMsg(from.Path(), rcpt.address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
+		qm := queue.MakeMsg(from.Path(), rcpt.address.Path(), has8bit, smtputf8, smtputf8Addr, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
 		qm.MaxAttempts = 5
@@ -822,16 +822,18 @@ Period: %s - %s UTC
 	return true, nil
 }
 
-func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportXMLGzipFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportXMLGzipFile *os.File) (msgPrefix string, has8bit bool, smtputf8, smtputf8Addr bool, messageID string, rerr error) {
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
-	smtputf8 = fromAddr.Localpart.IsInternational()
+	needUTF8 := fromAddr.Localpart.IsInternational()
 	for _, r := range recipients {
-		if smtputf8 {
-			smtputf8 = r.Address.Localpart.IsInternational()
+		if needUTF8 {
+			needUTF8 = r.Address.Localpart.IsInternational()
 			break
 		}
 	}
-	xc := message.NewComposer(mf, 100*1024*1024, smtputf8)
+	smtputf8Addr = needUTF8
+	smtputf8 = needUTF8
+	xc := message.NewComposer(mf, 100*1024*1024, needUTF8)
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -889,7 +891,7 @@ func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, from
 
 	msgPrefix = dkimSign(ctx, log, fromAddr, xc.SMTPUTF8, mf)
 
-	return msgPrefix, xc.Has8bit, xc.SMTPUTF8, messageID, nil
+	return msgPrefix, xc.Has8bit, smtputf8, smtputf8Addr, messageID, nil
 }
 
 // Though this functionality is quite underspecified, we'll do our best to send our
@@ -920,7 +922,7 @@ Submitting-URI: %s
 `, time.Now().Format(message.RFC5322Z), reportDomain.ASCII, reportID, reportMsgSize, mox.Conf.Static.HostnameDomain.ASCII, strings.Join(recipientStrs, ","))
 	text = strings.ReplaceAll(text, "\n", "\r\n")
 
-	msgPrefix, has8bit, smtputf8, messageID, err := composeErrorReport(ctx, log, msgf, fromAddr, recipients, subject, text)
+	msgPrefix, has8bit, smtputf8, smtputf8Addr, messageID, err := composeErrorReport(ctx, log, msgf, fromAddr, recipients, subject, text)
 	if err != nil {
 		return err
 	}
@@ -945,7 +947,7 @@ Submitting-URI: %s
 			continue
 		}
 
-		qm := queue.MakeMsg(fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
+		qm := queue.MakeMsg(fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, smtputf8Addr, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
 		qm.MaxAttempts = 5
@@ -962,16 +964,18 @@ Submitting-URI: %s
 	return nil
 }
 
-func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text string) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text string) (msgPrefix string, has8bit bool, smtputf8, smtputf8Addr bool, messageID string, rerr error) {
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
-	smtputf8 = fromAddr.Localpart.IsInternational()
+	needUTF8 := fromAddr.Localpart.IsInternational()
 	for _, r := range recipients {
-		if smtputf8 {
-			smtputf8 = r.Address.Localpart.IsInternational()
+		if needUTF8 {
+			needUTF8 = r.Address.Localpart.IsInternational()
 			break
 		}
 	}
-	xc := message.NewComposer(mf, 100*1024*1024, smtputf8)
+	smtputf8Addr = needUTF8
+	smtputf8 = needUTF8
+	xc := message.NewComposer(mf, 100*1024*1024, needUTF8)
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -1002,9 +1006,9 @@ func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr
 
 	xc.Flush()
 
-	msgPrefix = dkimSign(ctx, log, fromAddr, smtputf8, mf)
+	msgPrefix = dkimSign(ctx, log, fromAddr, needUTF8, mf)
 
-	return msgPrefix, xc.Has8bit, xc.SMTPUTF8, messageID, nil
+	return msgPrefix, xc.Has8bit, smtputf8, smtputf8Addr, messageID, nil
 }
 
 func dkimSign(ctx context.Context, log mlog.Log, fromAddr smtp.Address, smtputf8 bool, mf *os.File) string {

@@ -532,7 +532,7 @@ Period: %s - %s UTC
 	reportFilename := fmt.Sprintf("%s!%s!%d!%d.json.gz", fromDom.ASCII, polDom.ASCII, beginUTC.Unix(), endUTC.Add(-time.Second).Unix())
 
 	// Compose the message.
-	msgPrefix, has8bit, smtputf8, messageID, err := composeMessage(ctx, log, msgf, polDom, confDKIM, from, recipients, subject, text, reportFilename, reportFile)
+	msgPrefix, has8bit, smtputf8, smtputf8Addr, messageID, err := composeMessage(ctx, log, msgf, polDom, confDKIM, from, recipients, subject, text, reportFilename, reportFile)
 	if err != nil {
 		return false, fmt.Errorf("composing message with outgoing tls report: %v", err)
 	}
@@ -591,7 +591,7 @@ Period: %s - %s UTC
 			continue
 		}
 
-		qm := queue.MakeMsg(from.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
+		qm := queue.MakeMsg(from.Path(), rcpt.Address.Path(), has8bit, smtputf8, smtputf8Addr, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsTLSReport.
 		// ../rfc/8460:1077
@@ -621,16 +621,18 @@ Period: %s - %s UTC
 	return true, nil
 }
 
-func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain dns.Domain, confDKIM config.DKIM, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain dns.Domain, confDKIM config.DKIM, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit bool, smtputf8, smtputf8Addr bool, messageID string, rerr error) {
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
-	smtputf8 = fromAddr.Localpart.IsInternational()
+	needUTF8 := fromAddr.Localpart.IsInternational()
 	for _, r := range recipients {
-		if smtputf8 {
-			smtputf8 = r.Address.Localpart.IsInternational()
+		if needUTF8 {
+			needUTF8 = r.Address.Localpart.IsInternational()
 			break
 		}
 	}
-	xc := message.NewComposer(mf, 100*1024*1024, smtputf8)
+	smtputf8Addr = needUTF8
+	smtputf8 = needUTF8
+	xc := message.NewComposer(mf, 100*1024*1024, needUTF8)
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -700,8 +702,8 @@ func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain
 		selectors[i] = sel
 	}
 
-	dkimHeader, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fromAddr.Domain, selectors, smtputf8, mf)
+	dkimHeader, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fromAddr.Domain, selectors, needUTF8, mf)
 	xc.Checkf(err, "dkim-signing report message")
 
-	return dkimHeader, xc.Has8bit, xc.SMTPUTF8, messageID, nil
+	return dkimHeader, xc.Has8bit, smtputf8, smtputf8Addr, messageID, nil
 }

@@ -136,7 +136,7 @@ func ExampleComposer() {
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", "\n"))
 	// Output:
 	// From: "Charlie" <root@localhost>
-	// Subject: hi =?utf-8?q?=E2=98=BA?=
+	// Subject: =?utf-8?q?hi_=E2=98=BA?=
 	// Date: 2 Jan 2006 15:04:05 +0700
 	// Message-ID: <unique@host>
 	// MIME-Version: 1.0

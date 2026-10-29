@@ -22,6 +22,7 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
+	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtasts"
@@ -131,6 +132,21 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	// For convenience, we use m0 to access properties that are shared over all
 	// messages we are delivering.
 	m0 := msgs[0]
+
+	// If we know from a previous delivery that this domain doesn't support SMTPUTF8,
+	// and this message has non-ASCII envelope addresses (not downgradable), fail
+	// permanently without wasting a connection.
+	if m0.SMTPUTF8 && m0.SMTPUTF8Addr && m0.SenderAccount != "" && !m0.RecipientDomain.IsIP() {
+		rdt, ok := lookupRecipientDomainTLS(mox.Shutdown, qlog, m0.SenderAccount, m0.RecipientDomain.Domain.Name())
+		if ok && !rdt.SMTPUTF8 {
+			err := smtpclient.Error{
+				Permanent: true,
+				Err:       fmt.Errorf("recipient domain %s is known not to support smtputf8, and message has non-ascii envelope addresses that cannot be downgraded", m0.RecipientDomain.Domain.Name()),
+			}
+			failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, err)
+			return
+		}
+	}
 
 	// Resolve domain and hosts to attempt delivery to.
 	// These next-hop names are often the name under which we find MX records. The
@@ -665,6 +681,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 			Domain:     m0.RecipientDomain.Domain.Name(),
 			STARTTLS:   sc.TLSConnectionState() != nil,
 			RequireTLS: sc.SupportsRequireTLS(),
+			SMTPUTF8:   sc.SupportsSMTPUTF8(),
 		}
 		if err = updateRecipientDomainTLS(ctx, log, m0.SenderAccount, rdt); err != nil {
 			err = fmt.Errorf("storing recipient domain tls status: %w", err)
@@ -686,6 +703,11 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 			if errors.Is(cerr.Err, smtpclient.ErrRequireTLSUnsupported) {
 				cerr.Secode = smtp.SePol7MissingReqTLS30
 				metricRequireTLSUnsupported.WithLabelValues("norequiretls").Inc()
+			}
+			// If server does not support SMTPUTF8 and envelope addresses require it,
+			// there is no way to deliver this message — make it a permanent failure.
+			if errors.Is(cerr.Err, smtpclient.ErrSMTPUTF8Unsupported) && m0.SMTPUTF8Addr {
+				cerr.Permanent = true
 			}
 			return cerr
 		}
@@ -712,6 +734,25 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		}
 	}
 
+	// If the message requires SMTPUTF8 but the server doesn't support it, attempt to
+	// downgrade the message by re-encoding headers to MIME (RFC 2047). This is only
+	// possible if the envelope addresses are ASCII — messages with non-ASCII
+	// localparts cannot be downgraded.
+	downgraded := false
+	if smtputf8 && !sc.SupportsSMTPUTF8() && !m0.SMTPUTF8Addr {
+		msgr.Reset()
+		if final, ok := downgradeSMTPUTF8Msg(log, m0, msgr); ok {
+			smtputf8 = false
+			size = int64(len(final))
+			msg = bytes.NewReader(final)
+			resetReader = func() { msg = bytes.NewReader(final) }
+			mailFrom = m0.Sender().XString(false)
+			downgraded = true
+			log.Info("downgraded smtputf8 message for non-smtputf8 server")
+		}
+		// On failure, fall through — DeliverMultiple will return ErrSMTPUTF8Unsupported.
+	}
+
 	// Try to deliver messages. We'll do multiple transactions if the smtp server responds
 	// with "too many recipients".
 	todo := msgResps
@@ -727,7 +768,11 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 
 		rcpts := make([]string, n)
 		for i, mr := range todo[:n] {
-			rcpts[i] = mr.msg.Recipient().XString(m0.SMTPUTF8)
+			if downgraded {
+				rcpts[i] = mr.msg.Recipient().XString(false)
+			} else {
+				rcpts[i] = mr.msg.Recipient().XString(m0.SMTPUTF8)
+			}
 		}
 
 		// Only require that remote announces 8bitmime extension when in pedantic mode. All
@@ -772,6 +817,27 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 }
 
 // Update (overwite) last known starttls/requiretls support for recipient domain.
+// lookupRecipientDomainTLS returns the cached TLS capabilities for the
+// recipient domain, if available. Returns zero value and false if not found.
+func lookupRecipientDomainTLS(ctx context.Context, log mlog.Log, senderAccount string, domain string) (store.RecipientDomainTLS, bool) {
+	if senderAccount == "" {
+		return store.RecipientDomainTLS{}, false
+	}
+	acc, err := store.OpenAccount(log, senderAccount, false)
+	if err != nil {
+		return store.RecipientDomainTLS{}, false
+	}
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account after tls lookup")
+	}()
+	rdt := store.RecipientDomainTLS{Domain: domain}
+	if err := acc.DB.Get(ctx, &rdt); err != nil {
+		return store.RecipientDomainTLS{}, false
+	}
+	return rdt, true
+}
+
 func updateRecipientDomainTLS(ctx context.Context, log mlog.Log, senderAccount string, rdt store.RecipientDomainTLS) error {
 	acc, err := store.OpenAccount(log, senderAccount, false)
 	if err != nil {
@@ -793,4 +859,34 @@ func updateRecipientDomainTLS(ctx context.Context, log mlog.Log, senderAccount s
 		return fmt.Errorf("adding recipient domain tls status to account database: %w", err)
 	}
 	return nil
+}
+
+// downgradeSMTPUTF8Msg reads a message from r, re-encodes non-ASCII headers to
+// RFC 2047 MIME encoding, and re-signs DKIM. Returns the final message bytes and
+// true on success. On any failure the error is logged and false is returned.
+func downgradeSMTPUTF8Msg(log mlog.Log, m0 *Msg, r io.Reader) ([]byte, bool) {
+	fullMsg, err := io.ReadAll(r)
+	if err != nil {
+		log.Errorx("reading message for smtputf8 downgrade", err)
+		return nil, false
+	}
+
+	dgMsg, err := message.DowngradeSMTPUTF8(fullMsg)
+	if err != nil {
+		log.Errorx("smtputf8 header downgrade", err)
+		return nil, false
+	}
+
+	// Re-sign DKIM. DKIMSign walks domain hierarchy to find config.
+	// Old DKIM-Signature headers remain but a new valid one is prepended.
+	dkimHeaders, err := mox.DKIMSign(mox.Shutdown, log, m0.Sender(), false, dgMsg)
+	if err != nil {
+		log.Errorx("dkim re-sign for smtputf8 downgrade", err)
+		return nil, false
+	}
+
+	if dkimHeaders != "" {
+		return append([]byte(dkimHeaders), dgMsg...), true
+	}
+	return dgMsg, true
 }
