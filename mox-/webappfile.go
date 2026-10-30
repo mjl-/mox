@@ -116,9 +116,11 @@ func (a *WebappFile) Serve(ctx context.Context, log mlog.Log, w http.ResponseWri
 				a.serverError(log, w, err, "stat customization file")
 				return false
 			}
-		} else if mtm := fi.ModTime(); mtm.After(diskmtime) {
-			diskmtime = mtm
+		} else {
 			*have = true
+			if mtm := fi.ModTime(); mtm.After(diskmtime) {
+				diskmtime = mtm
+			}
 		}
 		return true
 	}
