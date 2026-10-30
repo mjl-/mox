@@ -969,3 +969,113 @@ func fakeCert(t *testing.T, expired bool) tls.Certificate {
 	}
 	return c
 }
+
+// TestSlowServer checks that we wait for servers that delay their responses, e.g.
+// to slow down spammers, as long as each response arrives within the timeout. The
+// session lasts longer than the write timeout after STARTTLS, which previously
+// failed because writes after STARTTLS kept the deadline of the STARTTLS command.
+func TestSlowServer(t *testing.T) {
+	origReply, origDataEnd, origWrite := timeoutReply, timeoutDataEnd, timeoutWrite
+	defer func() {
+		timeoutReply, timeoutDataEnd, timeoutWrite = origReply, origDataEnd, origWrite
+	}()
+	timeoutReply = time.Second
+	timeoutDataEnd = 2 * time.Second
+	timeoutWrite = 500 * time.Millisecond
+
+	log := mlog.New("smtpclient", nil)
+	cert := fakeCert(t, false)
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+
+	// Server delays each response by delay, and the response after the message data
+	// by dataEndDelay.
+	test := func(delay, dataEndDelay time.Duration, expErr bool) {
+		t.Helper()
+
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		defer ln.Close()
+
+		serverDone := make(chan struct{})
+		go func() {
+			defer close(serverDone)
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			var c net.Conn = conn
+			br := bufio.NewReader(c)
+			readline := func() bool {
+				_, err := br.ReadString('\n')
+				return err == nil
+			}
+			writeline := func(s string) {
+				fmt.Fprintf(c, "%s\r\n", s)
+			}
+
+			time.Sleep(delay)
+			writeline("220 slow.example ESMTP")
+			readline() // EHLO
+			writeline("250-slow.example")
+			writeline("250-PIPELINING")
+			writeline("250 STARTTLS")
+			readline() // STARTTLS
+			writeline("220 go")
+			tc := tls.Server(conn, tlsConfig)
+			if err := tc.Handshake(); err != nil {
+				return
+			}
+			c = tc
+			br = bufio.NewReader(c)
+			readline() // EHLO
+			writeline("250-slow.example")
+			writeline("250 PIPELINING")
+			readline() // MAIL FROM
+			readline() // RCPT TO
+			readline() // DATA
+			time.Sleep(delay)
+			writeline("250 ok")
+			time.Sleep(delay)
+			writeline("250 ok")
+			writeline("354 continue")
+			if _, err := io.Copy(io.Discard, smtp.NewDataReader(br)); err != nil {
+				return
+			}
+			time.Sleep(dataEndDelay)
+			writeline("250 ok")
+			readline() // QUIT
+			writeline("221 ok")
+		}()
+		defer func() { <-serverDone }()
+
+		conn, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		ctx := context.Background()
+		client, err := New(ctx, log.Logger, conn, TLSOpportunistic, false, localhost, dns.Domain{ASCII: "slow.example"}, Opts{})
+		if err != nil {
+			conn.Close()
+			t.Fatalf("new client: %v", err)
+		}
+		defer client.Close()
+		msg := "From: <postmaster@mox.example>\r\nTo: <mjl@slow.example>\r\nSubject: test\r\n\r\ntest\r\n"
+		err = client.Deliver(ctx, "postmaster@mox.example", "mjl@slow.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
+		if expErr && err == nil {
+			t.Fatalf("deliver: got success, expected timeout")
+		} else if !expErr && err != nil {
+			t.Fatalf("deliver: %v", err)
+		}
+	}
+
+	// Each response within timeoutReply, session after STARTTLS longer than
+	// timeoutWrite, response after data longer than timeoutReply but within
+	// timeoutDataEnd.
+	test(400*time.Millisecond, 1500*time.Millisecond, false)
+
+	// Response after data slower than timeoutDataEnd.
+	test(0, 2500*time.Millisecond, true)
+}
