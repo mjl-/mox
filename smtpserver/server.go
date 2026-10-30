@@ -2304,6 +2304,9 @@ func (c *conn) cmdData(p *parser) {
 		return recvHdr.String()
 	}
 
+	// Chatmail servers require messages to be end-to-end encrypted.
+	c.xchatmailCheck(dataFile)
+
 	// Submission is easiest because user is trusted. Far fewer checks to make. So
 	// handle it first, and leave the rest of the function for handling wild west
 	// internet traffic.
