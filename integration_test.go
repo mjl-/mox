@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -22,6 +23,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
+	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 )
 
@@ -194,6 +196,72 @@ a message.
 		tcheck(t, err, "sendmail")
 	})
 	log.Print("success", slog.Any("duration", time.Since(t0)))
+}
+
+func TestChatmail(t *testing.T) {
+	log := mlog.New("integration", nil)
+	mlog.Logfmt = true
+
+	hostname, err := os.Hostname()
+	tcheck(t, err, "hostname")
+	ourHostname, err := dns.ParseDomain(hostname)
+	tcheck(t, err, "parse hostname")
+
+	// moxmail2 has chatmail mode enabled, with chat.example as chatmail domain.
+	const desthost = "moxmail2.mox2.example:465"
+	const imaphost = "moxmail2.mox2.example:993"
+	user := "chatmail1@chat.example"
+	password := "chatmailpassword1"
+	rcptto := "moxtest2@mox2.example"
+
+	// submit connects to submissions, authenticating as user, and delivers msg. It
+	// returns the error from the SMTP transaction, if any.
+	submit := func(msg string) error {
+		conn, err := tls.Dial("tcp", desthost, nil)
+		tcheck(t, err, "dial submission")
+		defer conn.Close()
+
+		auth := func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+			return sasl.NewClientPlain(user, password), nil
+		}
+		c, err := smtpclient.New(mox.Context, log.Logger, conn, smtpclient.TLSSkip, false, ourHostname, dns.Domain{ASCII: desthost}, smtpclient.Opts{Auth: auth})
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		return c.Deliver(mox.Context, user, rcptto, int64(len(msg)), strings.NewReader(msg), false, false, false)
+	}
+
+	// Reuse the encrypted message fixture, with the chatmail account as sender.
+	buf, err := os.ReadFile("chatmail/testdata/encrypted.eml")
+	tcheck(t, err, "read encrypted message fixture")
+	encrypted := strings.ReplaceAll(string(buf), "\r\n", "\n")
+	encrypted = strings.ReplaceAll(encrypted, "\n", "\r\n")
+	encrypted = strings.ReplaceAll(encrypted, "{subject}", "...")
+	encrypted = strings.NewReplacer("one@example.org", user, "two@example.org", rcptto).Replace(encrypted)
+
+	// First login creates the account, and the encrypted message is accepted.
+	log.Info("submitting encrypted message as new chatmail account")
+	tcheck(t, submit(encrypted), "submit encrypted message as new chatmail account")
+
+	// Unencrypted submissions from a chatmail account are rejected with 523.
+	log.Info("submitting unencrypted message as chatmail account (should be rejected)")
+	plain := fmt.Sprintf("From: <%s>\r\nTo: <%s>\r\nSubject: test\r\n\r\nunencrypted.\r\n", user, rcptto)
+	err = submit(plain)
+	var cerr smtpclient.Error
+	if !errors.As(err, &cerr) || cerr.Code != smtp.C523EncryptionNeeded {
+		t.Fatalf("unencrypted submission: got %v, expected error with code 523", err)
+	}
+
+	// The created account can log in over IMAP.
+	imapconn, err := tls.Dial("tcp", imaphost, nil)
+	tcheck(t, err, "dial imap")
+	defer imapconn.Close()
+	opts := imapclient.Opts{Logger: slog.Default().With("cid", mox.Cid())}
+	imapc, err := imapclient.New(imapconn, &opts)
+	tcheck(t, err, "new imapclient")
+	_, err = imapc.Login(user, password)
+	tcheck(t, err, "imap login")
 }
 
 func expectReadAfter2s(t *testing.T, hostport string, nextproto string, expected string) {

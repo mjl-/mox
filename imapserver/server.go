@@ -67,6 +67,7 @@ import (
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/flate"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/message"
@@ -2710,7 +2711,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 
 		var err error
-		account, c.loginAttempt.AccountName, err = store.OpenEmailAuth(c.log, username, password, false)
+		account, c.loginAttempt.AccountName, err = admin.OpenEmailAuth(c.log, username, password, false, true)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
 				c.loginAttempt.Result = store.AuthBadCredentials
@@ -3004,7 +3005,7 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 		}
 	}()
 
-	account, accName, err := store.OpenEmailAuth(c.log, username, password, true)
+	account, accName, err := admin.OpenEmailAuth(c.log, username, password, true, true)
 	c.loginAttempt.AccountName = accName
 	if err != nil {
 		var code string

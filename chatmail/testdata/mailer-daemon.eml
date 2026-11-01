@@ -1,0 +1,46 @@
+Date: Fri, 8 Jul 1994 09:21:47 -0400
+From: Mail Delivery Subsystem <MAILER-DAEMON@example.org>
+Subject: Returned mail: User unknown
+To: <owner-ups-mib@CS.UTK.EDU>
+Auto-Submitted: auto-replied 
+MIME-Version: 1.0
+Content-Type: multipart/report; report-type=delivery-status;
+      boundary="JAA13167.773673707/CS.UTK.EDU"
+
+--JAA13167.773673707/CS.UTK.EDU
+content-type: text/plain; charset=us-ascii
+
+   ----- The following addresses had delivery problems -----
+<arathib@vnet.ibm.com>  (unrecoverable error)
+<wsnell@sdcc13.ucsd.edu>  (unrecoverable error)
+
+--JAA13167.773673707/CS.UTK.EDU
+content-type: message/delivery-status
+
+Reporting-MTA: dns; cs.utk.edu
+
+Original-Recipient: rfc822;arathib@vnet.ibm.com
+Final-Recipient: rfc822;arathib@vnet.ibm.com
+Action: failed
+Status: 5.0.0 (permanent failure)
+Diagnostic-Code: smtp;
+ 550 'arathib@vnet.IBM.COM' is not a registered gateway user
+Remote-MTA: dns; vnet.ibm.com
+
+Original-Recipient: rfc822;johnh@hpnjld.njd.hp.com
+Final-Recipient: rfc822;johnh@hpnjld.njd.hp.com
+Action: delayed
+Status: 4.0.0 (hpnjld.njd.jp.com: host name lookup failure)
+
+Original-Recipient: rfc822;wsnell@sdcc13.ucsd.edu
+Final-Recipient: rfc822;wsnell@sdcc13.ucsd.edu
+Action: failed
+Status: 5.0.0
+Diagnostic-Code: smtp; 550 user unknown
+Remote-MTA: dns; sdcc13.ucsd.edu
+
+--JAA13167.773673707/CS.UTK.EDU
+content-type: message/rfc822
+
+[original message goes here]
+--JAA13167.773673707/CS.UTK.EDU--

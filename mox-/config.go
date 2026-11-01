@@ -1284,6 +1284,10 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 		domain.Domain = dnsdomain
 
+		if domain.Chatmail && !c.Chatmail.Enabled {
+			addDomainErrorf("chatmail domain, but chatmail is not enabled")
+		}
+
 		if domain.ClientSettingsDomain != "" {
 			csd, err := dns.ParseDomain(domain.ClientSettingsDomain)
 			if err != nil {
@@ -1433,6 +1437,10 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	for accName, acc := range c.Accounts {
 		addAccountErrorf := func(format string, args ...any) {
 			addErrorf("account %q: %s", accName, fmt.Sprintf(format, args...))
+		}
+
+		if acc.Chatmail && !c.Chatmail.Enabled {
+			addAccountErrorf("chatmail account, but chatmail is not enabled")
 		}
 
 		var err error

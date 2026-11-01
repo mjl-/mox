@@ -1,0 +1,56 @@
+From: one@example.org
+To: two@example.org
+Autocrypt-Setup-Message: v1
+Subject: Autocrypt Setup Message
+Date: Tue, 22 Jan 2019 12:56:29 +0100
+Content-type: multipart/mixed; boundary="Y6fyGi9SoGeH8WwRaEdC6bbBcYOedDzrQ"
+
+--Y6fyGi9SoGeH8WwRaEdC6bbBcYOedDzrQ
+Content-Type: text/plain
+
+This message contains all information to transfer your Autocrypt
+settings along with your secret key securely from your original
+device.
+
+To set up your new device for Autocrypt, please follow the
+instuctions that should be presented by your new device.
+
+You can keep this message and use it as a backup for your secret
+key. If you want to do this, you should write down the Setup Code
+and store it securely.
+--Y6fyGi9SoGeH8WwRaEdC6bbBcYOedDzrQ
+Content-Type: application/autocrypt-setup
+Content-Disposition: attachment; filename="autocrypt-setup-message.html"
+
+<html><body>
+<p>
+This is the Autocrypt setup file used to transfer settings and
+keys between clients. You can decrypt it using the Setup Code
+presented on your old device, and then import the contained key
+into your keyring.
+</p>
+
+<pre>
+-----BEGIN PGP MESSAGE-----
+Passphrase-Format: numeric9x4
+Passphrase-Begin: 17
+
+jA0EBwMCFAxADoCdzeX/0ukBlqI5+pfpKb751qd/7nLNbkpy3gVcaf1QwRPZYt40
+Ynp08UqRQ2g48ZlnzHLSwlTGOPTuv2Jt8ka+pgZ45xzvJSG2gau03xP4VsC271kR
+VmCjdb0Y6Rk96mAwfGzrkbaRQ9Z7fIoL866GOv6h9neiVIkp+JYlTV6ISD0ZQJ4Q
+I6dOQkB/TWZyVjtiJDOQHdfNWliA6NtqaLq19wlu9L5xXjuNpY95KwR8EJXWe0+o
+Y3d2U/KxOAkXKghP2Qg1GtlPVeGC5T4p03TGI6pzKT+kHX6Rrm9wK6sM9aTquMmF
+Vok84Jg1DFnwivWC2RILR81rXi7k/+Y6MUbveFgJ9cQduqpxnmD7TjOblYu7M6zp
+YGAUxh8DRKlIMn2QsA++DBYQ6ACZvwuY8qTDLkqPDo4WqM313dsMJbyGjDdVE7EM
+PESS+RlABETpZXz8g/ycr6DIUNdlbPcmYlsBfHWDOuR2GFFTwmlv5slWS39dJv38
+E0eIe1CwdxI801Se7t7dUUS/ZF8wb6GlmxOcqGbF8eko1Z0S64IAm7/h13MRQCxI
+geQnHfGYVJ2FOimoCMEKwfa9x++RFTDW0u7spDC2uWvK/1viV8OfRppFhLr/kmKb
+18lWXuAz80DAjUDUsVqEq2MvJBJGoCJUEyjuRsLkHYRM5jYk4v50LyyR0Om73nWF
+nZBqmqNzdr7Xb9PHHdFhnEc0VvoYbrcM0RVYcEMW3YbmejM891j1d6Iv+/n/qND/
+NdebGrfWJMmFLf/iEkzTZ3/v5inW9LpWoRc94ioCjJTaEo8Rib6ARRFaJVIsmNXi
+YicFGO98D+zX+a2t9Yz6IpPajVslnOp6ScpmXgts/2XWD7oE+JgxSAqo/dLVsHgP
+Ufo=
+=pulM
+-----END PGP MESSAGE-----
+</pre></body></html>
+--Y6fyGi9SoGeH8WwRaEdC6bbBcYOedDzrQ--

@@ -1,0 +1,21 @@
+Subject: Message from one@example.org
+From: <one@example.org>
+To: <two@example.org>
+Date: Sun, 15 Oct 2023 16:43:25 +0000
+Message-ID: <Mr.78MWtlV7RAi.goCFzBhCYfy@c2.testrun.org>
+Chat-Version: 1.0
+Secure-Join: vc-request
+Secure-Join-Invitenumber: RANDOM-TOKEN
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="Gl92xgZjOShJ5PGHntqYkoo2OK2Dvi"
+
+
+--Gl92xgZjOShJ5PGHntqYkoo2OK2Dvi
+Content-Type: text/plain; charset=utf-8
+
+Meow!
+
+
+--Gl92xgZjOShJ5PGHntqYkoo2OK2Dvi--
+
+
