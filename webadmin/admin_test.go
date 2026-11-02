@@ -210,6 +210,38 @@ func TestAdminAuth(t *testing.T) {
 	testHTTPAuthAPI("GET", "/api/Transports", http.StatusMethodNotAllowed, nil, nil)
 	testHTTPAuthAPI("POST", "/api/Transports", http.StatusOK, httpHeaders{ctJSON}, nil)
 
+	// Admin tokens, as alternative to session cookie and csrf token.
+	tneedErrorCode(t, "user:error", func() { api.AdminTokenAdd(ctxbg, " ", nil) })
+	past := time.Now().Add(-time.Minute)
+	tneedErrorCode(t, "user:error", func() { api.AdminTokenAdd(ctxbg, "past", &past) })
+	adminToken := api.AdminTokenAdd(ctxbg, "test", nil)
+	tneedErrorCode(t, "user:error", func() { api.AdminTokenAdd(ctxbg, "test", nil) })
+	future := time.Now().Add(time.Hour)
+	api.AdminTokenAdd(ctxbg, "expiring", &future)
+	tokens := api.AdminTokens(ctxbg)
+	tcompare(t, len(tokens), 2)
+	tcompare(t, tokens[0].Name, "expiring")
+	tcompare(t, tokens[0].Expires != nil, true)
+	tcompare(t, tokens[1].Name, "test")
+	tcompare(t, tokens[1].Expires == nil, true)
+	tcompare(t, tokens[1].LastUsed == nil, true)
+
+	hdrBearerOK := [2]string{"Authorization", "Bearer " + adminToken}
+	hdrBearerBad := [2]string{"Authorization", "Bearer AAAAAAAAAAAAAAAAAAAAAA"}
+	testHTTP("POST", "/api/Transports", httpHeaders{hdrBearerOK}, http.StatusOK, httpHeaders{ctJSON}, nil)
+	testHTTP("POST", "/api/Transports", httpHeaders{[2]string{"Authorization", "bearer " + adminToken}}, http.StatusOK, httpHeaders{ctJSON}, nil)
+	testHTTP("POST", "/api/Transports", httpHeaders{hdrBearerBad}, http.StatusOK, nil, badAuth)
+	testHTTP("POST", "/api/Transports", httpHeaders{hdrBearerBad, hdrCSRFOK, hdrSessionOK}, http.StatusOK, nil, badAuth)
+	testHTTP("GET", "/api/Transports", httpHeaders{hdrBearerOK}, http.StatusMethodNotAllowed, nil, nil)
+	tokens = api.AdminTokens(ctxbg)
+	tcompare(t, tokens[1].LastUsed != nil, true)
+
+	// Revoked token no longer works.
+	api.AdminTokenRemove(ctxbg, tokens[1].ID)
+	tneedErrorCode(t, "user:error", func() { api.AdminTokenRemove(ctxbg, tokens[1].ID) })
+	testHTTP("POST", "/api/Transports", httpHeaders{hdrBearerOK}, http.StatusOK, nil, badAuth)
+	tcompare(t, len(api.AdminTokens(ctxbg)), 1)
+
 	// Logout needs session token.
 	reqInfo.SessionToken = store.SessionToken(strings.SplitN(sessionCookie.Value, " ", 2)[0])
 	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
