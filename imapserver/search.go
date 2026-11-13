@@ -147,13 +147,15 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 	// We may be left with an empty but non-nil sk.searchKeys, which is important for
 	// matching.
 	sk.searchKeys = sk.searchKeys[:n]
+	accConf, _ := c.account.Conf()
+	foldLatin := accConf.SearchFoldLatin
 	var bodySearch, textSearch *store.WordSearch
 	if len(bodyWords) > 0 || len(bodyNotWords) > 0 {
-		ws := store.PrepareWordSearch(bodyWords, bodyNotWords)
+		ws := store.PrepareWordSearch(bodyWords, bodyNotWords, foldLatin)
 		bodySearch = &ws
 	}
 	if len(textWords) > 0 || len(textNotWords) > 0 {
-		ws := store.PrepareWordSearch(textWords, textNotWords)
+		ws := store.PrepareWordSearch(textWords, textNotWords, foldLatin)
 		textSearch = &ws
 	}
 
@@ -432,7 +434,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					}
 					progress++
 
-					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, xhighestUID) {
+					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, foldLatin, xhighestUID) {
 						result.UIDs = append(result.UIDs, m.UID)
 						result.MaxModSeq = max(result.MaxModSeq, m.ModSeq)
 						if min1 == 1 && min1+max1 == len(eargs) {
@@ -473,7 +475,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					progress++
 
 					var seq msgseq // Filled in by searchMatch for messages in selected mailbox.
-					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, xhighestUID) {
+					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, foldLatin, xhighestUID) {
 						result.UIDs = append(result.UIDs, m.UID)
 						result.MaxModSeq = max(result.MaxModSeq, m.ModSeq)
 						break
@@ -597,9 +599,10 @@ type search struct {
 	mr          *store.MsgReader
 	p           *message.Part
 	xhighestUID func() store.UID
+	foldLatin   bool
 }
 
-func (c *conn) searchMatch(tx *bstore.Tx, msgCount uint32, seq msgseq, m store.Message, sk searchKey, bodySearch, textSearch *store.WordSearch, xhighestUID func() store.UID) bool {
+func (c *conn) searchMatch(tx *bstore.Tx, msgCount uint32, seq msgseq, m store.Message, sk searchKey, bodySearch, textSearch *store.WordSearch, foldLatin bool, xhighestUID func() store.UID) bool {
 	if m.MailboxID == c.mailboxID {
 		// If session doesn't know about the message yet, don't return it.
 		if c.uidonly {
@@ -615,7 +618,7 @@ func (c *conn) searchMatch(tx *bstore.Tx, msgCount uint32, seq msgseq, m store.M
 		}
 	}
 
-	s := search{c: c, tx: tx, msgCount: msgCount, seq: seq, m: m, xhighestUID: xhighestUID}
+	s := search{c: c, tx: tx, msgCount: msgCount, seq: seq, m: m, xhighestUID: xhighestUID, foldLatin: foldLatin}
 	defer func() {
 		if s.mr != nil {
 			err := s.mr.Close()
@@ -695,14 +698,14 @@ func (s *search) match0(sk searchKey) bool {
 	}
 
 	filterHeader := func(field, value string) bool {
-		lower := strings.ToLower(value)
+		lower := store.SearchText(value, s.foldLatin)
 		h, err := s.p.Header()
 		if err != nil {
 			c.log.Debugx("parsing message header", err, slog.Any("uid", s.m.UID), slog.Int64("msgid", s.m.ID))
 			return false
 		}
 		for _, v := range h.Values(field) {
-			if strings.Contains(strings.ToLower(message.DecodeHeader(v)), lower) {
+			if strings.Contains(store.SearchText(message.DecodeHeader(v), s.foldLatin), lower) {
 				return true
 			}
 		}
@@ -862,7 +865,7 @@ func (s *search) match0(sk searchKey) bool {
 		// nested.
 		// todo optimize: handle deeper nested word/not-word searches more efficiently.
 		headerToo := sk.op == "TEXT"
-		match, err := store.PrepareWordSearch([]string{sk.astring}, nil).MatchPart(s.c.log, s.p, headerToo)
+		match, err := store.PrepareWordSearch([]string{sk.astring}, nil, s.foldLatin).MatchPart(s.c.log, s.p, headerToo)
 		xcheckf(err, "word search")
 		return match
 	case "CC":
@@ -875,7 +878,7 @@ func (s *search) match0(sk searchKey) bool {
 		return filterHeader("To", sk.astring)
 	case "HEADER":
 		// ../rfc/9051:3895
-		lower := strings.ToLower(sk.astring)
+		lower := store.SearchText(sk.astring, s.foldLatin)
 		h, err := s.p.Header()
 		if err != nil {
 			c.log.Errorx("parsing header for search", err, slog.Any("uid", s.m.UID), slog.Int64("msgid", s.m.ID))
@@ -883,7 +886,7 @@ func (s *search) match0(sk searchKey) bool {
 		}
 		k := textproto.CanonicalMIMEHeaderKey(sk.headerField)
 		for _, v := range h.Values(k) {
-			if lower == "" || strings.Contains(strings.ToLower(message.DecodeHeader(v)), lower) {
+			if lower == "" || strings.Contains(store.SearchText(message.DecodeHeader(v), s.foldLatin), lower) {
 				return true
 			}
 		}

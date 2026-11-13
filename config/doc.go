@@ -1037,6 +1037,17 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	Accounts:
 		x:
 
+			# Ignore Latin diacritics in IMAP and webmail text searches. Disabled by default.
+			# Applies equally to search terms, message bodies and decoded headers, including
+			# negative searches. For example, Příliš/Prilis, München/Munchen,
+			# Straße/Strasse and Łódź/Lodz match. Uses Unicode canonical decomposition for
+			# Latin accents, plus ß to ss and stroked Ł/Ø/Đ/Ħ/Ŧ and dotless ı to
+			# l/o/d/h/t/i. Other scripts are unchanged except for normal case-insensitive
+			# matching. Does not equate German ae/oe/ue with ä/ö/ü. Original messages are
+			# unchanged; existing mail is searchable immediately without reindexing. Reloads
+			# with domains.conf. (optional)
+			SearchFoldLatin: false
+
 			# Webhooks for events about outgoing deliveries. (optional)
 			OutgoingWebhook:
 

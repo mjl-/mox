@@ -7,6 +7,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/transform"
+
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 )
@@ -16,26 +18,27 @@ import (
 type WordSearch struct {
 	words, notWords    [][]byte
 	searchBuf, keepBuf []byte
+	foldLatin          bool
 }
 
 // PrepareWordSearch returns a search context that can be used to match multiple
 // messages (after each other, not concurrently).
-func PrepareWordSearch(words, notWords []string) WordSearch {
+func PrepareWordSearch(words, notWords []string, foldLatin bool) WordSearch {
 	var wl, nwl [][]byte
 	for _, w := range words {
-		wl = append(wl, []byte(strings.ToLower(w)))
+		wl = append(wl, []byte(SearchText(w, foldLatin)))
 	}
 	for _, w := range notWords {
-		nwl = append(nwl, []byte(strings.ToLower(w)))
+		nwl = append(nwl, []byte(SearchText(w, foldLatin)))
 	}
 
 	keep := 0
-	for _, w := range words {
+	for _, w := range wl {
 		if len(w) > keep {
 			keep = len(w)
 		}
 	}
-	for _, w := range notWords {
+	for _, w := range nwl {
 		if len(w) > keep {
 			keep = len(w)
 		}
@@ -50,7 +53,7 @@ func PrepareWordSearch(words, notWords []string) WordSearch {
 	keepBuf := make([]byte, keep)
 	searchBuf := make([]byte, bufSize)
 
-	return WordSearch{wl, nwl, searchBuf, keepBuf}
+	return WordSearch{wl, nwl, searchBuf, keepBuf, foldLatin}
 }
 
 // MatchPart returns whether the part/mail message p matches the search.
@@ -135,6 +138,11 @@ func (ws WordSearch) searchReader(log mlog.Log, r io.Reader, seen map[int]bool) 
 	// advance our buffer in largish chunks, keeping the end of the buffer the size of
 	// the largest word plus the max of an utf-8 character to account for words
 	// spanning chunks.
+
+	// Fold before buffering so overlap is measured in transformed bytes.
+	if ws.foldLatin {
+		r = transform.NewReader(r, &latinSearchFold{})
+	}
 
 	have := 0
 	for {

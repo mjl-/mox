@@ -623,6 +623,13 @@
 			"Docs": "",
 			"Fields": [
 				{
+					"Name": "SearchFoldLatin",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "OutgoingWebhook",
 					"Docs": "",
 					"Typewords": [

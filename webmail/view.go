@@ -1253,17 +1253,18 @@ func (v view) matches(log mlog.Log, acc *store.Account, checkRange bool, message
 		return false, rerr
 	}
 
-	envFilter := q.envFilterFn(log, &state)
+	accConf, _ := acc.Conf()
+	envFilter := q.envFilterFn(log, &state, accConf.SearchFoldLatin)
 	if envFilter != nil && (!ensureMessage() || !envFilter(m)) {
 		return false, rerr
 	}
 
-	headerFilter := q.headerFilterFn(log, &state)
+	headerFilter := q.headerFilterFn(log, &state, accConf.SearchFoldLatin)
 	if headerFilter != nil && (!ensureMessage() || !headerFilter(m)) {
 		return false, rerr
 	}
 
-	wordsFilter := q.wordsFilterFn(log, &state)
+	wordsFilter := q.wordsFilterFn(log, &state, accConf.SearchFoldLatin)
 	if wordsFilter != nil && (!ensureMessage() || !wordsFilter(m)) {
 		return false, rerr
 	}
@@ -1538,17 +1539,18 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 		q.FilterFn(attachmentFilter)
 	}
 
-	envFilter := query.envFilterFn(log, &state)
+	accConf, _ := acc.Conf()
+	envFilter := query.envFilterFn(log, &state, accConf.SearchFoldLatin)
 	if envFilter != nil {
 		q.FilterFn(envFilter)
 	}
 
-	headerFilter := query.headerFilterFn(log, &state)
+	headerFilter := query.headerFilterFn(log, &state, accConf.SearchFoldLatin)
 	if headerFilter != nil {
 		q.FilterFn(headerFilter)
 	}
 
-	wordsFilter := query.wordsFilterFn(log, &state)
+	wordsFilter := query.wordsFilterFn(log, &state, accConf.SearchFoldLatin)
 	if wordsFilter != nil {
 		q.FilterFn(wordsFilter)
 	}
@@ -1964,7 +1966,7 @@ func attachmentTypes(log mlog.Log, m store.Message, state *msgState) (map[Attach
 // used by IMAP, i.e. basic message headers from/to/subject, an unfortunate name
 // clash with SMTP envelope) for the query. A nil function is returned if no
 // filtering is needed.
-func (q Query) envFilterFn(log mlog.Log, state *msgState) func(m store.Message) bool {
+func (q Query) envFilterFn(log mlog.Log, state *msgState, foldLatin bool) func(m store.Message) bool {
 	if len(q.Filter.From) == 0 && len(q.Filter.To) == 0 && len(q.Filter.Subject) == 0 && len(q.NotFilter.From) == 0 && len(q.NotFilter.To) == 0 && len(q.NotFilter.Subject) == 0 {
 		return nil
 	}
@@ -1975,7 +1977,7 @@ func (q Query) envFilterFn(log mlog.Log, state *msgState) func(m store.Message) 
 		}
 		r := make([]string, len(l))
 		for i, s := range l {
-			r[i] = strings.ToLower(s)
+			r[i] = store.SearchText(s, foldLatin)
 		}
 		return r
 	}
@@ -1998,7 +2000,7 @@ func (q Query) envFilterFn(log mlog.Log, state *msgState) func(m store.Message) 
 		}
 
 		if len(filterSubject) > 0 || len(notFilterSubject) > 0 {
-			subject := strings.ToLower(env.Subject)
+			subject := store.SearchText(env.Subject, foldLatin)
 			for _, s := range filterSubject {
 				if !strings.Contains(subject, s) {
 					return false
@@ -2015,8 +2017,8 @@ func (q Query) envFilterFn(log mlog.Log, state *msgState) func(m store.Message) 
 		next:
 			for _, s := range textLower {
 				for _, a := range l {
-					name := strings.ToLower(a.Name)
-					addr := strings.ToLower(fmt.Sprintf("<%s@%s>", a.User, a.Host))
+					name := store.SearchText(a.Name, foldLatin)
+					addr := store.SearchText(fmt.Sprintf("<%s@%s>", a.User, a.Host), foldLatin)
 					if strings.Contains(name, s) || strings.Contains(addr, s) {
 						if !all {
 							return true
@@ -2052,14 +2054,14 @@ func (q Query) envFilterFn(log mlog.Log, state *msgState) func(m store.Message) 
 
 // headerFilterFn returns a function that filters for the header filters in the
 // query. A nil function is returned if there are no header filters.
-func (q Query) headerFilterFn(log mlog.Log, state *msgState) func(m store.Message) bool {
+func (q Query) headerFilterFn(log mlog.Log, state *msgState, foldLatin bool) func(m store.Message) bool {
 	if len(q.Filter.Headers) == 0 {
 		return nil
 	}
 
 	lowerValues := make([]string, len(q.Filter.Headers))
 	for i, t := range q.Filter.Headers {
-		lowerValues[i] = strings.ToLower(t[1])
+		lowerValues[i] = store.SearchText(t[1], foldLatin)
 	}
 
 	return func(m store.Message) bool {
@@ -2081,7 +2083,7 @@ func (q Query) headerFilterFn(log mlog.Log, state *msgState) func(m store.Messag
 				continue
 			}
 			for _, e := range l {
-				if strings.Contains(strings.ToLower(e), v) {
+				if strings.Contains(store.SearchText(message.DecodeHeader(e), foldLatin), v) {
 					continue next
 				}
 			}
@@ -2093,12 +2095,12 @@ func (q Query) headerFilterFn(log mlog.Log, state *msgState) func(m store.Messag
 
 // wordFiltersFn returns a function that applies the word filters of the query. A
 // nil function is returned when query does not contain a word filter.
-func (q Query) wordsFilterFn(log mlog.Log, state *msgState) func(m store.Message) bool {
+func (q Query) wordsFilterFn(log mlog.Log, state *msgState, foldLatin bool) func(m store.Message) bool {
 	if len(q.Filter.Words) == 0 && len(q.NotFilter.Words) == 0 {
 		return nil
 	}
 
-	ws := store.PrepareWordSearch(q.Filter.Words, q.NotFilter.Words)
+	ws := store.PrepareWordSearch(q.Filter.Words, q.NotFilter.Words, foldLatin)
 
 	return func(m store.Message) bool {
 		if !state.ensurePart(m, true) {
