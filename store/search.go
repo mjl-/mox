@@ -75,7 +75,7 @@ func (ws WordSearch) isQuickHit(seen map[int]bool) bool {
 // non-miss, the caller checks if there was a hit.
 func (ws WordSearch) matchPart(log mlog.Log, p *message.Part, headerToo bool, seen map[int]bool) (miss bool, rerr error) {
 	if headerToo {
-		miss, err := ws.searchReader(log, p.HeaderReader(), seen)
+		miss, err := ws.searchReader(log, decodedHeaderReader(p), seen)
 		if miss || err != nil || ws.isQuickHit(seen) {
 			return miss, err
 		}
@@ -106,6 +106,26 @@ func (ws WordSearch) matchPart(log mlog.Log, p *message.Part, headerToo bool, se
 		}
 	}
 	return false, nil
+}
+
+// decodedHeaderReader returns the header with RFC 2047 encoded-words decoded, so
+// searching for a non-ASCII word finds it in Subject and display names. Falls back
+// to the raw header if it cannot be parsed.
+func decodedHeaderReader(p *message.Part) io.Reader {
+	h, err := p.Header()
+	if err != nil {
+		return p.HeaderReader()
+	}
+	var sb strings.Builder
+	for k, l := range h {
+		for _, v := range l {
+			sb.WriteString(k)
+			sb.WriteString(": ")
+			sb.WriteString(message.DecodeHeader(v))
+			sb.WriteString("\n")
+		}
+	}
+	return strings.NewReader(sb.String())
 }
 
 func (ws WordSearch) searchReader(log mlog.Log, r io.Reader, seen map[int]bool) (miss bool, rerr error) {

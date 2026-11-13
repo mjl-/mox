@@ -702,7 +702,7 @@ func (s *search) match0(sk searchKey) bool {
 			return false
 		}
 		for _, v := range h.Values(field) {
-			if strings.Contains(strings.ToLower(v), lower) {
+			if strings.Contains(strings.ToLower(message.DecodeHeader(v)), lower) {
 				return true
 			}
 		}
@@ -883,7 +883,7 @@ func (s *search) match0(sk searchKey) bool {
 		}
 		k := textproto.CanonicalMIMEHeaderKey(sk.headerField)
 		for _, v := range h.Values(k) {
-			if lower == "" || strings.Contains(strings.ToLower(v), lower) {
+			if lower == "" || strings.Contains(strings.ToLower(message.DecodeHeader(v)), lower) {
 				return true
 			}
 		}

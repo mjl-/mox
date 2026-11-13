@@ -490,6 +490,16 @@ var wordDecoder = mime.WordDecoder{
 	},
 }
 
+// DecodeHeader decodes RFC 2047 encoded-words in a header value, e.g. a
+// Subject or a display name in From. The value is returned unchanged when it
+// cannot be decoded.
+func DecodeHeader(s string) string {
+	if d, err := wordDecoder.DecodeHeader(s); err == nil {
+		return d
+	}
+	return s
+}
+
 func parseEnvelope(log mlog.Log, h mail.Header) (*Envelope, error) {
 	date, _ := h.Date()
 

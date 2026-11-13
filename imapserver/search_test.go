@@ -883,3 +883,41 @@ func TestSearchSingleResponse(t *testing.T) {
 	}
 	tc.xsearch(expected...)
 }
+
+// Header search must match against the decoded header, not the raw RFC 2047
+// encoded-words that non-ASCII subjects and names are transported in.
+func TestSearchEncodedHeader(t *testing.T) {
+	tc := start(t, false)
+	defer tc.close()
+	tc.login("mjl@mox.example", password0)
+	tc.client.Select("inbox")
+
+	// From is "Иван", Subject is "Привет мир".
+	msg := tocrlf(`Date: Mon, 1 Jan 2022 10:00:00 +0100
+From: =?UTF-8?B?0JjQstCw0L0=?= <ivan@mox.example>
+Subject: =?UTF-8?B?0J/RgNC40LLQtdGCINC80LjRgA==?=
+To: <mjl@mox.example>
+Message-Id: <enc@mox.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+hello
+`)
+	received := time.Date(2022, time.January, 1, 9, 0, 0, 0, time.UTC)
+	tc.client.Append("inbox", makeAppendTime(msg, received))
+
+	tc.transactf("ok", `search subject "Привет"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search subject "привет мир"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search from "Иван"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search header subject "мир"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search text "мир"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search not text "мир"`)
+	tc.xsearch()
+	tc.transactf("ok", `search subject "bogus"`)
+	tc.xsearch()
+}
