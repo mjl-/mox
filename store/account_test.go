@@ -79,6 +79,69 @@ func TestJunkFlagsForMailboxMove(t *testing.T) {
 	}
 }
 
+func TestJunkFlagsForMailboxMoveFromRejects(t *testing.T) {
+	conf := config.Account{
+		RejectsMailbox: "Rejects",
+		AutomaticJunkFlags: config.AutomaticJunkFlags{
+			Enabled: true,
+		},
+	}
+	conf.JunkMailbox = regexp.MustCompile("^junk$")
+	conf.NeutralMailbox = regexp.MustCompile("^(inbox|trash|rejects)$")
+
+	rejects := Mailbox{ID: 1, Name: "Rejects"}
+	inbox := Mailbox{ID: 2, Name: "Inbox"}
+	junkmb := Mailbox{ID: 3, Name: "Junk"}
+	trash := Mailbox{ID: 4, Name: "Trash"}
+	other := Mailbox{ID: 5, Name: "Other"}
+
+	// Moving a reject to its intended mailbox marks it as non-junk, even though that
+	// mailbox is neutral.
+	m := Message{MailboxOrigID: inbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(rejects, inbox, conf)
+	if m.Junk || !m.Notjunk {
+		t.Fatalf("move of reject to intended mailbox not marked as nonjunk: %#v", m)
+	}
+
+	// Moving to junk marks it as junk.
+	m = Message{MailboxOrigID: inbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(rejects, junkmb, conf)
+	if !m.Junk || m.Notjunk {
+		t.Fatalf("move of reject to junk not marked as junk: %#v", m)
+	}
+
+	// Moving to another neutral mailbox, e.g. deleting it, leaves it unclassified.
+	m = Message{MailboxOrigID: inbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(rejects, trash, conf)
+	if m.Junk || m.Notjunk {
+		t.Fatalf("move of reject to trash changed junk flags: %#v", m)
+	}
+
+	// Moving to a regular mailbox works as before, it is non-junk because of the
+	// automatic junk flags.
+	m = Message{MailboxOrigID: inbox.ID, MailboxDestinedID: inbox.ID}
+	m.JunkFlagsForMailboxMove(rejects, other, conf)
+	if m.Junk || !m.Notjunk {
+		t.Fatalf("move of reject to other mailbox not marked as nonjunk: %#v", m)
+	}
+
+	// A message without intended mailbox, e.g. moved to Rejects by the user, isn't
+	// treated specially.
+	m = Message{MailboxOrigID: inbox.ID}
+	m.JunkFlagsForMailboxMove(rejects, inbox, conf)
+	if m.Junk || m.Notjunk {
+		t.Fatalf("move of non-reject from rejects changed junk flags: %#v", m)
+	}
+
+	// A reject intended for another mailbox (e.g. through a ruleset) moved to Inbox
+	// isn't treated specially.
+	m = Message{MailboxOrigID: other.ID, MailboxDestinedID: other.ID}
+	m.JunkFlagsForMailboxMove(rejects, inbox, conf)
+	if m.Junk || m.Notjunk {
+		t.Fatalf("move of reject to mailbox other than intended changed junk flags: %#v", m)
+	}
+}
+
 func TestMailbox(t *testing.T) {
 	log := mlog.New("store", nil)
 	os.RemoveAll("../testdata/store/data")

@@ -762,8 +762,17 @@ func (m *Message) JunkFlagsForMailbox(mb Mailbox, conf config.Account) {
 // another mailbox that marks it as non-junk, it is marked as a positive
 // interaction and used for reputation during future deliveries. A move or copy to
 // a junk mailbox records a negative interaction for the intended mailbox.
+//
+// A message moved or copied from the Rejects mailbox to its originally intended
+// mailbox was incorrectly rejected. If the intended mailbox is neutral (typically
+// Inbox), it is marked as non-junk, so it is used for reputation and junk filter
+// training, like a message moved from the Introbox.
 func (m *Message) JunkFlagsForMailboxMove(mbSrc, mbDst Mailbox, conf config.Account) {
 	m.JunkFlagsForMailbox(mbDst, conf)
+	if conf.RejectsMailbox != "" && mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 && m.MailboxDestinedID == mbDst.ID && !m.Junk && !m.Notjunk {
+		m.Notjunk = true
+		return
+	}
 	if mbSrc.Name != conf.Introbox || m.MailboxDestinedID == 0 {
 		return
 	}
