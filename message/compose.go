@@ -9,6 +9,7 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mjl-/mox/smtp"
 )
@@ -112,24 +113,73 @@ func (xc *Composer) HeaderAddrs(k string, l []NameAddress) {
 func (xc *Composer) Subject(subject string) {
 	var subjectValue strings.Builder
 	subjectLineLen := len("Subject: ")
-	subjectWord := false
-	for i, word := range strings.Split(subject, " ") {
-		if !xc.SMTPUTF8 && !isASCII(word) {
-			word = mime.QEncoding.Encode("utf-8", word)
-		}
-		if i > 0 {
-			subjectValue.WriteString(" ")
-			subjectLineLen++
-		}
-		if subjectWord && subjectLineLen+len(word) > 77 {
+	for i, part := range subjectParts(subject, !xc.SMTPUTF8 && !isASCII(subject)) {
+		if i > 0 && subjectLineLen+len(part) > 77 {
 			subjectValue.WriteString("\r\n\t")
 			subjectLineLen = 1
 		}
-		subjectValue.WriteString(word)
-		subjectLineLen += len(word)
-		subjectWord = true
+		subjectValue.WriteString(part)
+		subjectLineLen += len(part)
 	}
 	xc.Header("Subject", subjectValue.String())
+}
+
+// subjectParts splits a subject into segments for writing. When encodeUTF8 is
+// set, non-ascii text is Q-encoded. Whitespace between non-ascii words is
+// included in a single encoded segment: RFC 2047 ignores whitespace between
+// adjacent encoded-words, so a space left as a separator between two of them
+// would be dropped by every conforming decoder, gluing the words together.
+func subjectParts(subject string, encodeUTF8 bool) []string {
+	if !encodeUTF8 {
+		return []string{subject}
+	}
+	var parts []string
+	for i := 0; i < len(subject); {
+		r, _ := utf8.DecodeRuneInString(subject[i:])
+		if r < 0x80 {
+			j := i
+			for j < len(subject) {
+				r2, size2 := utf8.DecodeRuneInString(subject[j:])
+				if r2 >= 0x80 {
+					break
+				}
+				j += size2
+			}
+			parts = append(parts, subject[i:j])
+			i = j
+			continue
+		}
+		j := i
+		for j < len(subject) {
+			r2, size2 := utf8.DecodeRuneInString(subject[j:])
+			if r2 >= 0x80 {
+				j += size2
+				continue
+			}
+			if r2 == ' ' || r2 == '\t' {
+				k := j
+				for k < len(subject) {
+					r3, size3 := utf8.DecodeRuneInString(subject[k:])
+					if r3 == ' ' || r3 == '\t' {
+						k += size3
+						continue
+					}
+					break
+				}
+				if k < len(subject) {
+					r3, _ := utf8.DecodeRuneInString(subject[k:])
+					if r3 >= 0x80 {
+						j = k
+						continue
+					}
+				}
+			}
+			break
+		}
+		parts = append(parts, mime.QEncoding.Encode("utf-8", subject[i:j]))
+		i = j
+	}
+	return parts
 }
 
 // Line writes an empty line.
