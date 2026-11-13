@@ -9,6 +9,7 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mjl-/mox/smtp"
 )
@@ -110,26 +111,118 @@ func (xc *Composer) HeaderAddrs(k string, l []NameAddress) {
 
 // Subject writes a subject message header.
 func (xc *Composer) Subject(subject string) {
+	value := strings.Join(subjectParts(subject, !xc.SMTPUTF8 && !isASCII(subject)), "")
 	var subjectValue strings.Builder
-	subjectLineLen := len("Subject: ")
-	subjectWord := false
-	for i, word := range strings.Split(subject, " ") {
-		if !xc.SMTPUTF8 && !isASCII(word) {
-			word = mime.QEncoding.Encode("utf-8", word)
-		}
-		if i > 0 {
-			subjectValue.WriteString(" ")
-			subjectLineLen++
-		}
-		if subjectWord && subjectLineLen+len(word) > 77 {
-			subjectValue.WriteString("\r\n\t")
-			subjectLineLen = 1
-		}
-		subjectValue.WriteString(word)
-		subjectLineLen += len(word)
-		subjectWord = true
-	}
+	lineLen := len("Subject: ")
+	writeFolded(&subjectValue, value, &lineLen, subjectLineLenLimit)
 	xc.Header("Subject", subjectValue.String())
+}
+
+// subjectLineLenLimit is the RFC 5322 recommended maximum line length. The hard
+// limit is 998 octets; folding is lossless here, so staying at the recommended
+// length costs nothing.
+const subjectLineLenLimit = 78
+
+// writeFolded writes s to sb, wrapping lines at whitespace that is already
+// present in s. The CRLF is inserted immediately before that whitespace, and
+// RFC 5322 unfolding removes a CRLF that is directly followed by whitespace
+// while keeping the whitespace itself, so the logical header value comes out
+// byte-for-byte identical to s.
+//
+// Folding must not introduce whitespace of its own. Writing "\r\n\t" between two
+// segments, as an earlier version did, leaves a tab in the unfolded value: next
+// to plain text that shows up as a stray tab, and between two adjacent
+// encoded-words it happens to be harmless only because RFC 2047 discards
+// whitespace there.
+func writeFolded(sb *strings.Builder, s string, lineLen *int, limit int) {
+	for i := 0; i < len(s); {
+		if s[i] != ' ' && s[i] != '\t' {
+			// Write the whole run of non-whitespace at once.
+			j := i
+			for j < len(s) && s[j] != ' ' && s[j] != '\t' {
+				j++
+			}
+			sb.WriteString(s[i:j])
+			*lineLen += j - i
+			i = j
+			continue
+		}
+		// Whitespace run, plus the non-whitespace token that follows it. Folding
+		// is worthwhile only if that token would otherwise overflow the line.
+		j := i
+		for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+			j++
+		}
+		k := j
+		for k < len(s) && s[k] != ' ' && s[k] != '\t' {
+			k++
+		}
+		if *lineLen+(k-i) > limit && *lineLen > 1 {
+			sb.WriteString("\r\n")
+			*lineLen = 0
+		}
+		sb.WriteString(s[i:k])
+		*lineLen += k - i
+		i = k
+	}
+}
+
+// subjectParts splits a subject into segments for writing. When encodeUTF8 is
+// set, non-ascii text is Q-encoded. Whitespace between non-ascii words is
+// included in a single encoded segment: RFC 2047 ignores whitespace between
+// adjacent encoded-words, so a space left as a separator between two of them
+// would be dropped by every conforming decoder, gluing the words together.
+func subjectParts(subject string, encodeUTF8 bool) []string {
+	if !encodeUTF8 {
+		return []string{subject}
+	}
+	var parts []string
+	for i := 0; i < len(subject); {
+		r, _ := utf8.DecodeRuneInString(subject[i:])
+		if r < 0x80 {
+			j := i
+			for j < len(subject) {
+				r2, size2 := utf8.DecodeRuneInString(subject[j:])
+				if r2 >= 0x80 {
+					break
+				}
+				j += size2
+			}
+			parts = append(parts, subject[i:j])
+			i = j
+			continue
+		}
+		j := i
+		for j < len(subject) {
+			r2, size2 := utf8.DecodeRuneInString(subject[j:])
+			if r2 >= 0x80 {
+				j += size2
+				continue
+			}
+			if r2 == ' ' || r2 == '\t' {
+				k := j
+				for k < len(subject) {
+					r3, size3 := utf8.DecodeRuneInString(subject[k:])
+					if r3 == ' ' || r3 == '\t' {
+						k += size3
+						continue
+					}
+					break
+				}
+				if k < len(subject) {
+					r3, _ := utf8.DecodeRuneInString(subject[k:])
+					if r3 >= 0x80 {
+						j = k
+						continue
+					}
+				}
+			}
+			break
+		}
+		parts = append(parts, mime.QEncoding.Encode("utf-8", subject[i:j]))
+		i = j
+	}
+	return parts
 }
 
 // Line writes an empty line.
