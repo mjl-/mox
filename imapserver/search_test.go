@@ -2,12 +2,14 @@ package imapserver
 
 import (
 	"fmt"
+	"mime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mjl-/mox/imapclient"
+	"github.com/mjl-/mox/mox-"
 )
 
 var searchMsg = strings.ReplaceAll(`Date: Mon, 1 Jan 2022 10:00:00 +0100 (CEST)
@@ -882,4 +884,106 @@ func TestSearchSingleResponse(t *testing.T) {
 		expected[i] = uint32(i + 1)
 	}
 	tc.xsearch(expected...)
+}
+
+// Header search must match against the decoded header, not the raw RFC 2047
+// encoded-words that non-ASCII subjects and names are transported in.
+func TestSearchEncodedHeader(t *testing.T) {
+	tc := start(t, false)
+	defer tc.close()
+	tc.login("mjl@mox.example", password0)
+	tc.client.Select("inbox")
+
+	// From is "Иван", Subject is "Привет мир".
+	msg := tocrlf(`Date: Mon, 1 Jan 2022 10:00:00 +0100
+From: =?UTF-8?B?0JjQstCw0L0=?= <ivan@mox.example>
+Subject: =?UTF-8?B?0J/RgNC40LLQtdGCINC80LjRgA==?=
+To: <mjl@mox.example>
+Message-Id: <enc@mox.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+hello
+`)
+	received := time.Date(2022, time.January, 1, 9, 0, 0, 0, time.UTC)
+	tc.client.Append("inbox", makeAppendTime(msg, received))
+
+	tc.transactf("ok", `search subject "Привет"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search subject "привет мир"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search from "Иван"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search header subject "мир"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search text "мир"`)
+	tc.xsearch(1)
+	tc.transactf("ok", `search not text "мир"`)
+	tc.xsearch()
+	tc.transactf("ok", `search subject "bogus"`)
+	tc.xsearch()
+}
+
+func TestSearchFoldLatin(t *testing.T) {
+	tc := start(t, false)
+	defer tc.close()
+	tc.login("mjl@mox.example", password0)
+	tc.client.Select("inbox")
+
+	texts := []string{"Příliš Straße Łódź Ľúbim", "Prilis Strasse Lodz Lubim", "Pr\u030ci\u0301lis\u030c Straße Ło\u0301dz\u0301 L\u030cu\u0301bim"}
+	for _, text := range texts {
+		hdr := mime.QEncoding.Encode("utf-8", text)
+		msg := fmt.Sprintf("From: %s <sender@mox.example>\r\nTo: %s <to@mox.example>\r\nCc: %s <cc@mox.example>\r\nBcc: %s <bcc@mox.example>\r\nSubject: %s\r\nX-Name: %s\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s й ё\r\n--x--\r\n", hdr, hdr, hdr, hdr, hdr, hdr, text)
+		tc.client.Append("inbox", makeAppend(msg))
+	}
+
+	other := startArgsMore(t, false, false, false, nil, nil, true, true, "other", nil)
+	defer other.close()
+	other.login("other@mox.example", password0)
+	other.client.Append("inbox", makeAppend("Subject: Příliš\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nPříliš\r\n"))
+	other.client.Select("inbox")
+
+	conf, _ := tc.account.Conf()
+	if conf.SearchFoldLatin {
+		t.Fatal("folding enabled by default")
+	}
+	// Change the setting on an existing session, with all messages already stored.
+	for _, enabled := range []bool{false, true, false} {
+		unlock := mox.Conf.DynamicLockUnlock()
+		conf.SearchFoldLatin = enabled
+		mox.Conf.Dynamic.Accounts["mjl"] = conf
+		unlock()
+		for i, text := range texts {
+			expected := []uint32{uint32(i + 1)}
+			if enabled {
+				expected = []uint32{1, 2, 3}
+			}
+			for _, key := range []string{"subject", "from", "to", "cc", "bcc", "header X-Name", "text", "body"} {
+				tc.transactf("ok", "search %s %q", key, text)
+				tc.xsearch(expected...)
+			}
+			tc.transactf("ok", "search or body absent body %q", text)
+			tc.xsearch(expected...)
+			tc.transactf("ok", "uid search body %q", text)
+			tc.xsearch(expected...)
+			tc.transactf("ok", "search not body %q", text)
+			var excluded []uint32
+			if !enabled {
+				for id := uint32(1); id <= 3; id++ {
+					if id != uint32(i+1) {
+						excluded = append(excluded, id)
+					}
+				}
+			}
+			tc.xsearch(excluded...)
+		}
+		other.transactf("ok", `search body "prilis"`)
+		other.xsearch()
+		other.transactf("ok", `search body "příliš"`)
+		other.xsearch(1)
+		tc.transactf("ok", `search body "и е"`)
+		tc.xsearch()
+		tc.transactf("ok", `search body "й ё"`)
+		tc.xsearch(1, 2, 3)
+	}
 }
