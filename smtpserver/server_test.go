@@ -772,6 +772,96 @@ func tretrain(t *testing.T, acc *store.Account) {
 	tcheck(t, err, "save junkfilter")
 }
 
+// Test that moving a reject to its intended neutral mailbox (Inbox) marks it as
+// nonjunk, causing future deliveries from the sender to be accepted.
+func TestRejectsMoveToInbox(t *testing.T) {
+	resolver := &dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.1"}, // For mx check.
+		},
+		TXT: map[string][]string{
+			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
+	defer ts.close()
+
+	// Give the sender a bad reputation.
+	m := store.Message{
+		RemoteIP:          "127.0.0.10",
+		RemoteIPMasked1:   "127.0.0.10",
+		RemoteIPMasked2:   "127.0.0.0",
+		RemoteIPMasked3:   "127.0.0.0",
+		MailFrom:          "remote@example.org",
+		MailFromLocalpart: smtp.Localpart("remote"),
+		MailFromDomain:    "example.org",
+		RcptToLocalpart:   smtp.Localpart("mjl"),
+		RcptToDomain:      "mox.example",
+		MsgFromLocalpart:  smtp.Localpart("remote"),
+		MsgFromDomain:     "example.org",
+		MsgFromOrgDomain:  "example.org",
+		MsgFromValidated:  true,
+		MsgFromValidation: store.ValidationStrict,
+		Flags:             store.Flags{Seen: true, Junk: true},
+		Size:              int64(len(deliverMessage)),
+	}
+	for range 3 {
+		nm := m
+		tinsertmsg(t, ts.acc, "Inbox", &nm, deliverMessage)
+	}
+
+	// Typical automatic junk flags config, with Inbox and Rejects neutral.
+	acc := mox.Conf.Dynamic.Accounts[ts.acc.Name]
+	acc.AutomaticJunkFlags.Enabled = true
+	acc.AutomaticJunkFlags.JunkMailboxRegexp = "^(junk|spam)"
+	acc.AutomaticJunkFlags.NeutralMailboxRegexp = "^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects)"
+	acc.JunkMailbox = regexp.MustCompile(acc.AutomaticJunkFlags.JunkMailboxRegexp)
+	acc.NeutralMailbox = regexp.MustCompile(acc.AutomaticJunkFlags.NeutralMailboxRegexp)
+	mox.Conf.Dynamic.Accounts[ts.acc.Name] = acc
+
+	deliver := func(msg string, expErr *smtpclient.Error) {
+		t.Helper()
+		ts.run(func(client *smtpclient.Client) {
+			err := client.Deliver(ctxbg, "remote@example.org", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
+			if expErr != nil {
+				ts.smtpErr(err, expErr)
+			} else {
+				tcheck(t, err, "deliver")
+			}
+		})
+	}
+
+	// Delivery is rejected, the message is stored in Rejects.
+	deliver(deliverMessage2, &smtpclient.Error{Permanent: false, Code: smtp.C451LocalErr, Secode: smtp.SeSys3Other0})
+	ts.checkCount("Rejects", 1)
+
+	rejects, err := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB).FilterNonzero(store.Mailbox{Name: "Rejects"}).Get()
+	tcheck(t, err, "get rejects mailbox")
+	rm, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).FilterNonzero(store.Message{MailboxID: rejects.ID}).FilterEqual("Expunged", false).Get()
+	tcheck(t, err, "get reject")
+	if rm.Junk || rm.Notjunk || !rm.IsReject || rm.MailboxDestinedID == 0 {
+		t.Fatalf("unexpected reject: junk %v, notjunk %v, isreject %v, mailboxdestinedid %d", rm.Junk, rm.Notjunk, rm.IsReject, rm.MailboxDestinedID)
+	}
+
+	// User moves the reject to the Inbox. It must be marked as nonjunk, even though
+	// Inbox is neutral.
+	ts.xops.MessageMove(ctxbg, pkglog, ts.acc, []int64{rm.ID}, "Inbox", 0, false)
+	ts.checkCount("Rejects", 0)
+	ts.checkCount("Inbox", 4)
+	rm, err = bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).FilterID(rm.ID).Get()
+	tcheck(t, err, "get moved reject")
+	if rm.Junk || !rm.Notjunk || rm.IsReject {
+		t.Fatalf("moved reject not marked as nonjunk: junk %v, notjunk %v, isreject %v", rm.Junk, rm.Notjunk, rm.IsReject)
+	}
+
+	// The most recent message from the sender is now nonjunk, so the next message is
+	// accepted.
+	deliver(deliverMessage3, nil)
+	ts.checkCount("Inbox", 5)
+	ts.checkCount("Rejects", 0)
+}
+
 // Test accept/reject with DMARC reputation and with spammy content.
 func TestSpam(t *testing.T) {
 	resolver := &dns.MockResolver{

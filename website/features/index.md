@@ -243,8 +243,8 @@ of communication should be tried.
 When mox rejects a message for being junk, it stores a copy of the message in
 the special "Rejects" mailbox (automatically cleaned up). If you are expecting
 an email, e.g. about signup to a new service, and it is rejected, you will find
-the message in that mailbox. By moving the message to the Inbox, and marking it
-as non-junk (e.g. by moving it to the Archive or Trash mailbox), future
+the message in that mailbox. Moving the message to the Inbox (or the mailbox it
+would otherwise have been delivered to) marks it as non-junk, and future
 messages by that sender will be accepted due to the now positive reputation.
 
 ### Reputation is per account
