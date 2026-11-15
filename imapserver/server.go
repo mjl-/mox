@@ -757,6 +757,10 @@ func (c *conn) xreadliteral(size int64, sync bool) []byte {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
+// connLogger is used for logging by new connections. If nil, the default mlog
+// logger is used. Set by tests to inspect log output.
+var connLogger *slog.Logger
+
 // serve handles a single IMAP connection on nc.
 //
 // If xtls is set, immediate TLS should be enabled on the connection, unless
@@ -796,7 +800,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	}
 	var logmutex sync.Mutex
 	// Also see (and possibly update) c.logbg, for logging in a goroutine.
-	c.log = mlog.New("imapserver", nil).WithFunc(func() []slog.Attr {
+	c.log = mlog.New("imapserver", connLogger).WithFunc(func() []slog.Attr {
 		logmutex.Lock()
 		defer logmutex.Unlock()
 		now := time.Now()
@@ -1199,8 +1203,9 @@ func (c *conn) command() {
 			metricIMAPCommands.WithLabelValues(c.cmdMetric, result).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
 		}()
 
+		cmd := c.cmd
 		logFields := []slog.Attr{
-			slog.String("cmd", c.cmd),
+			slog.String("cmd", cmd),
 			slog.Duration("duration", time.Since(c.cmdStart)),
 		}
 		c.cmd = ""
@@ -1250,8 +1255,17 @@ func (c *conn) command() {
 				c.xwritelinef("* BYE please try again speaking imap")
 				c.xbrokenf("not speaking imap (%w)", errIO)
 			}
-			c.log.Debugx("imap command syntax error", sxerr.err, logFields...)
-			c.log.Info("imap syntax error", slog.String("lastline", c.lastLine))
+			logErr := sxerr.err
+			lastLine := c.lastLine
+			if cmd == "login" || cmd == "authenticate" {
+				// LOGIN has the plain text password on its command line, AUTHENTICATE can
+				// have credentials in its initial response or in a continuation line. The
+				// error can include the remainder of the line, the message doesn't.
+				logErr = errors.New(sxerr.errmsg)
+				lastLine = "(not logged, may contain credentials)"
+			}
+			c.log.Debugx("imap command syntax error", logErr, logFields...)
+			c.log.Info("imap syntax error", slog.String("lastline", lastLine))
 			fatal := strings.HasSuffix(c.lastLine, "+}")
 			if fatal {
 				err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))

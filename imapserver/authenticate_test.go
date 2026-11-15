@@ -1,6 +1,7 @@
 package imapserver
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/md5"
@@ -11,10 +12,12 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -378,5 +381,46 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	}
 	if alert, ok := mox.AsTLSAlert(err); !ok || alert != 42 {
 		t.Fatalf("got err %#v, expected tls 'bad certificate' alert", err)
+	}
+}
+
+type syncBuffer struct {
+	sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.Lock()
+	defer b.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.Lock()
+	defer b.Unlock()
+	return b.buf.String()
+}
+
+// Test that credentials in LOGIN and AUTHENTICATE commands with a syntax error
+// are not logged.
+func TestSyntaxErrorCredentialsNotLogged(t *testing.T) {
+	var logbuf syncBuffer
+	connLogger = slog.New(slog.NewTextHandler(&logbuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	defer func() {
+		connLogger = nil
+	}()
+
+	tc := start(t, false)
+	tc.transactf("bad", `login mjl@mox.example "secret\x"`)   // Invalid escape.
+	tc.transactf("bad", `authenticate plain c2VjcmV0 secret`) // Leftover data.
+	tc.transactf("bad", `logout badarg`)                      // Not credentials, line is logged.
+	tc.close()
+
+	logs := logbuf.String()
+	if strings.Contains(logs, "secret") || strings.Contains(logs, "c2VjcmV0") {
+		t.Fatalf("credentials logged:\n%s", logs)
+	}
+	if !strings.Contains(logs, "logout badarg") {
+		t.Fatalf("line with syntax error not logged for non-credential command:\n%s", logs)
 	}
 }
