@@ -380,3 +380,21 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 		t.Fatalf("got err %#v, expected tls 'bad certificate' alert", err)
 	}
 }
+
+// Test that escaped backslashes and quotes in a quoted string are parsed, e.g. in
+// a password with LOGIN.
+func TestLoginQuotedEscapes(t *testing.T) {
+	tc := start(t, false)
+	defer tc.close()
+
+	acc, err := store.OpenAccount(pkglog, "mjl", false)
+	tcheck(t, err, "open account")
+	err = acc.SetPassword(pkglog, `te\st"1234\`)
+	tcheck(t, err, "set password")
+	err = acc.Close()
+	tcheck(t, err, "close account")
+
+	tc.transactf("bad", `login mjl@mox.example "te\st"`) // Invalid escape.
+	tc.transactf("no", `login mjl@mox.example "te\\st\"1234"`)
+	tc.transactf("ok", `login mjl@mox.example "te\\st\"1234\\"`)
+}
