@@ -284,9 +284,7 @@ func (p *parser) xstring() (r string) {
 		esc := false
 		r := ""
 		for i, c := range p.orig[p.o:] {
-			if c == '\\' {
-				esc = true
-			} else if c == '\x00' || c == '\r' || c == '\n' {
+			if c == '\x00' || c == '\r' || c == '\n' {
 				p.xerrorf("invalid nul, cr or lf in string")
 			} else if esc {
 				if c == '\\' || c == '"' {
@@ -295,6 +293,8 @@ func (p *parser) xstring() (r string) {
 				} else {
 					p.xerrorf("invalid escape char %c", c)
 				}
+			} else if c == '\\' {
+				esc = true
 			} else if c == '"' {
 				p.o += i + 1
 				return r
