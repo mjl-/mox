@@ -98,7 +98,7 @@ func TestSig(t *testing.T) {
 		SignTime:         -1,
 		ExpireTime:       -1,
 	}
-	test("dkim-signature: v = 1 ; a=ed25519-sha256; s=xn--tst-bma; d=xn--mx-lka.example; h=from; b=dGVzdAo=; bh=LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q= ; i=møx@xn--tst-bma.xn--mx-lka.example;\r\n", true, sig2, nil)
+	test("dkim-signature: v = 1 ; a=ed25519-sha256; s=xn--tst-bma; d=xn--mx-lka.example; h=from; b=dGVzdAo=; bh=LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q= ; i=m=C3=B8x@xn--tst-bma.xn--mx-lka.example;\r\n", true, sig2, nil)
 	test("dkim-signature: v = 1 ; a=ed25519-sha256; s=xn--tst-bma; d=xn--mx-lka.example; h=from; b=dGVzdAo=; bh=LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q= ; i=møx@xn--tst-bma.xn--mx-lka.example;\r\n", false, nil, parseErr("")) // No UTF-8 allowed.
 
 	multiatom := smtp.Localpart("a.b.c")
@@ -135,7 +135,25 @@ func TestSig(t *testing.T) {
 		SignTime:         -1,
 		ExpireTime:       -1,
 	}
-	test("dkim-signature: v = 1 ; a=ed25519-sha256; s=test; d=mox.example; h=from; b=dGVzdAo=; bh=LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q= ; i=\"test \\\"\\\\test\"@mox.example\r\n", true, sig4, nil)
+	test("dkim-signature: v = 1 ; a=ed25519-sha256; s=test; d=mox.example; h=from; b=dGVzdAo=; bh=LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q= ; i=\"test=20\\\"\\\\test\"@mox.example\r\n", true, sig4, nil)
+
+	equalslp := smtp.Localpart("test=test")
+	sig5 := &Sig{
+		Version:          1,
+		AlgorithmSign:    "ed25519",
+		AlgorithmHash:    "sha256",
+		Signature:        xbase64("dGVzdAo="),
+		BodyHash:         xbase64("LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q="),
+		Domain:           xdomain("mox.example"),
+		SignedHeaders:    []string{"from"},
+		Selector:         xdomain("test"),
+		Identity:         &Identity{&equalslp, xdomain("mox.example")},
+		Canonicalization: "simple/simple",
+		Length:           -1,
+		SignTime:         -1,
+		ExpireTime:       -1,
+	}
+	test("dkim-signature: v = 1 ; a=ed25519-sha256; s=test; d=mox.example; h=from; b=dGVzdAo=; bh=LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q= ; i=test=3Dtest@mox.example\r\n", true, sig5, nil)
 
 	test("", true, nil, errSigMissingCRLF)
 	test("other: ...\r\n", true, nil, errSigHeader)

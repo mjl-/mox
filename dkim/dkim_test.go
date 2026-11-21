@@ -89,9 +89,10 @@ mtrKWknTDQ==
 }
 
 func TestParseSignature(t *testing.T) {
-	// Domain name must always be A-labels, not U-labels. We do allow localpart with non-ascii.
+	// Domain name must always be A-labels, not U-labels. We do not allow
+	// localpart with unecoded non-ascii. ../rfc/6376:648
 	hdr := `DKIM-Signature: v=1; a=rsa-sha256; d=xn--h-bga.mox.example; s=xn--yr2021-pua;
-        i=møx@xn--h-bga.mox.example; t=1643719203; h=From:To:Cc:Bcc:Reply-To:
+        i=m=C3=B8x@xn--h-bga.mox.example; t=1643719203; h=From:To:Cc:Bcc:Reply-To:
         References:In-Reply-To:Subject:Date:Message-ID:Content-Type:From:To:Subject:
         Date:Message-ID:Content-Type;
         bh=g3zLYH4xKxcPrHOD18z9YfpQcnk/GaJedfustWU5uGs=; b=dtgAOl71h/dNPQrmZTi3SBVkm+
