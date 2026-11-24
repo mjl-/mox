@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
 	"mime/quotedprintable"
@@ -877,6 +878,105 @@ func TestSpam(t *testing.T) {
 		ts.smtpErr(err, &smtpclient.Error{Permanent: false, Code: smtp.C451LocalErr, Secode: smtp.SeSys3Other0})
 		checkEvaluationCount(t, 1) // No new evaluation, this isn't a DMARC reject.
 	})
+}
+
+var deliverMessageAlias = strings.ReplaceAll(`From: <remote@example.org>
+To: <public@mox.example>
+Subject: test
+Message-Id: <alias@example.org>
+
+test email for alias.
+`, "\n", "\r\n")
+
+// Message to an alias where one member's analysis rejects the message (delivering
+// it to that account's rejects mailbox) while another member accepts it. The
+// rejects cleanup after delivery must not remove the message that was just
+// delivered to the rejects mailbox.
+func TestAliasMixedAcceptancePreservesRejects(t *testing.T) {
+	resolver := &dns.MockResolver{
+		A: map[string][]string{
+			"example.org.":      {"127.0.0.1"},  // For mx check.
+			"mail.example.org.": {"127.0.0.10"}, // For iprev pass.
+		},
+		TXT: map[string][]string{
+			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject; rua=mailto:dmarcrpt@example.org"},
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"mail.example.org."}, // For iprev pass.
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
+	defer ts.close()
+
+	// Give the sender bad reputation with account mjl, so delivery through the alias
+	// is rejected for mjl and the message is delivered to its Rejects mailbox.
+	// Account "other" has no reputation and accepts the message, so the alias
+	// delivery as a whole is accepted.
+	m := store.Message{
+		RemoteIP:          "127.0.0.10",
+		RemoteIPMasked1:   "127.0.0.10",
+		RemoteIPMasked2:   "127.0.0.0",
+		RemoteIPMasked3:   "127.0.0.0",
+		MailFrom:          "remote@example.org",
+		MailFromLocalpart: smtp.Localpart("remote"),
+		MailFromDomain:    "example.org",
+		RcptToLocalpart:   smtp.Localpart("mjl"),
+		RcptToDomain:      "mox.example",
+		MsgFromLocalpart:  smtp.Localpart("remote"),
+		MsgFromDomain:     "example.org",
+		MsgFromOrgDomain:  "example.org",
+		MsgFromValidated:  true,
+		MsgFromValidation: store.ValidationStrict,
+		Flags:             store.Flags{Seen: true, Junk: true},
+		Size:              int64(len(deliverMessage)),
+	}
+	for range 3 {
+		nm := m
+		tinsertmsg(t, ts.acc, "Inbox", &nm, deliverMessage)
+	}
+
+	otherAcc, err := store.OpenAccount(pkglog, "other", false)
+	tcheck(t, err, "open account")
+	defer func() {
+		err := otherAcc.Close()
+		tcheck(t, err, "close account")
+		otherAcc.WaitClosed()
+	}()
+
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "public@mox.example"
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessageAlias)), strings.NewReader(deliverMessageAlias), false, false, false)
+		tcheck(t, err, "deliver")
+	})
+
+	// Each account must have exactly one live copy in the expected mailbox, and the
+	// message must be readable.
+	checkMsg := func(acc *store.Account, mailboxName string) {
+		t.Helper()
+		q := bstore.QueryDB[store.Mailbox](ctxbg, acc.DB)
+		q.FilterNonzero(store.Mailbox{Name: mailboxName})
+		q.FilterEqual("Expunged", false)
+		mb, err := q.Get()
+		tcheck(t, err, "get mailbox")
+		qm := bstore.QueryDB[store.Message](ctxbg, acc.DB)
+		qm.FilterNonzero(store.Message{MailboxID: mb.ID, MessageID: "alias@example.org"})
+		qm.FilterEqual("Expunged", false)
+		msg, err := qm.Get()
+		tcheck(t, err, "get live delivered message")
+		mf, err := os.Open(acc.MessagePath(msg.ID))
+		tcheck(t, err, "open message file")
+		buf, err := io.ReadAll(store.FileMsgReader(msg.MsgPrefix, mf))
+		tcheck(t, err, "read message file")
+		if !strings.Contains(string(buf), "test email for alias.") {
+			t.Fatalf("message body not found in stored message")
+		}
+		err = mf.Close()
+		tcheck(t, err, "close message file")
+	}
+	checkMsg(otherAcc, "Inbox")
+	checkMsg(ts.acc, "Rejects")
 }
 
 // Test accept/reject with forwarded messages, DMARC ignored, no IP/EHLO/MAIL
