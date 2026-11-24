@@ -3579,7 +3579,10 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				log.Info("incoming message delivered", slog.String("reason", a0.reason), slog.Any("msgfrom", msgFrom))
 
 				conf, _ := a.d.acc.Conf()
-				if conf.RejectsMailbox != "" && a.d.m.MessageID != "" {
+				// Don't remove the message we just delivered from the rejects mailbox: for an
+				// alias, the message may have been accepted due to another member, with this
+				// member's analysis rejecting it, delivering it to the rejects mailbox.
+				if conf.RejectsMailbox != "" && a.d.m.MessageID != "" && a.mailbox != conf.RejectsMailbox {
 					if err := a.d.acc.RejectsRemove(log, conf.RejectsMailbox, a.d.m.MessageID); err != nil {
 						log.Errorx("removing message from rejects mailbox", err, slog.String("messageid", messageID))
 					}
